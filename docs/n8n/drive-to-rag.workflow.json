@@ -1,0 +1,51 @@
+{
+  "name": "Google Drive → RAG ingest",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": { "item": [{ "mode": "everyMinute" }] },
+        "triggerOn": "specificFolder",
+        "folderToWatch": "={{ $env.GOOGLE_DRIVE_FOLDER_ID }}",
+        "event": "fileCreated",
+        "options": {}
+      },
+      "id": "drive-trigger",
+      "name": "Google Drive Trigger",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RAG_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-N8N-Secret", "value": "={{ $env.N8N_WEBHOOK_SECRET }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"fileId\": \"{{ $json.id }}\",\n  \"fileName\": \"{{ $json.name }}\"\n}",
+        "options": {}
+      },
+      "id": "http-rag",
+      "name": "POST /api/webhooks/n8n",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 300]
+    }
+  ],
+  "connections": {
+    "Google Drive Trigger": {
+      "main": [[{ "node": "POST /api/webhooks/n8n", "type": "main", "index": 0 }]]
+    }
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "description": "Khi PDF mới vào folder Drive → gọi webhook RAG với X-N8N-Secret. Đặt env trên n8n: RAG_WEBHOOK_URL=https://your-host/api/webhooks/n8n, N8N_WEBHOOK_SECRET=..., GOOGLE_DRIVE_FOLDER_ID=..."
+  },
+  "settings": { "executionOrder": "v1" }
+}

@@ -1,0 +1,182 @@
+import { CheckCircle2, Copy, ShieldAlert, ShieldCheck } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { Bot, User } from 'lucide-react'
+import CitationChip from './CitationChip'
+import logo from '../assets/hcc-logo.jpg'
+
+/**
+ * MessageBubble — hiển thị độ tin cậy + copy nhanh.
+ */
+export default function MessageBubble({
+  role,
+  content,
+  streaming,
+  sources = [],
+  confidence,
+  qaMode,
+}) {
+  const isUser = role === 'user'
+  const markdownBody = content?.length ? content : streaming ? ' ' : ''
+  const conf = confidence || {
+    level: sources?.length >= 2 ? 'high' : sources?.length === 1 ? 'medium' : 'low',
+    label:
+      sources?.length >= 2
+        ? 'Độ tin cậy cao'
+        : sources?.length === 1
+          ? 'Có căn cứ pháp lý'
+          : streaming
+            ? 'Đang kiểm chứng…'
+            : 'Chưa có căn cứ trong kho',
+    sources: sources?.length || 0,
+  }
+
+  async function copyAnswer() {
+    try {
+      await navigator.clipboard.writeText(content || '')
+    } catch {
+      // ignore
+    }
+  }
+
+  return (
+    <div
+      className={`msg-enter flex w-full gap-2 sm:gap-3 ${
+        isUser ? 'flex-row-reverse' : 'flex-row'
+      }`}
+    >
+      {isUser ? (
+        <div
+          className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--hcc-red)] text-white shadow-sm"
+          aria-hidden="true"
+        >
+          <User className="h-4 w-4" />
+        </div>
+      ) : (
+        <img
+          src={logo}
+          alt=""
+          width={32}
+          height={32}
+          className="mt-1 h-8 w-8 shrink-0 rounded-full object-cover shadow-[0_0_0_2px_var(--hcc-gold)]"
+          aria-hidden="true"
+        />
+      )}
+
+      <div
+        className={`max-w-[min(100%,42rem)] rounded-2xl px-4 py-3 text-left text-[15px] leading-relaxed xl:max-w-[min(100%,48rem)] 2xl:max-w-[min(100%,52rem)] ${
+          isUser
+            ? 'rounded-tr-md bg-[var(--hcc-red)] text-white shadow-[var(--shadow-md)]'
+            : 'rounded-tl-md border border-[var(--hcc-line)] bg-white text-[var(--hcc-ink)] shadow-[var(--shadow-sm)]'
+        }`}
+      >
+        {isUser ? (
+          <p className="m-0 whitespace-pre-wrap">{content}</p>
+        ) : (
+          <>
+            {!streaming && (
+              <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                    conf.level === 'high'
+                      ? 'bg-emerald-50 text-emerald-800'
+                      : conf.level === 'medium'
+                        ? 'bg-amber-50 text-amber-900'
+                        : 'bg-[var(--hcc-red-soft)] text-[var(--hcc-red-deep)]'
+                  }`}
+                >
+                  {conf.level === 'low' ? (
+                    <ShieldAlert className="h-3 w-3" />
+                  ) : (
+                    <ShieldCheck className="h-3 w-3" />
+                  )}
+                  {conf.label}
+                  {conf.sources > 0 ? ` · ${conf.sources} nguồn` : ''}
+                </span>
+                {qaMode && (
+                  <span className="rounded-full bg-[var(--hcc-canvas)] px-2 py-0.5 text-[11px] text-[var(--hcc-muted)]">
+                    {qaMode === 'advise' ? 'Tư vấn' : 'Tra cứu'}
+                  </span>
+                )}
+              </div>
+            )}
+
+            <div className="prose-chat [&_table]:w-full [&_table]:text-sm [&_th]:border [&_th]:border-[var(--hcc-line)] [&_th]:bg-[var(--hcc-red-soft)] [&_th]:px-2 [&_th]:py-1 [&_td]:border [&_td]:border-[var(--hcc-line)] [&_td]:px-2 [&_td]:py-1">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  a: ({ href, children }) => (
+                    <CitationChip href={href}>{children}</CitationChip>
+                  ),
+                  p: ({ children }) => (
+                    <p className="mb-2 last:mb-0 leading-relaxed [&_.citation-chip]:my-1">
+                      {children}
+                    </p>
+                  ),
+                  ul: ({ children }) => (
+                    <ul className="mb-2 list-disc space-y-1 pl-5">{children}</ul>
+                  ),
+                  ol: ({ children }) => (
+                    <ol className="mb-2 list-decimal space-y-1 pl-5">{children}</ol>
+                  ),
+                  strong: ({ children }) => (
+                    <strong className="font-semibold text-[var(--hcc-red-deep)]">
+                      {children}
+                    </strong>
+                  ),
+                  code: ({ children, className }) => {
+                    const isBlock = Boolean(className)
+                    if (isBlock) {
+                      return (
+                        <code className="mb-2 block overflow-x-auto rounded-lg bg-[var(--hcc-canvas)] p-3 text-[0.85em]">
+                          {children}
+                        </code>
+                      )
+                    }
+                    return (
+                      <code className="rounded bg-[var(--hcc-red-soft)] px-1 py-0.5 text-[0.9em] text-[var(--hcc-red-deep)]">
+                        {children}
+                      </code>
+                    )
+                  },
+                }}
+              >
+                {markdownBody}
+              </ReactMarkdown>
+              {streaming && (
+                <span
+                  className="ml-0.5 inline-block h-4 w-1.5 animate-pulse align-middle bg-[var(--hcc-gold)]"
+                  aria-label="Đang trả lời"
+                />
+              )}
+              {!streaming && !content && (
+                <span className="inline-flex items-center gap-1 text-sm text-[var(--hcc-muted)]">
+                  <Bot className="h-3.5 w-3.5" /> Đang soạn…
+                </span>
+              )}
+            </div>
+
+            {!streaming && content && (
+              <div className="mt-2 flex gap-2 border-t border-[var(--hcc-line)]/70 pt-2">
+                <button
+                  type="button"
+                  onClick={copyAnswer}
+                  className="inline-flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-[var(--hcc-muted)] hover:bg-[var(--hcc-canvas)] hover:text-[var(--hcc-red)]"
+                >
+                  <Copy className="h-3 w-3" />
+                  Sao chép
+                </button>
+                {conf.level !== 'low' && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] text-emerald-700">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Có trích dẫn
+                  </span>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}

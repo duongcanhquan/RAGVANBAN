@@ -1,0 +1,18 @@
+{
+  "name": "rag-van-ban-hanh-chinh",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hệ thống RAG tra cứu văn bản hành chính",
+  "scripts": {
+    "dev:client": "npm --prefix client run dev",
+    "dev:server": "npm --prefix server run dev",
+    "build:client": "npm --prefix client run build",
+    "start:server": "npm --prefix server run start",
+    "ingest": "npm --prefix server run ingest",
+    "test:ingest": "npm --prefix server run test:ingest",
+    "test:chat": "npm --prefix server run test:chat",
+    "test:rag": "npm --prefix server run test:rag",
+    "test:sources": "npm --prefix client run test:sources",
+    "test": "npm --prefix server test && npm run test:sources && npm run build:client"
+  }
+}

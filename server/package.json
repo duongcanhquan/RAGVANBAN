@@ -1,0 +1,55 @@
+{
+  "name": "rag-van-ban-server",
+  "version": "1.0.0",
+  "description": "Backend Express cho hệ thống RAG tra cứu văn bản hành chính",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "prestart": "node -e \"console.log('[prestart] Node', process.version)\"",
+    "ingest": "node scripts/ingest.js",
+    "test:ingest": "node scripts/test-ingest-unit.js",
+    "test:chat": "node scripts/test-chat-unit.js",
+    "test:llm": "node scripts/test-llm-factory.js",
+    "test:rag": "node scripts/evaluate.js",
+    "test": "npm run test:ingest && npm run test:chat && npm run test:llm && npm run test:taxonomy",
+    "test:taxonomy": "node scripts/test-taxonomy-unit.js",
+    "kill:5000": "node -e \"const {execSync}=require('child_process'); try{const o=execSync('netstat -ano | findstr :5000',{encoding:'utf8'}); const ids=[...new Set(o.split(/\\r?\\n/).map(l=>l.trim().split(/\\s+/).pop()).filter(x=>/^\\d+$/.test(x)&&x!=='0'))]; ids.forEach(id=>{try{execSync('taskkill /PID '+id+' /F'); console.log('killed',id)}catch{}}); if(!ids.length) console.log('Port 5000 free')}catch{console.log('Port 5000 free')}\""
+  },
+  "keywords": [
+    "rag",
+    "langchain",
+    "pinecone",
+    "van-ban-hanh-chinh"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@langchain/community": "^0.3.42",
+    "@langchain/core": "^0.3.40",
+    "@langchain/google-genai": "^0.1.12",
+    "@langchain/openai": "^0.3.17",
+    "@langchain/textsplitters": "^0.1.0",
+    "@pinecone-database/pinecone": "^8.2.0",
+    "@supabase/supabase-js": "^2.112.3",
+    "chalk": "^4.1.2",
+    "cheerio": "^1.2.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "googleapis": "^174.0.1",
+    "jszip": "^3.10.1",
+    "langchain": "^0.3.27",
+    "mammoth": "^1.12.1",
+    "multer": "^2.2.0",
+    "openai": "^7.4.0",
+    "pdf-parse": "^2.4.5",
+    "tesseract.js": "^7.0.0",
+    "word-extractor": "^1.0.4"
+  },
+  "devDependencies": {
+    "@types/multer": "^2.2.0",
+    "nodemon": "^3.1.14"
+  }
+}

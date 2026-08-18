@@ -1,0 +1,247 @@
+{
+  "categories": [
+    {
+      "id": "6557ce82-3169-41f5-ace0-d24c38fac539",
+      "parent_id": null,
+      "name": "Hành chính công",
+      "slug": "hanh-chinh-cong",
+      "kind": "chuyen_muc",
+      "description": "",
+      "sort_order": 0,
+      "created_at": "2026-08-17T16:30:51.827Z",
+      "updated_at": "2026-08-17T16:30:51.827Z"
+    },
+    {
+      "id": "93955a8e-f286-45e3-93c1-066b6f29db26",
+      "parent_id": "6557ce82-3169-41f5-ace0-d24c38fac539",
+      "name": "Thủ tục hành chính",
+      "slug": "thu-tuc-hanh-chinh",
+      "kind": "chuyen_mon",
+      "description": "",
+      "sort_order": 0,
+      "created_at": "2026-08-17T16:30:51.827Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "6cb13368-1a29-431e-80ad-a0497241e5bf",
+      "parent_id": "6557ce82-3169-41f5-ace0-d24c38fac539",
+      "name": "Căn cước · Cư trú",
+      "slug": "can-cuoc-cu-tru",
+      "kind": "chuyen_mon",
+      "description": "",
+      "sort_order": 1,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "f8d0613a-eacc-486f-a4b1-51238cb4169b",
+      "parent_id": "6557ce82-3169-41f5-ace0-d24c38fac539",
+      "name": "Hộ tịch",
+      "slug": "ho-tich",
+      "kind": "chuyen_mon",
+      "description": "",
+      "sort_order": 2,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "064a678f-0f75-4f74-8ad6-2b80f3de6286",
+      "parent_id": null,
+      "name": "Lao động · BHXH",
+      "slug": "lao-dong-bhxh",
+      "kind": "chuyen_muc",
+      "description": "",
+      "sort_order": 1,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "9f2c12cd-aa8f-47b8-a181-7518f0456a04",
+      "parent_id": "064a678f-0f75-4f74-8ad6-2b80f3de6286",
+      "name": "Hợp đồng · Tiền lương",
+      "slug": "hop-dong-luong",
+      "kind": "chuyen_mon",
+      "description": "",
+      "sort_order": 0,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "7aa5db52-3e4f-41a0-b4b7-8144c44d3150",
+      "parent_id": "064a678f-0f75-4f74-8ad6-2b80f3de6286",
+      "name": "Bảo hiểm xã hội",
+      "slug": "bao-hiem-xa-hoi",
+      "kind": "chuyen_mon",
+      "description": "",
+      "sort_order": 1,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "d16bea84-3a20-40f7-9a69-3cdbf9d325a3",
+      "parent_id": "064a678f-0f75-4f74-8ad6-2b80f3de6286",
+      "name": "An toàn lao động",
+      "slug": "an-toan-lao-dong",
+      "kind": "chuyen_mon",
+      "description": "",
+      "sort_order": 2,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "e6ead197-488e-4bc6-a695-62d863f57991",
+      "parent_id": null,
+      "name": "Thuế · Tài chính",
+      "slug": "thue-tai-chinh",
+      "kind": "chuyen_muc",
+      "description": "",
+      "sort_order": 2,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "f9b53b76-0d55-48a2-909b-05fe21c8b431",
+      "parent_id": "e6ead197-488e-4bc6-a695-62d863f57991",
+      "name": "Thuế thu nhập",
+      "slug": "thue-thu-nhap",
+      "kind": "chuyen_mon",
+      "description": "",
+      "sort_order": 0,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "f29dfd96-9975-43cb-b487-eef49d128af8",
+      "parent_id": "e6ead197-488e-4bc6-a695-62d863f57991",
+      "name": "Thuế GTGT · Hải quan",
+      "slug": "thue-gtgt",
+      "kind": "chuyen_mon",
+      "description": "",
+      "sort_order": 1,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "d0ab87d0-3dee-4583-90ce-481ff892a106",
+      "parent_id": "e6ead197-488e-4bc6-a695-62d863f57991",
+      "name": "Ngân sách · Phí lệ phí",
+      "slug": "ngan-sach-phi",
+      "kind": "chuyen_mon",
+      "description": "",
+      "sort_order": 2,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "cf017853-e597-4db0-a215-0c9ed1858ecb",
+      "parent_id": null,
+      "name": "Đất đai · Xây dựng",
+      "slug": "dat-dai-xay-dung",
+      "kind": "chuyen_muc",
+      "description": "",
+      "sort_order": 3,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "4ce26d49-ecc5-4e28-9104-3464fe7b7918",
+      "parent_id": "cf017853-e597-4db0-a215-0c9ed1858ecb",
+      "name": "Đất đai · Nhà ở",
+      "slug": "dat-dai-nha-o",
+      "kind": "chuyen_mon",
+      "description": "",
+      "sort_order": 0,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "54504991-72cb-439a-bfd4-9daaf43c746d",
+      "parent_id": "cf017853-e597-4db0-a215-0c9ed1858ecb",
+      "name": "Giấy phép xây dựng",
+      "slug": "giay-phep-xay-dung",
+      "kind": "chuyen_mon",
+      "description": "",
+      "sort_order": 1,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "381f779e-f328-4d4b-abfc-8731e008800d",
+      "parent_id": null,
+      "name": "Doanh nghiệp · Đầu tư",
+      "slug": "doanh-nghiep",
+      "kind": "chuyen_muc",
+      "description": "",
+      "sort_order": 4,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "4e1e057f-b77b-4bd9-a9eb-ea1bd0dd7fca",
+      "parent_id": "381f779e-f328-4d4b-abfc-8731e008800d",
+      "name": "Đăng ký kinh doanh",
+      "slug": "dang-ky-kinh-doanh",
+      "kind": "chuyen_mon",
+      "description": "",
+      "sort_order": 0,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "2ee849be-f6a4-48a2-bf5c-573b13eb5880",
+      "parent_id": "381f779e-f328-4d4b-abfc-8731e008800d",
+      "name": "Giấy phép · Điều kiện",
+      "slug": "giay-phep-dieu-kien",
+      "kind": "chuyen_mon",
+      "description": "",
+      "sort_order": 1,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "8101a096-6163-4796-a775-22c73b6f50e2",
+      "parent_id": null,
+      "name": "Tư pháp · Khiếu nại",
+      "slug": "tu-phap",
+      "kind": "chuyen_muc",
+      "description": "",
+      "sort_order": 5,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "d2fbf179-2967-46df-807e-9ca9b5d68c54",
+      "parent_id": "8101a096-6163-4796-a775-22c73b6f50e2",
+      "name": "Khiếu nại · Tố cáo",
+      "slug": "khieu-nai-to-cao",
+      "kind": "chuyen_mon",
+      "description": "",
+      "sort_order": 0,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "26f96d53-1a3d-4e9b-b386-ffd036322757",
+      "parent_id": "8101a096-6163-4796-a775-22c73b6f50e2",
+      "name": "Hỗ trợ pháp lý",
+      "slug": "ho-tro-phap-ly",
+      "kind": "chuyen_mon",
+      "description": "",
+      "sort_order": 1,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    },
+    {
+      "id": "e7276c23-4773-43f4-a71f-07f9fbcf9b03",
+      "parent_id": null,
+      "name": "Chưa phân loại",
+      "slug": "chua-phan-loai",
+      "kind": "folder",
+      "description": "",
+      "sort_order": 6,
+      "created_at": "2026-08-17T16:30:51.828Z",
+      "updated_at": "2026-08-17T16:30:51.828Z"
+    }
+  ],
+  "docCategoryMap": {}
+}

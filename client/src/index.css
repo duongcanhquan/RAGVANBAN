@@ -1,0 +1,367 @@
+@import "tailwindcss";
+
+/* HCC — Hành chính công Việt Nam (đỏ · vàng) */
+:root {
+  --hcc-red: #c41e3a;
+  --hcc-red-deep: #9b1530;
+  --hcc-red-soft: #fde8ec;
+  --hcc-gold: #e8b923;
+  --hcc-gold-bright: #ffd54a;
+  --hcc-ink: #1a1214;
+  --hcc-muted: #5c5356;
+  --hcc-line: #ead9dc;
+  --hcc-surface: #ffffff;
+  --hcc-canvas: #faf6f7;
+
+  --color-primary: var(--hcc-red);
+  --color-on-primary: #ffffff;
+  --color-secondary: var(--hcc-muted);
+  --color-accent: var(--hcc-gold);
+  --color-background: var(--hcc-canvas);
+  --color-foreground: var(--hcc-ink);
+  --color-muted: var(--hcc-red-soft);
+  --color-border: var(--hcc-line);
+  --color-destructive: #b91c1c;
+  --color-ring: var(--hcc-red);
+
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+
+  --shadow-sm: 0 1px 2px rgba(154, 21, 48, 0.06);
+  --shadow-md: 0 8px 28px rgba(154, 21, 48, 0.1);
+  --shadow-gold: 0 6px 20px rgba(232, 185, 35, 0.35);
+  --font-sans: 'Be Vietnam Pro', system-ui, sans-serif;
+  --radius-lg: 1.25rem;
+  --nav-h: 4.15rem;
+  --bottom-nav-h: 4.25rem;
+  --workbench-w: 0px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--color-foreground);
+  background: var(--color-background);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#root {
+  min-height: 100dvh;
+  min-height: 100svh;
+}
+
+:focus-visible {
+  outline: 3px solid var(--hcc-gold);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .msg-enter,
+  .brand-rise,
+  .gold-shimmer::after {
+    animation: none !important;
+  }
+}
+
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes brand-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes soft-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.msg-enter {
+  animation: msg-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.brand-rise {
+  animation: brand-rise 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.brand-rise-delay {
+  animation-delay: 80ms;
+}
+
+.brand-rise-delay-2 {
+  animation-delay: 160ms;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.safe-top {
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+}
+
+.safe-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+.safe-x {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+/* Canvas hành chính — đỏ nhẹ + vàng ấm */
+.app-canvas {
+  background:
+    radial-gradient(900px 420px at 50% -8%, rgba(196, 30, 58, 0.12), transparent 55%),
+    radial-gradient(700px 360px at 100% 0%, rgba(232, 185, 35, 0.14), transparent 45%),
+    radial-gradient(600px 400px at 0% 100%, rgba(196, 30, 58, 0.06), transparent 50%),
+    linear-gradient(180deg, #fff8f9 0%, var(--hcc-canvas) 38%, #f5f2f3 100%);
+}
+
+.prose-chat a.citation-chip {
+  text-decoration: none;
+}
+
+/* Nút vàng sang */
+.btn-gold {
+  background: linear-gradient(135deg, var(--hcc-gold-bright) 0%, var(--hcc-gold) 55%, #d4a017 100%);
+  color: var(--hcc-ink);
+  box-shadow: var(--shadow-gold);
+}
+
+.btn-gold:hover:not(:disabled) {
+  filter: brightness(1.04);
+}
+
+.btn-red {
+  background: linear-gradient(135deg, #e03a55 0%, var(--hcc-red) 50%, var(--hcc-red-deep) 100%);
+  color: #fff;
+  box-shadow: 0 8px 22px rgba(196, 30, 58, 0.35);
+}
+
+/* Admin — glass đỏ–vàng */
+.admin-shell {
+  background:
+    radial-gradient(1000px 520px at 12% -5%, rgba(232, 185, 35, 0.22), transparent 55%),
+    radial-gradient(800px 480px at 92% 8%, rgba(196, 30, 58, 0.28), transparent 50%),
+    linear-gradient(165deg, #2a0a12 0%, #4a101f 42%, #1a080c 100%);
+}
+
+.admin-aurora {
+  background:
+    radial-gradient(circle at 25% 28%, rgba(255, 213, 74, 0.12), transparent 38%),
+    radial-gradient(circle at 78% 72%, rgba(196, 30, 58, 0.2), transparent 42%);
+  filter: blur(48px);
+  animation: soft-pulse 8s ease-in-out infinite;
+}
+
+.glass-panel {
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.14) 0%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  border: 1px solid rgba(255, 213, 74, 0.18);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.glass-progress {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 213, 74, 0.12);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Bottom tab (mobile app feel) */
+.bottom-tab {
+  min-height: 44px;
+  min-width: 64px;
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --bottom-nav-h: 0px;
+  }
+}
+
+@media (min-width: 1280px) {
+  html.workbench-open {
+    --workbench-w: 360px;
+  }
+}
+
+@media (min-width: 1536px) {
+  html.workbench-open {
+    --workbench-w: 400px;
+  }
+}
+
+.nav-pins {
+  margin-right: var(--workbench-w);
+}
+
+/* ——— Ghim giấy (header brand + nav) ——— */
+.paper-pin {
+  position: relative;
+  background:
+    linear-gradient(180deg, #fffefb 0%, #fff8f4 100%);
+  border: 1px solid rgba(196, 30, 58, 0.12);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 4px 10px rgba(26, 18, 20, 0.08),
+    0 1px 2px rgba(154, 21, 48, 0.06);
+}
+
+.brand-pin {
+  margin-top: 0.15rem;
+  padding: 0.35rem 0.65rem 0.4rem 0.45rem;
+  border-radius: 2px 3px 4px 3px;
+  transform: rotate(-1.15deg);
+  transform-origin: 18% 0%;
+}
+
+.brand-pin:hover {
+  transform: rotate(-0.4deg) translateY(-1px);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.95) inset,
+    0 8px 18px rgba(26, 18, 20, 0.1),
+    0 2px 4px rgba(154, 21, 48, 0.08);
+}
+
+.nav-pin {
+  border-radius: 2px 3px 3px 2px;
+  transform: rotate(var(--pin-tilt, -0.8deg));
+  transform-origin: 50% 0%;
+  color: var(--hcc-muted);
+  text-decoration: none;
+}
+
+.nav-pin:hover {
+  color: var(--hcc-red);
+  transform: rotate(0deg) translateY(-2px);
+  z-index: 2;
+}
+
+.nav-pin--idle {
+  background: linear-gradient(165deg, #fffefc 0%, #faf4f0 100%);
+}
+
+.nav-pin--active {
+  color: var(--hcc-red-deep);
+  background: linear-gradient(165deg, #fff 0%, var(--hcc-red-soft) 100%);
+  border-color: rgba(196, 30, 58, 0.28);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.95) inset,
+    0 5px 14px rgba(196, 30, 58, 0.16);
+  font-weight: 600;
+}
+
+.nav-pin--gold {
+  color: var(--hcc-ink);
+  background: linear-gradient(135deg, #fff8e0 0%, var(--hcc-gold-bright) 48%, var(--hcc-gold) 100%);
+  border-color: rgba(212, 160, 23, 0.45);
+  box-shadow: var(--shadow-gold);
+  font-weight: 600;
+}
+
+.push-pin {
+  position: absolute;
+  top: -5px;
+  left: 14px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 30%, #fff6c8 0%, var(--hcc-gold-bright) 38%, var(--hcc-gold) 70%, #b8860b 100%);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.25),
+    0 0 0 1px rgba(184, 134, 11, 0.35);
+  z-index: 3;
+}
+
+.push-pin::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 9px;
+  width: 2px;
+  height: 7px;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, #8a6a12, rgba(138, 106, 18, 0.15));
+  border-radius: 1px;
+}
+
+.push-pin--sm {
+  left: 50%;
+  top: -4px;
+  width: 9px;
+  height: 9px;
+  transform: translateX(-50%);
+}
+
+.push-pin--sm::after {
+  top: 7px;
+  height: 5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-pin,
+  .nav-pin {
+    transform: none !important;
+  }
+}

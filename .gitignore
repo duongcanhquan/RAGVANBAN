@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+
+# Build / cache
+dist/
+build/
+.vite/
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Local runtime catalogs (generated)
+server/data/documents.json
+
+# Credentials
+*.pem
+credentials.json
+*-service-account.json
