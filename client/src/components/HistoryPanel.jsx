@@ -6,6 +6,7 @@ import {
   markLocalKnowledge,
   promoteToScenario,
 } from '../lib/chatHistory'
+import { groupHistoryIntoThreads } from '../lib/conversationHistory'
 import { adminFetch } from '../lib/adminApi'
 
 /**
@@ -57,7 +58,7 @@ export default function HistoryPanel({ open, onClose, sessionId, onRestore }) {
           map.set(l.id, { ...l, from: 'local' })
         }
       }
-      setItems([...map.values()].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))))
+      setItems(groupHistoryIntoThreads([...map.values()]))
       setLoading(false)
     })()
     return () => {
@@ -66,10 +67,12 @@ export default function HistoryPanel({ open, onClose, sessionId, onRestore }) {
   }, [open, sessionId])
 
   async function enrich(item) {
+    const last = item.turns?.[item.turns.length - 1] || item
+    const targetId = last.id || item.id
     setBusyId(item.id)
     try {
-      if (item.from === 'server') {
-        const res = await adminFetch(`/api/history/${item.id}/mark-knowledge`, {
+      if (last.from === 'server') {
+        const res = await adminFetch(`/api/history/${targetId}/mark-knowledge`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ marked: true, asScenario: true }),
@@ -77,9 +80,9 @@ export default function HistoryPanel({ open, onClose, sessionId, onRestore }) {
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || 'Không lưu được')
       } else {
-        await promoteToScenario(item)
+        await promoteToScenario(last)
       }
-      markLocalKnowledge(item.id, true)
+      markLocalKnowledge(targetId, true)
       setItems((prev) =>
         prev.map((x) => (x.id === item.id ? { ...x, marked_knowledge: true } : x))
       )
@@ -104,7 +107,7 @@ export default function HistoryPanel({ open, onClose, sessionId, onRestore }) {
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <div className="flex items-center gap-2 text-[var(--hcc-gold-bright)]">
             <History className="h-5 w-5" />
-            <h2 className="m-0 text-base font-semibold text-[var(--hcc-ink)]">Lịch sử tra cứu</h2>
+            <h2 className="m-0 text-base font-semibold text-[var(--hcc-ink)]">Lịch sử đoạn chat</h2>
           </div>
           <button
             type="button"
@@ -116,7 +119,7 @@ export default function HistoryPanel({ open, onClose, sessionId, onRestore }) {
           </button>
         </div>
         <p className="m-0 border-b border-white/10 px-4 py-2 text-xs text-[var(--hcc-muted)]">
-          Bấm mục để xem lại · Bookmark để đưa vào kho tình huống (làm giàu AI)
+          Bấm đoạn chat để xem lại cả cuộc hỏi đáp · Bookmark để đưa vào kho tình huống
         </p>
         <div className="flex-1 overflow-y-auto p-3">
           {loading && <p className="text-sm text-[var(--hcc-muted)]">Đang tải…</p>}
@@ -141,10 +144,10 @@ export default function HistoryPanel({ open, onClose, sessionId, onRestore }) {
                     {item.question}
                   </p>
                   <p className="m-0 mt-1 text-[11px] text-[var(--hcc-muted)]">
+                    {item.turnCount > 1 ? `${item.turnCount} lượt · ` : ''}
                     {item.created_at
                       ? new Date(item.created_at).toLocaleString('vi-VN')
-                      : ''}{' '}
-                    · {item.from === 'server' ? 'server' : 'máy này'}
+                      : ''}
                     {item.marked_knowledge ? ' · đã làm giàu' : ''}
                   </p>
                 </button>

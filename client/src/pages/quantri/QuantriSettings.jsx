@@ -3,16 +3,18 @@ import { Plus, Trash2 } from 'lucide-react'
 import { adminFetch } from '../../lib/adminApi'
 import CategoryTreeEditor from './QuantriCategories'
 import QuantriIntegrations from './QuantriIntegrations'
+import VoiceTalkCard from './VoiceTalkCard'
 
 const SECTIONS = [
+  { id: 'voice-chat', label: 'Voice chat' },
   { id: 'chuyen-muc', label: 'Chuyên mục' },
   { id: 'tu-khoa', label: 'Từ khóa tìm nhanh' },
   { id: 'drive-n8n', label: 'Google Drive & n8n' },
 ]
 
 export default function QuantriSettings() {
-  const [section, setSection] = useState('chuyen-muc')
-  const [seen, setSeen] = useState(() => new Set(['chuyen-muc']))
+  const [section, setSection] = useState('voice-chat')
+  const [seen, setSeen] = useState(() => new Set(['voice-chat']))
   const [items, setItems] = useState([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -76,7 +78,7 @@ export default function QuantriSettings() {
       <header className="mb-5">
         <h1 className="m-0 text-2xl font-semibold">Cài đặt</h1>
         <p className="m-0 mt-1 text-sm text-white/65">
-          Chuyên mục, từ khóa chat, Google Drive (theo người) và webhook n8n.
+          Voice chat, chuyên mục, từ khóa, Google Drive (theo người) và webhook n8n.
         </p>
       </header>
 
@@ -94,6 +96,12 @@ export default function QuantriSettings() {
           </button>
         ))}
       </nav>
+
+      {seen.has('voice-chat') ? (
+        <div hidden={section !== 'voice-chat'} className="max-w-3xl">
+          <VoiceTalkCard />
+        </div>
+      ) : null}
 
       {seen.has('chuyen-muc') ? (
         <div hidden={section !== 'chuyen-muc'}>

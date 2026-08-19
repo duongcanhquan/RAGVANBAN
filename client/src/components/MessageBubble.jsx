@@ -1,10 +1,11 @@
 import { CheckCircle2, Copy, ShieldAlert, ShieldCheck } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Bot, User } from 'lucide-react'
+import { User } from 'lucide-react'
 import CitationChip from './CitationChip'
+import { ChatWait } from './WaitMotion'
 import logoVietmy from '../assets/logo-vietmy.png'
-import { extractSourceChips } from '../lib/sources'
+import { extraSourceChips } from '../lib/sources'
 
 /**
  * MessageBubble — hiển thị độ tin cậy + copy nhanh.
@@ -16,6 +17,7 @@ export default function MessageBubble({
   sources = [],
   confidence,
   qaMode,
+  statusText = '',
 }) {
   const isUser = role === 'user'
   const markdownBody = content?.length ? content : streaming ? ' ' : ''
@@ -31,7 +33,7 @@ export default function MessageBubble({
             : 'Chưa có căn cứ trong kho',
     sources: sources?.length || 0,
   }
-  const extraChips = !isUser && !streaming ? extractSourceChips('', sources) : []
+  const extraChips = !isUser && !streaming ? extraSourceChips(content, sources) : []
 
   async function copyAnswer() {
     try {
@@ -103,6 +105,11 @@ export default function MessageBubble({
               </div>
             )}
 
+            {streaming && !String(content || '').trim() ? (
+              <ChatWait statusText={statusText} compact />
+            ) : null}
+
+            {streaming && !String(content || '').trim() ? null : (
             <div className="prose-chat [&_table]:w-full [&_table]:text-sm [&_th]:border [&_th]:border-[var(--hcc-line)] [&_th]:bg-[var(--hcc-red-soft)] [&_th]:px-2 [&_th]:py-1 [&_td]:border [&_td]:border-[var(--hcc-line)] [&_td]:px-2 [&_td]:py-1">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
@@ -145,18 +152,14 @@ export default function MessageBubble({
               >
                 {markdownBody}
               </ReactMarkdown>
-              {streaming && (
+              {streaming && String(content || '').trim() ? (
                 <span
                   className="ml-0.5 inline-block h-4 w-1.5 animate-pulse align-middle bg-[var(--hcc-gold)]"
                   aria-label="Đang trả lời"
                 />
-              )}
-              {!streaming && !content && (
-                <span className="inline-flex items-center gap-1 text-sm text-[var(--hcc-muted)]">
-                  <Bot className="h-3.5 w-3.5" /> Đang soạn…
-                </span>
-              )}
+              ) : null}
             </div>
+            )}
 
             {!streaming && extraChips.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5">

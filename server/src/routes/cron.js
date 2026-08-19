@@ -36,4 +36,18 @@ router.get('/drive-sync', async (req, res) => {
   }
 });
 
+router.get('/ai-learn', async (req, res) => {
+  if (!cronAuthorized(req)) {
+    res.status(401).json({ ok: false, error: 'Unauthorized' });
+    return;
+  }
+  try {
+    const { runDailyLearn } = require('../services/learnLoop');
+    const result = await runDailyLearn();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: publicErrorMessage(err, 'Cron học AI thất bại') });
+  }
+});
+
 module.exports = router;

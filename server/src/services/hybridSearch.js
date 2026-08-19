@@ -21,7 +21,7 @@ function buildMetadataFilter(intent = {}) {
     conditions.push({ trang_thai: { $in: ACTIVE_TRANG_THAI } });
   }
 
-  if (intent.linh_vuc && intent.linh_vuc !== 'Chung') {
+  if (intent.linh_vuc && intent.linh_vuc !== 'Chung' && intent.skipLinhVucFilter !== true) {
     conditions.push({ linh_vuc: { $eq: intent.linh_vuc } });
   }
 

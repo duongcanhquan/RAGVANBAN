@@ -101,6 +101,7 @@ function verifyAnswerAgainstMatches(answer, matches = []) {
 
 function appendVerifyNotes(answer, report) {
   if (report.ok) return answer;
+  if (/kiểm chứng\s*:/i.test(String(answer || ''))) return answer;
   const notes = [];
   if (report.unverifiedQuotes?.length) {
     notes.push(

@@ -1,0 +1,4 @@
+-- Kỹ năng / vòng học lưu app_settings (ai_skills, ai_learn).
+-- File này ghi chú vận hành — không đổi schema bắt buộc.
+-- Trang quản trị: /quantri/day-ai
+-- Cron: GET /api/cron/ai-learn (0:00 ICT = 17:00 UTC)

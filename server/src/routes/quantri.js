@@ -449,7 +449,7 @@ router.put('/voice', requireSuperAdmin, async (req, res, next) => {
   }
 });
 
-router.get('/voice-talk', requireSuperAdmin, async (_req, res, next) => {
+router.get('/voice-talk', requireAdmin, async (_req, res, next) => {
   try {
     const talk = await getTalk();
     res.json({ ok: true, talk: publicTalkPayload(talk) });
@@ -458,7 +458,7 @@ router.get('/voice-talk', requireSuperAdmin, async (_req, res, next) => {
   }
 });
 
-router.put('/voice-talk', requireSuperAdmin, async (req, res, next) => {
+router.put('/voice-talk', requireAdmin, async (req, res, next) => {
   try {
     const saved = await setTalk(req.body || {});
     res.json({ ok: true, source: saved.source, talk: publicTalkPayload(saved.talk) });
@@ -511,6 +511,83 @@ router.post('/rag/reindex-all', requireSuperAdmin, async (req, res, next) => {
 router.post('/integrations/r2-ping', requireSuperAdmin, async (_req, res, next) => {
   try {
     res.json(await pingR2Write());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/skills', requireAdmin, async (_req, res, next) => {
+  try {
+    const { getSkills } = require('../services/skillStore');
+    const { getLearnState } = require('../services/learnLoop');
+    const { listScenarios } = require('../services/knowledgeStore');
+    const [items, learn, scenarios] = await Promise.all([
+      getSkills(),
+      getLearnState(),
+      listScenarios({ limit: 40 }),
+    ]);
+    res.json({
+      ok: true,
+      items,
+      learn,
+      samples: scenarios.items || [],
+      samplesSource: scenarios.source,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/skills', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const { saveSkills, upsertSkill, deleteSkill } = require('../services/skillStore');
+    if (req.body?.deleteSlug) {
+      const saved = await deleteSkill(req.body.deleteSlug);
+      return res.json(saved);
+    }
+    if (req.body?.skill) {
+      const saved = await upsertSkill(req.body.skill);
+      return res.json(saved);
+    }
+    if (Array.isArray(req.body?.items)) {
+      const saved = await saveSkills(req.body.items);
+      return res.json(saved);
+    }
+    res.status(400).json({ ok: false, error: 'Thiếu skill hoặc items' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/learn/run', requireSuperAdmin, async (_req, res, next) => {
+  try {
+    const { runDailyLearn } = require('../services/learnLoop');
+    res.json(await runDailyLearn());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/learn/dismiss', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const { dismissLearn } = require('../services/learnLoop');
+    res.json(await dismissLearn(req.body?.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/learn/approve', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const { approveLearn } = require('../services/learnLoop');
+    const result = await approveLearn(req.body?.suggestion, {
+      createdBy: req.admin?.email || 'admin',
+    });
+    if (!result.ok) {
+      res.status(400).json(result);
+      return;
+    }
+    res.json(result);
   } catch (err) {
     next(err);
   }

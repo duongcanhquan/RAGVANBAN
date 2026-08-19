@@ -50,6 +50,8 @@ test('Vercel cron đồng bộ Drive không phụ thuộc n8n Active', () => {
   const cron = (vercel.crons || []).find((c) => c.path === '/api/cron/drive-sync');
   assert.ok(cron, 'thiếu cron /api/cron/drive-sync');
   assert.match(String(cron.schedule), /15|\*\/15/);
+  const learn = (vercel.crons || []).find((c) => c.path === '/api/cron/ai-learn');
+  assert.ok(learn, 'thiếu cron /api/cron/ai-learn');
 });
 
 test('policy app_settings không đọc secret cho anon', () => {

@@ -205,7 +205,7 @@ alter table public.documents add column if not exists mo_ta text;
 alter table public.documents add column if not exists content_sha256 text;
 alter table public.documents add column if not exists byte_size bigint;
 
-create unique index if not exists documents_content_sha256_uidx
-  on public.documents (content_sha256)
-  where content_sha256 is not null and length(content_sha256) = 64;
+-- ---------- 010: dạy AI (kỹ năng lưu app_settings key ai_skills / ai_learn) ----------
+-- Không bắt buộc bảng mới: skillStore đọc public.app_settings.
+-- Cron /api/cron/ai-learn mỗi ngày đề xuất bài mẫu; admin duyệt tại /quantri/day-ai.
 

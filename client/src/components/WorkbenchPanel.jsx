@@ -14,6 +14,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { fetchServerHistory, loadLocalHistory } from '../lib/chatHistory'
+import { groupHistoryIntoThreads } from '../lib/conversationHistory'
 import { MODES } from '../lib/modes'
 import { apiUrl } from '../lib/apiBase'
 
@@ -28,6 +29,7 @@ export default function WorkbenchPanel({
   sessionId,
   streaming,
   quickKeywords,
+  refreshKey = 0,
 }) {
   const [tab, setTab] = useState('quick')
   const [tree, setTree] = useState([])
@@ -69,15 +71,11 @@ export default function WorkbenchPanel({
       for (const l of local) {
         if (!map.has(l.id)) map.set(l.id, l)
       }
-      setHistory(
-        [...map.values()]
-          .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
-          .slice(0, 25)
-      )
+      setHistory(groupHistoryIntoThreads([...map.values()]).slice(0, 20))
     } finally {
       setLoading(false)
     }
-  }, [sessionId])
+  }, [sessionId, refreshKey])
 
   useEffect(() => {
     loadSideData()
@@ -288,7 +286,7 @@ export default function WorkbenchPanel({
         {tab === 'hist' && (
           <div className="space-y-2">
             <p className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--hcc-muted)]">
-              Tra cứu gần đây
+              Đoạn chat gần đây
             </p>
             {!history.length && (
               <p className="text-xs text-[var(--hcc-muted)]">Chưa có lịch sử trên phiên này.</p>
@@ -304,6 +302,7 @@ export default function WorkbenchPanel({
                   {h.question}
                 </p>
                 <p className="m-0 mt-1 text-[10px] text-[var(--hcc-muted)]">
+                  {h.turnCount > 1 ? `${h.turnCount} lượt · ` : ''}
                   {h.created_at ? new Date(h.created_at).toLocaleString('vi-VN') : ''}
                 </p>
               </button>

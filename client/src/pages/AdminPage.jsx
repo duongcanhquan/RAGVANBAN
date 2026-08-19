@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useOutletContext } from 'react-router-dom'
 import { Globe, GripVertical, Pencil, Plus, RefreshCw, Sparkles, Trash2, Type, UploadCloud } from 'lucide-react'
+import { DigitizingWait } from '../components/WaitMotion'
 import { adminFetch } from '../lib/adminApi'
 import { apiUrl } from '../lib/apiBase'
 import { DIRECT_UPLOAD_MAX_BYTES, formatBytes, splitUploadFiles } from '../lib/uploadLimits'
@@ -932,7 +933,7 @@ export default function AdminPage() {
                   onClick={handleUpload}
                   className="btn-gold inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold disabled:opacity-40"
                 >
-                  <Sparkles className="h-4 w-4" />
+                  <Sparkles className={`h-4 w-4 ${uploading ? 'wait-spark' : ''}`} />
                   {uploading ? 'Đang số hóa…' : `Tải lên & số hóa (${files.length || 0})`}
                 </button>
                 {files.length ? (
@@ -972,18 +973,11 @@ export default function AdminPage() {
             )}
 
             {(uploading || progress.percent > 0) && (
-              <div className="glass-progress mt-4 overflow-hidden rounded-2xl p-4">
-                <div className="mb-2 flex items-center justify-between text-xs text-white/70">
-                  <span>{progress.message || 'Đang xử lý…'}</span>
-                  <span className="tabular-nums">{Math.round(progress.percent)}%</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-[var(--hcc-red)] to-[var(--hcc-gold-bright)]"
-                    style={{ width: `${Math.min(100, progress.percent)}%` }}
-                  />
-                </div>
-              </div>
+              <DigitizingWait
+                percent={progress.percent}
+                message={progress.message}
+                active={uploading}
+              />
             )}
 
             {error ? (

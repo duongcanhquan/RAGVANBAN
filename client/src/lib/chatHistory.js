@@ -18,13 +18,14 @@ export function loadLocalHistory(sessionId) {
   }
 }
 
-export function saveLocalTurn({ sessionId, question, answer, sources = [], id }) {
+export function saveLocalTurn({ sessionId, conversationId, question, answer, sources = [], id }) {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) || '{"items":[]}')
     const items = Array.isArray(raw.items) ? raw.items : []
     const entry = {
       id: id || crypto.randomUUID(),
       sessionId: sessionId || 'anonymous',
+      conversationId: conversationId || '',
       question,
       answer,
       sources,

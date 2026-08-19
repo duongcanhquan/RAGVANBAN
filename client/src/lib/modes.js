@@ -6,17 +6,17 @@ export const MODES = {
   lookup: {
     id: 'lookup',
     label: 'Tra cứu',
-    short: 'Tra cứu VB',
-    hint: 'Tìm đúng quy định, số hiệu, hiệu lực — kèm nguồn gốc.',
-            placeholder: 'Ví dụ: Nghị định nào quy định về…? Văn bản còn hiệu lực về…?',
+    short: 'Tìm văn bản nhanh',
+    hint: 'Tìm nhanh quy định, số hiệu, điều khoản, hiệu lực — kèm nguồn gốc.',
+    placeholder: 'Số hiệu hoặc từ khóa văn bản: Nghị định nào quy định… còn hiệu lực…?',
     examples: [],
   },
   advise: {
     id: 'advise',
     label: 'Tư vấn',
-    short: 'Tư vấn TT',
-    hint: 'Hướng dẫn từng bước thủ tục theo văn bản còn hiệu lực.',
-            placeholder: 'Ví dụ: Tôi muốn hỏi văn bản trong kho — quy định gì, áp dụng thế nào?',
+    short: 'Áp dụng tình huống',
+    hint: 'Mô tả tình huống thực tế — đối chiếu quy định trong kho và cách áp dụng.',
+    placeholder: 'Mô tả tình huống: đối tượng, việc xảy ra, cần xử lý / áp dụng thế nào…',
     examples: [],
   },
 }

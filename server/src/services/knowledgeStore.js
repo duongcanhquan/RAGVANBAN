@@ -195,13 +195,14 @@ async function findRelevantScenarios(question, limit = 2) {
 function formatScenariosForPrompt(scenarios) {
   if (!scenarios?.length) return '';
   return scenarios
-    .map(
-      (s, i) =>
-        `[Tình huống mẫu ${i + 1}] ${s.title}\nMô tả: ${s.situation}\n${
-          s.sample_answer ? `Gợi ý xử lý: ${s.sample_answer}\n` : ''
-        }`
-    )
-    .join('\n');
+    .map((s, i) => {
+      const q = s.suggested_question || s.situation || '';
+      const a = s.sample_answer || '';
+      return `[Bài mẫu ${i + 1}] ${s.title}
+Cách hỏi: ${q}
+${a ? `Cách trả lời mẫu (học bố cục, KHÔNG copy số liệu nếu khác context lần này):\n${a}` : 'Chưa có câu trả lời mẫu.'}`;
+    })
+    .join('\n\n');
 }
 
 module.exports = {

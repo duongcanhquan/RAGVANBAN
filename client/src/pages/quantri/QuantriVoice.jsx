@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
 import { PenLine, Save } from 'lucide-react'
+import { Link, useOutletContext } from 'react-router-dom'
 import { adminFetch } from '../../lib/adminApi'
+import VoiceTalkCard from './VoiceTalkCard'
 
 const TONE = [
   { id: 'formal', label: 'Trang trọng' },
@@ -34,21 +35,14 @@ export default function QuantriVoice() {
   const [busy, setBusy] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [preview, setPreview] = useState('')
-  const [talk, setTalk] = useState(null)
-  const [talkOk, setTalkOk] = useState('')
 
   const load = useCallback(async () => {
-    const [res, talkRes] = await Promise.all([
-      adminFetch('/api/quantri/voice'),
-      adminFetch('/api/quantri/voice-talk'),
-    ])
+    const res = await adminFetch('/api/quantri/voice')
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(data.error || 'Không tải được giọng AI')
     setVoice(data.voice)
     setHardRules(data.hardRules || '')
     setPresets(data.presets || [])
-    const talkData = await talkRes.json().catch(() => ({}))
-    if (talkRes.ok) setTalk(talkData.talk || talkData)
   }, [])
 
   useEffect(() => {
@@ -90,27 +84,6 @@ export default function QuantriVoice() {
     await save({ preset: id })
   }
 
-  async function saveTalk(next) {
-    setBusy(true)
-    setError('')
-    setTalkOk('')
-    try {
-      const res = await adminFetch('/api/quantri/voice-talk', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(next),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Không lưu được giọng nói')
-      setTalk(data.talk)
-      setTalkOk(data.talk?.enabled ? 'Đã bật giao tiếp giọng nói trên trang tra cứu.' : 'Đã tắt giọng nói.')
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
   async function showPreview() {
     const data = await save(voice)
     if (data?.preview?.lookup) {
@@ -132,84 +105,21 @@ export default function QuantriVoice() {
         </h1>
         <p className="m-0 mt-1 text-sm text-white/65">
           Phong cách soạn câu trả lời. Luật chống bịa và bắt buộc nguồn <strong>không tắt được</strong>.
+          Bật/tắt mic trên trang chat: mục Voice chat bên dưới, hoặc{' '}
+          <Link to="/quantri/cai-dat" className="text-[var(--hcc-gold-bright)] underline">
+            Cài đặt
+          </Link>
+          . Để dạy cách đọc văn bản và bài mẫu, dùng{' '}
+          <Link to="/quantri/day-ai" className="text-[var(--hcc-gold-bright)] underline">
+            Dạy AI
+          </Link>
+          .
         </p>
       </header>
 
-      {talk ? (
-        <section className="mb-5 rounded-3xl border border-white/10 bg-white/5 p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="m-0 text-base font-semibold">Giao tiếp giọng nói</h2>
-              <p className="m-0 mt-1 text-xs text-white/55">
-                Nói ngay từng câu khi AI đang viết — không đợi hết bài. Ưu tiên Groq / Gemini (token ra sớm).
-              </p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={talk.enabled}
-              disabled={busy}
-              onClick={() => saveTalk({ ...talk, enabled: !talk.enabled })}
-              className={`relative h-6 w-11 shrink-0 rounded-full transition ${
-                talk.enabled ? 'bg-emerald-500' : 'bg-white/20'
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${
-                  talk.enabled ? 'left-5' : 'left-0.5'
-                }`}
-              />
-            </button>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="flex items-center justify-between gap-2 text-sm text-white/75">
-              Tự đọc câu trả lời
-              <input
-                type="checkbox"
-                checked={talk.autoSpeak}
-                onChange={(e) => setTalk((t) => ({ ...t, autoSpeak: e.target.checked }))}
-              />
-            </label>
-            <label className="flex items-center justify-between gap-2 text-sm text-white/75">
-              Ưu tiên AI nhanh (Groq → Gemini → …)
-              <input
-                type="checkbox"
-                checked={talk.preferFastChat}
-                onChange={(e) => setTalk((t) => ({ ...t, preferFastChat: e.target.checked }))}
-              />
-            </label>
-            <label className="text-xs text-white/60">
-              Ngôn ngữ TTS / mic
-              <input
-                value={talk.lang}
-                onChange={(e) => setTalk((t) => ({ ...t, lang: e.target.value }))}
-                className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white"
-              />
-            </label>
-            <label className="text-xs text-white/60">
-              Tốc độ đọc ({talk.rate})
-              <input
-                type="range"
-                min="0.7"
-                max="1.4"
-                step="0.05"
-                value={talk.rate}
-                onChange={(e) => setTalk((t) => ({ ...t, rate: Number(e.target.value) }))}
-                className="mt-2 w-full"
-              />
-            </label>
-          </div>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => saveTalk(talk)}
-            className="mt-3 rounded-xl bg-white/10 px-3 py-2 text-xs disabled:opacity-40"
-          >
-            Lưu cài đặt giọng nói
-          </button>
-          {talkOk ? <p className="m-0 mt-2 text-xs text-emerald-200">{talkOk}</p> : null}
-        </section>
-      ) : null}
+      <div className="mb-5">
+        <VoiceTalkCard />
+      </div>
 
       <section className="mb-5 rounded-3xl border border-amber-400/20 bg-amber-500/10 p-4">
         <h2 className="m-0 text-sm font-semibold text-amber-100">Luật cứng (khóa)</h2>
@@ -299,7 +209,7 @@ export default function QuantriVoice() {
             className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 font-mono text-[12px] text-white"
           />
         </Field>
-        <Field label="Tư vấn thủ tục">
+        <Field label="Tư vấn tình huống">
           <textarea
             rows={7}
             value={voice.adviseTemplate}

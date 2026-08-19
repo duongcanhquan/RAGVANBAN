@@ -143,6 +143,10 @@ async function run() {
       false
     );
     assert.strictEqual(isFollowUpQuestion('Còn khoản 2 thì sao?', 'Điều 5 nói gì?'), true);
+    assert.strictEqual(
+      isFollowUpQuestion('Cụ thể giấy tờ nào?', 'Thủ tục cấp lại CCCD?'),
+      true
+    );
   });
 
   test('không cache retrieval cho phiên anonymous', () => {

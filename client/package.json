@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test:sources": "node scripts/test-sources.js"
+    "test:sources": "node scripts/test-sources.js",
+    "test:wait-voice": "node scripts/test-wait-voice.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",

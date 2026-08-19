@@ -9,6 +9,7 @@ const {
   heuristicIntent,
   routeIntent,
   shouldSkipIntentLlm,
+  resolveQaMode,
 } = require('../src/services/intentRouter');
 const {
   buildMetadataFilter,
@@ -21,6 +22,7 @@ const {
   buildSourceList,
   extractSourceLinksFromAnswer,
   buildNoContextAnswer,
+  collapseAnswerCitations,
 } = require('../src/services/qaChain');
 
 let passed = 0;
@@ -57,9 +59,22 @@ async function run() {
     assert.deepStrictEqual(intent.keywords, ['thuế TNCN']);
   });
 
-  test('heuristicIntent nhận lĩnh vực thuế', () => {
-    const intent = heuristicIntent('Mức thuế thu nhập cá nhân năm nay?');
-    assert.strictEqual(intent.linh_vuc, 'Thuế');
+  test('resolveQaMode: tab Tra cứu không bị đổi sang Tư vấn', () => {
+    assert.strictEqual(resolveQaMode('lookup', { muc_dich: 'tu_van' }), 'lookup');
+    assert.strictEqual(resolveQaMode('advise', { muc_dich: 'tra_cuu' }), 'advise');
+    assert.strictEqual(resolveQaMode('lookup', { muc_dich: 'so_sanh' }), 'compare');
+  });
+
+  test('heuristicIntent không gắn Hành chính công chỉ vì chữ thủ tục', () => {
+    const intent = heuristicIntent('Thủ tục kỷ luật học sinh khi đi muộn?');
+    assert.notEqual(intent.linh_vuc, 'Hành chính công');
+    assert.strictEqual(intent.muc_dich, 'tu_van');
+  });
+
+  test('buildMetadataFilter bỏ lọc lĩnh vực khi skipLinhVucFilter', () => {
+    const filter = buildMetadataFilter({ linh_vuc: 'Thuế', skipLinhVucFilter: true });
+    assert.ok(!filter.$and);
+    assert.ok(filter.trang_thai.$in);
   });
 
   await testAsync('routeIntent không LLM', async () => {
@@ -144,6 +159,73 @@ async function run() {
     assert.ok(ctx.includes('Điều 1'));
     const sources = buildSourceList(matches);
     assert.strictEqual(sources[0].title, 'Nghị định 01/2024/NĐ-CP');
+  });
+
+  test('buildSourceList gộp nhiều Điều cùng một văn bản', () => {
+    const sources = buildSourceList([
+      {
+        loai_van_ban: 'Nghị định',
+        so_hieu: '01/2024/NĐ-CP',
+        url_file_goc: 'https://example.com/a.pdf',
+        dieu: '1',
+        text: 'a',
+      },
+      {
+        loai_van_ban: 'Nghị định',
+        so_hieu: '01/2024/NĐ-CP',
+        url_file_goc: 'https://example.com/a.pdf',
+        dieu: '5',
+        khoan: '2',
+        text: 'b',
+      },
+      {
+        loai_van_ban: 'Nghị định',
+        so_hieu: '01/2024/NĐ-CP',
+        url_file_goc: 'https://example.com/a.pdf',
+        dieu: '8',
+        text: 'c',
+      },
+      {
+        loai_van_ban: 'Nghị định',
+        so_hieu: '01/2024/NĐ-CP',
+        url_file_goc: 'https://example.com/a.pdf',
+        dieu: '12',
+        text: 'd',
+      },
+    ]);
+    assert.strictEqual(sources.length, 1);
+    assert.strictEqual(sources[0].title, 'Nghị định 01/2024/NĐ-CP');
+    assert.ok(!/Điều/.test(sources[0].title));
+    assert.ok(sources[0].dieu.includes('1'));
+  });
+
+  test('formatContext gom đoạn theo văn bản, không 4 nguồn rời', () => {
+    const ctx = formatContext([
+      { text: 'A', so_hieu: '01/2024/NĐ-CP', loai_van_ban: 'Nghị định', dieu: '1', url_file_goc: 'https://x/a' },
+      { text: 'B', so_hieu: '01/2024/NĐ-CP', loai_van_ban: 'Nghị định', dieu: '5', url_file_goc: 'https://x/a' },
+    ]);
+    const numbered = ctx.match(/\[#\d+\]/g) || [];
+    assert.strictEqual(numbered.length, 1);
+    assert.ok(ctx.includes('Điều 1'));
+    assert.ok(ctx.includes('Điều 5'));
+  });
+
+  test('collapseAnswerCitations: Nguồn một lần / URL; link trùng thành chữ', () => {
+    const raw = `Theo [NĐ 01 Điều 1](https://x.com/a.pdf) và [NĐ 01 Điều 5](https://x.com/a.pdf).
+
+**Nguồn:**
+- [NĐ 01 · Điều 1](https://x.com/a.pdf)
+- [NĐ 01 · Điều 5](https://x.com/a.pdf)
+- [NĐ 01 · Điều 8](https://x.com/a.pdf)
+- [NĐ 01 · Điều 12](https://x.com/a.pdf)
+
+**Kiểm chứng:** ghi chú 1
+**Kiểm chứng:** ghi chú 2`;
+    const out = collapseAnswerCitations(raw);
+    const nguonLinks = [...out.matchAll(/\[([^\]]+)\]\((https:\/\/x\.com\/a\.pdf)\)/g)];
+    assert.strictEqual(nguonLinks.length, 1, 'chỉ còn 1 markdown link cho cùng URL');
+    assert.ok((out.match(/\*\*Kiểm chứng:\*\*/g) || []).length <= 1);
+    assert.ok(/Điều 5/.test(out));
   });
 
   test('extractSourceLinksFromAnswer', () => {

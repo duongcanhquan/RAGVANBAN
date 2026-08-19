@@ -6,10 +6,14 @@ import ChatInput from '../components/ChatInput'
 import HistoryPanel from '../components/HistoryPanel'
 import WorkbenchPanel from '../components/WorkbenchPanel'
 import { streamChat } from '../lib/streamChat'
-import { getSessionId } from '../lib/session'
+import { getConversationId, getSessionId, newConversationId, rememberConversationId } from '../lib/session'
 import { saveLocalTurn } from '../lib/chatHistory'
+import {
+  conversationHistoryFromMessages,
+  threadToMessages,
+} from '../lib/conversationHistory'
 import { getMode, MODES } from '../lib/modes'
-import { createSpeakAhead } from '../lib/speakAhead'
+import { createSpeakAhead, unlockSpeech } from '../lib/speakAhead'
 import { speechRecognitionSupported, startSpeechListen } from '../lib/speechListen'
 import { apiUrl } from '../lib/apiBase'
 
@@ -30,10 +34,12 @@ export default function ChatPage() {
   const [disclaimer, setDisclaimer] = useState('')
   const [speakOn, setSpeakOn] = useState(true)
   const [listening, setListening] = useState(false)
+  const [historyTick, setHistoryTick] = useState(0)
   const abortRef = useRef(null)
   const speakRef = useRef(null)
   const listenRef = useRef(null)
   const sessionId = getSessionId()
+  const [conversationId, setConversationId] = useState(() => getConversationId())
   const ttsSupported =
     typeof window !== 'undefined' && typeof window.speechSynthesis !== 'undefined'
   const location = useLocation()
@@ -65,8 +71,13 @@ export default function ChatPage() {
     fetch(apiUrl('/api/settings/voice-talk'))
       .then((r) => r.json())
       .then((d) => {
-        if (!d?.enabled) {
+        if (d?.enabled !== true) {
           setTalkCfg(null)
+          setSpeakOn(false)
+          speakRef.current?.cancel()
+          listenRef.current?.abort?.()
+          listenRef.current = null
+          setListening(false)
           return
         }
         setTalkCfg(d)
@@ -136,8 +147,10 @@ export default function ChatPage() {
 
   function newChat() {
     speakRef.current?.cancel()
-    listenRef.current?.stop()
+    listenRef.current?.abort?.()
+    listenRef.current = null
     setListening(false)
+    setConversationId(newConversationId())
     setMessages([])
     setInput('')
     setError('')
@@ -145,40 +158,45 @@ export default function ChatPage() {
   }
 
   function toggleSpeak() {
-    setSpeakOn((v) => {
-      const next = !v
-      try {
-        localStorage.setItem('hcc_speak_on', next ? '1' : '0')
-      } catch {
-        // ignore
-      }
-      if (!next) speakRef.current?.cancel()
-      return next
-    })
+    const next = !speakOn
+    try {
+      localStorage.setItem('hcc_speak_on', next ? '1' : '0')
+    } catch {
+      // ignore
+    }
+    setSpeakOn(next)
+    if (next) unlockSpeech()
+    else speakRef.current?.cancel()
   }
 
   function handleMic() {
-    if (!talkCfg?.enabled) return
+    if (talkCfg?.enabled !== true) return
+    unlockSpeech()
     if (listening) {
       listenRef.current?.stop()
+      listenRef.current = null
       setListening(false)
       return
     }
     if (!speechRecognitionSupported()) {
-      setError('Trình duyệt chưa hỗ trợ mic. Dùng Chrome/Edge và cho phép micro.')
+      setError(
+        typeof window !== 'undefined' && window.isSecureContext === false
+          ? 'Mic chỉ hoạt động trên HTTPS hoặc localhost. Dùng Chrome/Edge.'
+          : 'Trình duyệt chưa hỗ trợ mic. Dùng Chrome hoặc Edge và cho phép micro.'
+      )
       return
     }
     setError('')
     setListening(true)
     listenRef.current = startSpeechListen({
       lang: talkCfg.lang || 'vi-VN',
-      onText: (text, isFinal) => {
+      onText: (text) => {
         if (text) setInput(text)
-        if (isFinal && text.trim()) {
-          listenRef.current?.stop()
-          setListening(false)
-          sendMessage(text.trim())
-        }
+      },
+      onReady: (text) => {
+        listenRef.current = null
+        setListening(false)
+        if (text?.trim()) sendMessage(text.trim())
       },
       onEnd: () => setListening(false),
       onError: (err) => {
@@ -189,6 +207,13 @@ export default function ChatPage() {
   }
 
   function restoreFromHistory(item) {
+    const cid = String(item?.conversationId || item?.id || '').trim()
+    setConversationId(cid ? rememberConversationId(cid) : newConversationId())
+    const restored = threadToMessages(item)
+    if (restored.length) {
+      setMessages(restored)
+      return
+    }
     setMessages([
       { id: crypto.randomUUID(), role: 'user', content: item.question || '' },
       {
@@ -212,11 +237,17 @@ export default function ChatPage() {
     const question = String(text || '').trim()
     if (!question || streaming) return
 
+    listenRef.current?.abort?.()
+    listenRef.current = null
+    setListening(false)
+    unlockSpeech()
+
     setError('')
     setInput('')
     setStreaming(true)
     setStatusText('Đang tiếp nhận câu hỏi…')
 
+    const history = conversationHistoryFromMessages(messages, 12)
     const userMsg = { id: crypto.randomUUID(), role: 'user', content: question }
     const assistantId = crypto.randomUUID()
 
@@ -237,8 +268,9 @@ export default function ChatPage() {
     abortRef.current = controller
 
     speakRef.current?.cancel()
+    const voiceOn = talkCfg?.enabled === true
     const speaker =
-      talkCfg?.enabled && speakOn && ttsSupported
+      voiceOn && speakOn && ttsSupported
         ? createSpeakAhead({ lang: talkCfg.lang || 'vi-VN', rate: talkCfg.rate || 1.05 })
         : null
     speakRef.current = speaker
@@ -248,7 +280,8 @@ export default function ChatPage() {
         signal: controller.signal,
         sessionId,
         mode,
-        voiceTalk: Boolean(talkCfg?.enabled && speakOn),
+        history,
+        voiceTalk: Boolean(talkCfg?.enabled === true && speakOn),
         onMeta: (meta) => {
           if (meta.status) setStatusText(meta.status)
           setMessages((prev) =>
@@ -295,10 +328,12 @@ export default function ChatPage() {
           )
           saveLocalTurn({
             sessionId,
+            conversationId,
             question,
             answer: answer || '',
             sources,
           })
+          setHistoryTick((n) => n + 1)
         },
         onError: (err) => setError(err.message),
       })
@@ -378,7 +413,7 @@ export default function ChatPage() {
           </div>
 
           <div className="flex shrink-0 items-center gap-0.5">
-            {talkCfg?.enabled ? (
+            {talkCfg?.enabled === true ? (
               <button
                 type="button"
                 onClick={toggleSpeak}
@@ -456,12 +491,12 @@ export default function ChatPage() {
           placeholder={
             listening
               ? 'Đang nghe… hãy nói câu hỏi'
-              : talkCfg?.enabled
+              : talkCfg?.enabled === true
                 ? `${modeConfig.placeholder} · hoặc bấm mic`
                 : modeConfig.placeholder
           }
           wide
-          voiceEnabled={Boolean(talkCfg?.enabled)}
+          voiceEnabled={talkCfg?.enabled === true}
           listening={listening}
           onMicClick={handleMic}
         />
@@ -478,6 +513,7 @@ export default function ChatPage() {
             sessionId={sessionId}
             streaming={streaming}
             quickKeywords={chipExamples}
+            refreshKey={historyTick}
           />
         </div>
       )}

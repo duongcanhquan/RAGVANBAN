@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Loader2, SendHorizontal, Mic } from 'lucide-react'
+import { ListeningBars } from './WaitMotion'
 
 /**
  * ChatInput — placeholder theo chế độ + mic khi admin bật voice.
@@ -71,16 +72,23 @@ export default function ChatInput({
           <button
             type="button"
             onClick={onMicClick}
-            disabled={disabled}
-            aria-label={listening ? 'Dừng nghe' : 'Nói câu hỏi'}
+            disabled={disabled && !listening}
+            aria-label={listening ? 'Dừng nghe và gửi' : 'Nói câu hỏi'}
             aria-pressed={listening}
-            className={`inline-flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-2xl border transition disabled:opacity-40 ${
+            className={`relative inline-flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-2xl border transition disabled:opacity-40 ${
               listening
-                ? 'border-emerald-400/50 bg-emerald-500/25 text-emerald-100'
+                ? 'border-emerald-400/60 bg-emerald-500/30 text-emerald-50'
                 : 'border-white/15 bg-white/10 text-white/85 hover:bg-white/15'
             }`}
           >
-            <Mic className="h-5 w-5" aria-hidden="true" />
+            {listening ? (
+              <>
+                <span className="absolute inset-0 rounded-2xl border border-emerald-300/40 animate-ping" aria-hidden="true" />
+                <ListeningBars />
+              </>
+            ) : (
+              <Mic className="h-5 w-5" aria-hidden="true" />
+            )}
           </button>
         ) : null}
         <button

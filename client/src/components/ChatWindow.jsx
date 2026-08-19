@@ -28,7 +28,9 @@ export default function ChatWindow({
       {empty && (
         <section className="glass-panel rounded-2xl px-4 py-4 sm:px-5">
           <h1 className="m-0 text-lg font-semibold tracking-tight text-[var(--hcc-ink)] sm:text-xl">
-            Hệ thống tra cứu văn bản thông minh
+            {modeConfig?.id === 'advise'
+              ? 'Tư vấn tình huống theo văn bản'
+              : 'Tra cứu văn bản nhanh'}
           </h1>
           <p className="m-0 mt-1 max-w-3xl text-sm text-[var(--hcc-muted)]">
             {modeConfig?.hint ||
@@ -60,15 +62,6 @@ export default function ChatWindow({
         </section>
       )}
 
-      {statusText && (
-        <p
-          className="m-0 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-xs text-[var(--hcc-muted)]"
-          aria-live="polite"
-        >
-          {statusText}
-        </p>
-      )}
-
       {messages.map((m) => (
         <MessageBubble
           key={m.id}
@@ -78,6 +71,7 @@ export default function ChatWindow({
           sources={m.sources}
           confidence={m.confidence}
           qaMode={m.qaMode}
+          statusText={m.streaming ? statusText : ''}
         />
       ))}
       <div ref={bottomRef} aria-hidden="true" />

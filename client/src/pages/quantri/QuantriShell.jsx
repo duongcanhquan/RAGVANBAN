@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Brain, FileText, KeyRound, LogOut, Settings, Users, PenLine, Search } from 'lucide-react'
+import { Brain, FileText, GraduationCap, KeyRound, LogOut, Settings, Users, PenLine, Search } from 'lucide-react'
 import { supabase, supabaseConfigured } from '../../lib/supabase'
 import { adminFetch, clearAuthTokenCache } from '../../lib/adminApi'
 import { explainLoginError } from '../../lib/authErrors'
@@ -226,6 +226,7 @@ export default function QuantriShell() {
 
   const links = [
     { to: '/quantri', end: true, label: 'Tài liệu', Icon: FileText },
+    { to: '/quantri/day-ai', end: false, label: 'Dạy AI', Icon: GraduationCap },
     ...(me.role === 'super_admin'
       ? [
           { to: '/quantri/bo-nao', end: false, label: 'Bộ não', Icon: Brain },

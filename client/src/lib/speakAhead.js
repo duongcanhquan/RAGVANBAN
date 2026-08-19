@@ -63,15 +63,39 @@ export function extractSpeakable(buffer, options = {}) {
   }
 }
 
-function pickVoice(lang) {
+export function pickVoice(lang, voices) {
   const want = String(lang || 'vi-VN').toLowerCase()
-  const list = window.speechSynthesis?.getVoices?.() || []
+  const list = Array.isArray(voices) ? voices : window.speechSynthesis?.getVoices?.() || []
+  const vi = list.filter((v) => /vi/i.test(v.lang || ''))
   return (
-    list.find((v) => v.lang?.toLowerCase() === want) ||
-    list.find((v) => v.lang?.toLowerCase().startsWith(want.slice(0, 2))) ||
-    list.find((v) => /vi/i.test(v.lang)) ||
+    vi.find((v) => String(v.lang || '').toLowerCase() === want) ||
+    vi.find((v) => v.localService) ||
+    vi[0] ||
+    list.find((v) => String(v.lang || '').toLowerCase().startsWith(want.slice(0, 2))) ||
     null
   )
+}
+
+/** Chrome/Safari: TTS cần cử chỉ người dùng; gọi khi bấm gửi / mic. */
+export function unlockSpeech() {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return false
+  try {
+    window.speechSynthesis.resume()
+    const warm = window.speechSynthesis.getVoices()
+    if (!warm?.length) {
+      window.speechSynthesis.addEventListener?.('voiceschanged', () => window.speechSynthesis.getVoices(), {
+        once: true,
+      })
+    }
+    const u = new SpeechSynthesisUtterance(' ')
+    u.volume = 0
+    u.rate = 5
+    u.lang = 'vi-VN'
+    window.speechSynthesis.speak(u)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function createSpeakAhead({ lang = 'vi-VN', rate = 1.05 } = {}) {
@@ -79,19 +103,41 @@ export function createSpeakAhead({ lang = 'vi-VN', rate = 1.05 } = {}) {
   let queue = []
   let speaking = false
   let cancelled = false
+  let resumeTimer = null
 
-  function pump() {
-    if (cancelled || speaking || !queue.length) return
-    if (!window.speechSynthesis) return
-    const text = queue.shift()
+  function stopResumeWatch() {
+    if (resumeTimer) {
+      clearInterval(resumeTimer)
+      resumeTimer = null
+    }
+  }
+
+  function startResumeWatch() {
+    stopResumeWatch()
+    resumeTimer = setInterval(() => {
+      try {
+        window.speechSynthesis?.resume()
+      } catch {
+        // ignore
+      }
+    }, 8000)
+  }
+
+  function speakUtterance(text) {
+    if (cancelled || !window.speechSynthesis) {
+      speaking = false
+      return
+    }
     const u = new SpeechSynthesisUtterance(text)
     u.lang = lang
     u.rate = rate
     const voice = pickVoice(lang)
     if (voice) u.voice = voice
     speaking = true
+    startResumeWatch()
     u.onend = () => {
       speaking = false
+      if (!queue.length) stopResumeWatch()
       pump()
     }
     u.onerror = () => {
@@ -99,6 +145,30 @@ export function createSpeakAhead({ lang = 'vi-VN', rate = 1.05 } = {}) {
       pump()
     }
     window.speechSynthesis.speak(u)
+  }
+
+  function pump() {
+    if (cancelled || speaking || !queue.length) return
+    if (!window.speechSynthesis) return
+    const text = queue.shift()
+    speaking = true
+    try {
+      window.speechSynthesis.resume()
+    } catch {
+      // ignore
+    }
+    const start = () => {
+      if (cancelled) {
+        speaking = false
+        return
+      }
+      speakUtterance(text)
+    }
+    if (window.speechSynthesis.speaking) {
+      setTimeout(start, 80)
+      return
+    }
+    start()
   }
 
   function enqueue(text) {
@@ -126,6 +196,7 @@ export function createSpeakAhead({ lang = 'vi-VN', rate = 1.05 } = {}) {
       buf = ''
       queue = []
       speaking = false
+      stopResumeWatch()
       try {
         window.speechSynthesis?.cancel()
       } catch {

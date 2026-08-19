@@ -32,7 +32,14 @@ const { rerankLegal } = require('../src/services/rerank');
 const { buildConflictBrief, shouldCompare } = require('../src/services/conflictBrief');
 const { shouldSkipIntentLlm } = require('../src/services/intentRouter');
 const { normalizeRag } = require('../src/services/ragConfig');
-const { isFollowUpQuestion, mergeMatches } = require('../src/services/sessionSearchCache');
+const {
+  isFollowUpQuestion,
+  mergeMatches,
+  expandSearchQuery,
+  expandAdviseQuery,
+  normalizeConversationTurns,
+  formatConversationForPrompt,
+} = require('../src/services/sessionSearchCache');
 
 const SAMPLE = `
 Nghị định số 01/2024/NĐ-CP của Chính phủ
@@ -213,6 +220,22 @@ async function run() {
       unknownSoHieu: ['99/2099/NĐ-CP'],
     });
     assert.ok(/Kiểm chứng/i.test(out));
+  });
+
+  test('appendVerifyNotes không nhân đôi mục Kiểm chứng', () => {
+    const out = appendVerifyNotes('Trả lời\n\n**Kiểm chứng:** đã có', {
+      ok: false,
+      unverifiedQuotes: ['x'],
+    });
+    assert.strictEqual((out.match(/Kiểm chứng/gi) || []).length, 1);
+  });
+
+  test('composeSystemPrompt gắn kỹ năng sau luật cứng', () => {
+    const prompt = composeSystemPrompt('lookup', normalizeVoice({}), {
+      skillContext: 'KỸ NĂNG NỘI BỘ (cách đọc)\n[Kỹ năng 1: Test]',
+    });
+    assert.ok(prompt.indexOf('tuyệt đối không bịa') < prompt.indexOf('KỸ NĂNG NỘI BỘ'));
+    assert.ok(prompt.includes('Kỹ năng 1: Test'));
   });
 
   test('composeSystemPrompt luôn chứa luật cứng dù extra jailbreak', () => {
@@ -422,6 +445,51 @@ async function run() {
     );
     assert.strictEqual(merged.length, 2);
     assert.strictEqual(merged[0].id, 'b');
+  });
+
+  test('follow-up hỏi sâu giữ tình huống', () => {
+    assert.strictEqual(
+      isFollowUpQuestion('Cụ thể giấy tờ nào?', 'Thủ tục cấp lại CCCD?'),
+      true
+    );
+    assert.strictEqual(
+      isFollowUpQuestion('Nếu tôi là học sinh thì sao?', 'Thời hạn xử lý kỷ luật?'),
+      true
+    );
+    assert.strictEqual(
+      isFollowUpQuestion(
+        'Điều 5 Nghị định 01/2024/NĐ-CP quy định gì?',
+        'Bộ luật Lao động 45/2019/QH14 điều 3'
+      ),
+      false
+    );
+    const expanded = expandSearchQuery('Cụ thể giấy tờ nào?', [
+      { role: 'user', content: 'Thủ tục cấp lại CCCD?' },
+      { role: 'assistant', content: 'Cần Tờ khai...' },
+    ]);
+    assert.match(expanded, /CCCD/);
+    assert.match(expanded, /giấy tờ/);
+    const turns = normalizeConversationTurns(
+      [
+        { role: 'user', content: 'Một' },
+        { role: 'assistant', content: 'Hai' },
+        { role: 'user', content: 'Ba' },
+        { role: 'assistant', content: 'Bốn' },
+        { role: 'user', content: 'Năm' },
+        { role: 'assistant', content: 'Sáu' },
+        { role: 'user', content: 'Bảy' },
+        { role: 'assistant', content: 'Tám' },
+      ],
+      { maxTurns: 6 }
+    );
+    assert.strictEqual(turns.length, 6);
+    assert.strictEqual(turns[0].content, 'Ba');
+    const prompt = formatConversationForPrompt(turns.slice(0, 2));
+    assert.match(prompt, /Cán bộ: Ba/);
+    assert.match(prompt, /tình huống/);
+    const advised = expandAdviseQuery('Nếu tôi là học sinh thì bị xử lý thế nào?');
+    assert.match(advised, /học sinh/);
+    assert.match(advised, /áp dụng/);
   });
 
   console.log(`\nKết quả: ${passed} passed, ${failed} failed`);

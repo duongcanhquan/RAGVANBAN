@@ -50,7 +50,7 @@ function heuristicIntent(question, preferredMode) {
   else if (/lao động|hợp đồng lao động|lương|nghỉ phép/.test(q)) linh_vuc = 'Lao động';
   else if (/doanh nghiệp|đăng ký kinh doanh|giấy phép/.test(q)) linh_vuc = 'Doanh nghiệp';
   else if (/cccd|căn cước|hộ chiếu|cư trú/.test(q)) linh_vuc = 'Cư trú · Căn cước';
-  else if (/hành chính|thủ tục|hồ sơ/.test(q)) linh_vuc = 'Hành chính công';
+  else if (/hành chính công|bộ phận một cửa|một cửa/.test(q)) linh_vuc = 'Hành chính công';
 
   let muc_dich = preferredMode === 'advise' ? 'tu_van' : 'tra_cuu';
   if (/so sánh|khác gì|thay thế|sửa đổi/.test(q)) muc_dich = 'so_sanh';
@@ -140,10 +140,17 @@ function shouldSkipIntentLlm(question, mode = 'lookup') {
   return false;
 }
 
+function resolveQaMode(uiMode, intent) {
+  if (uiMode === 'advise') return 'advise';
+  if (intent?.muc_dich === 'so_sanh') return 'compare';
+  return 'lookup';
+}
+
 module.exports = {
   routeIntent,
   parseIntentResponse,
   heuristicIntent,
   shouldSkipIntentLlm,
+  resolveQaMode,
   DEFAULT_LINH_VUC,
 };

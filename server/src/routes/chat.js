@@ -4,7 +4,7 @@
  */
 
 const express = require('express');
-const { routeIntent, shouldSkipIntentLlm, heuristicIntent } = require('../services/intentRouter');
+const { routeIntent, shouldSkipIntentLlm, heuristicIntent, resolveQaMode } = require('../services/intentRouter');
 const { hybridSearch } = require('../services/hybridSearch');
 const {
   streamAnswer,
@@ -24,6 +24,7 @@ const {
   findRelevantScenarios,
   formatScenariosForPrompt,
 } = require('../services/knowledgeStore');
+const { matchSkillsForQuestion, formatSkillsForPrompt } = require('../services/skillStore');
 const { getVoice } = require('../services/voiceConfig');
 const { getTalk } = require('../services/voiceTalk');
 const { shouldCompare } = require('../services/conflictBrief');
@@ -34,6 +35,11 @@ const {
   recall,
   mergeMatches,
   beginSessionRequest,
+  normalizeConversationTurns,
+  lastUserQuestion,
+  expandSearchQuery,
+  expandAdviseQuery,
+  isGreeting,
 } = require('../services/sessionSearchCache');
 const { bindSseAbort } = require('../services/sseAbort');
 const { publicErrorMessage } = require('../services/publicError');
@@ -52,13 +58,6 @@ function initSse(res) {
 function sendEvent(res, event, data) {
   res.write(`event: ${event}\n`);
   res.write(`data: ${JSON.stringify(data)}\n\n`);
-}
-
-function resolveQaMode(uiMode, intent) {
-  if (uiMode === 'advise') return 'advise';
-  if (intent?.muc_dich === 'tu_van') return 'advise';
-  if (intent?.muc_dich === 'so_sanh') return 'compare';
-  return 'lookup';
 }
 
 async function persistLog({ userSession, question, sources, answer }) {
@@ -122,7 +121,16 @@ async function streamWithFallback(question, matches, onToken, scenarioContext, q
         const result = await streamAnswer(
           question,
           matches,
-          { llm, scenarioContext, mode: qaMode, voice, spoken, signal },
+          {
+            llm,
+            scenarioContext,
+            skillContext: opts.skillContext || '',
+            mode: qaMode,
+            voice,
+            spoken,
+            signal,
+            conversationTurns: opts.conversationTurns || [],
+          },
           (token) => {
             sent += 1;
             onToken(token);
@@ -175,8 +183,16 @@ router.post('/', async (req, res) => {
     const fastChat = voiceRequested && talk.preferFastChat;
     const chatOpts = fastChat ? { fastChat: true } : {};
 
+    const conversationTurns = normalizeConversationTurns(req.body?.history);
+    const prevTurnQuestion = lastUserQuestion(conversationTurns) || recall(userSession)?.question || '';
+    const followUp = isFollowUpQuestion(message, prevTurnQuestion, conversationTurns);
+    let searchQuery = followUp
+      ? expandSearchQuery(message, conversationTurns, prevTurnQuestion)
+      : message;
+    if (uiMode === 'advise') searchQuery = expandAdviseQuery(searchQuery);
+
     sendEvent(res, 'meta', {
-      status: 'Đang xác định lĩnh vực…',
+      status: followUp ? 'Đang hỏi tiếp trong cùng tình huống…' : 'Đang xác định lĩnh vực…',
       qaMode: uiMode,
       mode: 'live',
       voiceTalk: voiceRequested,
@@ -207,6 +223,11 @@ router.post('/', async (req, res) => {
       intent = await routeIntent(message, { useLlm: false, mode: uiMode });
     }
     if (rag.onlyActiveDefault === false) intent.onlyActive = false;
+    if (uiMode === 'advise') {
+      intent.muc_dich = 'tu_van';
+      intent.skipLinhVucFilter = true;
+    }
+    if (!isGreeting(message)) intent.needs_retrieval = true;
 
     let qaMode = resolveQaMode(uiMode, intent);
     throwIfAborted(signal);
@@ -234,12 +255,12 @@ router.post('/', async (req, res) => {
         maxTotal: rag.maxTotal,
         signal,
       };
-      matches = await hybridSearch(message, intent, searchOpts);
+      matches = await hybridSearch(searchQuery, intent, searchOpts);
       throwIfAborted(signal);
-      if (prev && isFollowUpQuestion(message, prev.question) && prev.matches?.length) {
+      if (followUp && prev?.matches?.length) {
         matches = mergeMatches(prev.matches, matches, rag.maxTotal + rag.maxPerDoc);
       }
-      remember(userSession, { question: message, matches }, seq);
+      remember(userSession, { question: message, matches, searchQuery }, seq);
     }
 
     if (qaMode === 'lookup' && shouldCompare(matches)) {
@@ -254,8 +275,12 @@ router.post('/', async (req, res) => {
     }));
 
     throwIfAborted(signal);
-    const relatedScenarios = await findRelevantScenarios(message, 2);
+    const [relatedScenarios, matchedSkills] = await Promise.all([
+      findRelevantScenarios(message, 2),
+      matchSkillsForQuestion(message),
+    ]);
     const scenarioContext = formatScenariosForPrompt(relatedScenarios);
+    const skillContext = formatSkillsForPrompt(matchedSkills);
     const previewConfidence = confidenceFromSources(sourcesPreview);
 
     throwIfAborted(signal);
@@ -301,7 +326,13 @@ router.post('/', async (req, res) => {
       scenarioContext,
       qaMode,
       voice,
-      { spoken: voiceRequested, fastChat, signal }
+      {
+        spoken: voiceRequested,
+        fastChat,
+        signal,
+        skillContext,
+        conversationTurns,
+      }
     );
 
     await persistLog({

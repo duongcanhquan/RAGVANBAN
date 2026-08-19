@@ -5,7 +5,7 @@
 
 const assert = require('assert');
 const { extractSpeakable, stripMarkdownForSpeech } = require('../src/services/speakChunks');
-const { normalizeTalk, FAST_CHAT_ORDER } = require('../src/services/voiceTalk');
+const { normalizeTalk, FAST_CHAT_ORDER, publicTalkPayload } = require('../src/services/voiceTalk');
 const { preferFastChatChain } = require('../src/services/llmFactory');
 
 let passed = 0;
@@ -47,6 +47,9 @@ test('normalizeTalk mặc định tắt, kẹp rate', () => {
   assert.strictEqual(t.enabled, true);
   assert.strictEqual(t.rate, 1.4);
   assert.strictEqual(normalizeTalk({}).enabled, false);
+  assert.strictEqual(normalizeTalk({ enabled: 'true' }).enabled, false);
+  assert.strictEqual(publicTalkPayload({}).enabled, false);
+  assert.strictEqual(publicTalkPayload({ enabled: true }).enabled, true);
 });
 
 test('FAST_CHAT_ORDER Groq rồi Gemini', () => {
