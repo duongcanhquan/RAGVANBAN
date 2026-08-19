@@ -78,10 +78,9 @@ File đã có trên Drive: **không** đưa vào R2 — dán link ở `/quantri`
 
 1. Vào [https://app.pinecone.io](https://app.pinecone.io)
 2. **API Keys** → tạo / copy key → `PINECONE_API_KEY`
-3. **Create Index**:
-   - Name: `van-ban-hanh-chinh` (hoặc tên bạn đặt vào `PINECONE_INDEX_NAME`)
-   - Dimension: **1536** nếu dùng `text-embedding-3-small` (OpenAI)
-   - Metric: `cosine`
+3. **Create Index** (dense, cosine — đừng chọn index “kèm model” của Pinecone):
+   - **768** nếu embedding Gemini `text-embedding-004` (chip có sẵn)
+   - **1536** nếu OpenAI `text-embedding-3-small`: console thường không hiện 1536 → **Custom settings**, gõ `1536`
 
 ### 3) OpenAI
 
@@ -164,7 +163,8 @@ CHUNK_OVERLAP=150
 UPSERT_BATCH_SIZE=64
 PUBLIC_DOCS_BASE_URL=
 RAG_TOP_K=6
-UPLOAD_MAX_BYTES=26214400
+# 1–512 MB; ghi đè tại /quantri/rag. Vercel HTTP ~4.5 MB — file lớn dùng Drive.
+UPLOAD_MAX_BYTES=41943040
 
 # -------- Supabase --------
 SUPABASE_URL=https://xxxx.supabase.co
@@ -404,7 +404,7 @@ Dán link Drive ở tab **Link / Drive**. Hệ thống đọc file rồi đưa v
 | Chat demo / không retrieve | Thiếu Pinecone/LLM key hoặc chưa ingest PDF |
 | CORS / API fail từ Vite | Backend phải chạy **port 5000**; Vite proxy dùng `127.0.0.1:5000` (không dùng `localhost` trên Windows) |
 | Server start xong rồi mất / không vào được | Port bị chiếm: `cd server && npm run kill:5000` rồi `npm run start`. Giữ cửa sổ terminal mở. Mở thử `http://127.0.0.1:5000/api/health` |
-| Embedding dimension mismatch | Index Pinecone phải khớp model (1536 cho `text-embedding-3-small`) |
+| Embedding dimension mismatch | Index phải khớp model: **768** = Gemini `text-embedding-004`; **1536** = OpenAI 3-small (Custom settings nếu không thấy chip 1536) |
 
 ---
 

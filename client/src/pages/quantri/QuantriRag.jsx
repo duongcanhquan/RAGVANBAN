@@ -15,6 +15,16 @@ function Field({ label, children }) {
 const inputCls =
   'mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-sm text-white outline-none'
 
+const MB = 1024 * 1024
+const UPLOAD_MB_MIN = 1
+const UPLOAD_MB_MAX = 512
+const UPLOAD_MB_PRESETS = [40, 80, 200, 512]
+
+function uploadMb(rag) {
+  const bytes = Number(rag?.uploadMaxBytes) || 40 * MB
+  return Math.min(UPLOAD_MB_MAX, Math.max(UPLOAD_MB_MIN, Math.round(bytes / MB)))
+}
+
 export default function QuantriRag() {
   const { me } = useOutletContext() || {}
   const [rag, setRag] = useState(null)
@@ -184,6 +194,51 @@ export default function QuantriRag() {
         </label>
       </section>
 
+      <section className="mb-5 rounded-2xl border border-amber-400/25 bg-black/25 p-4">
+        <h2 className="m-0 mb-1 text-sm font-semibold">Dung lượng file</h2>
+        <p className="m-0 mb-3 text-[11px] text-white/50">
+          Đây là mức <strong className="font-medium text-white/70">tối đa</strong>. File 10 KB, 200 KB, 900
+          KB vẫn tải bình thường. Mặc định 40 MB.
+        </p>
+        <Field label="Dung lượng tối đa (MB)">
+          <input
+            className={inputCls}
+            type="number"
+            min={UPLOAD_MB_MIN}
+            max={UPLOAD_MB_MAX}
+            step={1}
+            value={uploadMb(rag)}
+            onChange={(e) => {
+              const mb = Math.min(
+                UPLOAD_MB_MAX,
+                Math.max(UPLOAD_MB_MIN, Number(e.target.value) || 40)
+              )
+              patch({ uploadMaxBytes: mb * MB })
+            }}
+          />
+        </Field>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {UPLOAD_MB_PRESETS.map((mb) => (
+            <button
+              key={mb}
+              type="button"
+              onClick={() => patch({ uploadMaxBytes: mb * MB })}
+              className={`rounded-lg px-2.5 py-1 text-xs ${
+                uploadMb(rag) === mb
+                  ? 'bg-amber-400/90 text-black'
+                  : 'bg-white/10 text-white/80 hover:bg-white/15'
+              }`}
+            >
+              {mb} MB
+            </button>
+          ))}
+        </div>
+        <p className="m-0 mt-3 text-[11px] text-white/45">
+          Trên website, file trên khoảng 4,5 MB không gửi trực tiếp được — cán bộ sẽ được hướng dẫn dán
+          link Google Drive (không cần biết kỹ thuật). Drive vẫn tôn trọng mức tối đa ở trên.
+        </p>
+      </section>
+
       <section className="mb-5 rounded-2xl border border-white/10 bg-black/25 p-4">
         <h2 className="m-0 mb-3 text-sm font-semibold">Số hóa</h2>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -212,18 +267,6 @@ export default function QuantriRag() {
               className={inputCls}
               value={rag.ocrLangs}
               onChange={(e) => patch({ ocrLangs: e.target.value })}
-            />
-          </Field>
-          <Field label="Dung lượng upload tối đa (MB)">
-            <input
-              className={inputCls}
-              type="number"
-              min={1}
-              max={80}
-              value={Math.round((rag.uploadMaxBytes || 41943040) / (1024 * 1024))}
-              onChange={(e) =>
-                patch({ uploadMaxBytes: Math.max(1, Number(e.target.value) || 40) * 1024 * 1024 })
-              }
             />
           </Field>
         </div>

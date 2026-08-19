@@ -7,10 +7,13 @@ const {
   getEmbeddings,
   withProviderFallback,
   hasLiveKeys,
+  liveKeysReport,
+  brainNotReadyMessage,
   listAvailableProviders,
   ensureBrain,
 } = require('./llmFactory');
-const { pineconeCreds } = require('./llmConfig');
+const { pineconeCreds, providerCreds } = require('./llmConfig');
+const { assertExpectedFitsIndex, getPineconeIndexDimension } = require('./embeddingDim');
 
 let pineconeCached = null;
 let pineconeKeyUsed = '';
@@ -45,6 +48,7 @@ async function getClients() {
   const pinecone = getPinecone();
   if (!pinecone) return null;
   const pc = pineconeCreds();
+  const indexDim = await getPineconeIndexDimension(pinecone, pc.indexName);
 
   const { result: chatModel, provider: chatProvider } = await withProviderFallback(
     'chat',
@@ -53,7 +57,11 @@ async function getClients() {
 
   const { result: embeddings, provider: embeddingProvider } = await withProviderFallback(
     'embedding',
-    async (provider) => getEmbeddings(provider)
+    async (provider) => {
+      const creds = providerCreds(provider);
+      assertExpectedFitsIndex({ model: creds.embeddingModel, indexDim });
+      return getEmbeddings(provider);
+    }
   );
 
   return {
@@ -83,6 +91,8 @@ module.exports = {
   pineconeIndexTarget,
   getExtractLLM,
   hasLiveKeys,
+  liveKeysReport,
+  brainNotReadyMessage,
   listAvailableProviders,
   getLLM,
   getEmbeddings,

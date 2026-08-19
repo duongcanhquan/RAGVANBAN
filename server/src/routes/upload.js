@@ -17,11 +17,11 @@ const {
   guessContentType,
 } = require('../ingestion/extractAnyText');
 const { extractWebPage } = require('../ingestion/extractWebPage');
-const { hasLiveKeys, ensureBrain } = require('../services/clients');
+const { ensureBrain, liveKeysReport, brainNotReadyMessage } = require('../services/clients');
 const { assertCanUseCategory } = require('../services/adminAccess');
 const { parseDriveResource } = require('../services/googleDrive');
 const { ingestDriveFile, syncDriveFolder } = require('../services/driveIngest');
-const { getRagConfig, assertUploadSize } = require('../services/ragConfig');
+const { getRagConfig, assertUploadSize, UPLOAD_MAX_BYTES_MAX } = require('../services/ragConfig');
 const { getFlags } = require('../services/integrations');
 const { listenSseAbort } = require('../services/sseAbort');
 const { publicErrorMessage } = require('../services/publicError');
@@ -30,7 +30,7 @@ const router = express.Router();
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 80 * 1024 * 1024 },
+  limits: { fileSize: UPLOAD_MAX_BYTES_MAX },
   fileFilter: (_req, file, cb) => {
     if (!isAllowedUpload(file.originalname, file.mimetype)) {
       return cb(
@@ -60,11 +60,13 @@ async function requireLiveKeys(res) {
   } catch {
     /* env-only */
   }
-  if (hasLiveKeys()) return true;
+  const report = liveKeysReport();
+  if (report.ready) return true;
   res.status(503).json({
-    error:
-      'Chưa cấu hình bộ não (LLM + embedding + Pinecone). Super-admin vào /quantri/bo-nao để dán API key.',
+    error: brainNotReadyMessage(report),
     ragReady: false,
+    missing: report.missing,
+    providers: report.providers,
   });
   return false;
 }

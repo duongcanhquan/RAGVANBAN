@@ -21,6 +21,8 @@ export default function QuantriBrain() {
   const [status, setStatus] = useState(null)
   const [ragReady, setRagReady] = useState(false)
   const [fromEnv, setFromEnv] = useState({})
+  const [missing, setMissing] = useState([])
+  const [embeddingDim, setEmbeddingDim] = useState(null)
   const [error, setError] = useState('')
   const [ok, setOk] = useState('')
   const [busy, setBusy] = useState(false)
@@ -37,7 +39,15 @@ export default function QuantriBrain() {
     setStatus(data.status)
     setRagReady(Boolean(data.ragReady))
     setFromEnv(data.fromEnv || {})
+    setMissing(Array.isArray(data.missing) ? data.missing : [])
+    setEmbeddingDim(data.embeddingDim || null)
     setDraftKeys({})
+    adminFetch('/api/quantri/brain/embedding-dim')
+      .then(async (dimRes) => {
+        const dimData = await dimRes.json().catch(() => ({}))
+        if (dimRes.ok && dimData.embeddingDim) setEmbeddingDim(dimData.embeddingDim)
+      })
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -113,6 +123,8 @@ export default function QuantriBrain() {
       setStatus(data.status)
       setRagReady(Boolean(data.ragReady))
       setFromEnv(data.fromEnv || fromEnv)
+      setMissing(Array.isArray(data.missing) ? data.missing : [])
+      setEmbeddingDim(data.embeddingDim || null)
       setDraftKeys({})
       setOk('Đã lưu bộ não. Chat và số hóa dùng cấu hình mới ngay (không cần restart).')
     } catch (e) {
@@ -132,7 +144,9 @@ export default function QuantriBrain() {
     const data = await res.json().catch(() => ({}))
     const msg = data.ok
       ? purpose === 'embedding'
-        ? `OK · ${data.dims} chiều vector`
+        ? data.mismatch
+          ? `Vector ${data.dims} chiều ≠ index Pinecone ${data.indexDim} — phải giống nhau`
+          : `OK · ${data.dims} chiều${data.expectedDim ? ` (model ${data.expectedDim})` : ''}${data.indexDim ? ` · index ${data.indexDim}` : ''}`
         : `OK · ${data.sample || 'phản hồi nhận được'}`
       : data.error || 'Thất bại'
     setTestOut((cur) => ({ ...cur, [`${provider}:${purpose}`]: msg }))
@@ -164,7 +178,16 @@ export default function QuantriBrain() {
       >
         {ragReady
           ? `Sẵn sàng · chat: ${(status?.chat || []).join(', ') || '—'} · embedding: ${(status?.embedding || []).join(', ') || '—'} · Pinecone: ${status?.pinecone ? 'OK' : 'thiếu'}`
-          : 'Chưa đủ bộ não: cần ≥1 chat, ≥1 embedding, và Pinecone.'}
+          : `Chưa đủ bộ não: thiếu ${
+              (missing.length
+                ? missing
+                : [
+                    !(status?.chat || []).length && 'chat',
+                    !(status?.embedding || []).length && 'embedding',
+                    !status?.pinecone && 'pinecone',
+                  ].filter(Boolean)
+              ).join(', ') || 'chat, embedding, Pinecone'
+            }. Cần ≥1 key chat, ≥1 key embedding (không dùng DeepSeek/Groq để embed), và Pinecone. Dán xong phải bấm Lưu.`}
       </div>
 
       <section className="mb-5 rounded-3xl border border-white/10 bg-white/5 p-4 text-sm leading-relaxed text-white/75">
@@ -192,8 +215,65 @@ export default function QuantriBrain() {
       <section className="mb-5 rounded-3xl border border-white/10 bg-white/5 p-4">
         <h2 className="m-0 text-base font-semibold">1. Kho vector — Pinecone</h2>
         <p className="m-0 mt-1 mb-3 text-xs text-white/50">
-          Bắt buộc cho tìm văn bản. {fromEnv.pinecone ? 'Đã có key trong .env — để trống ô dưới nếu giữ nguyên.' : ''}
+          {embeddingDim?.createHint ||
+            'Console Pinecone hiện chip 384 / 512 / 768 / 1024 / 2048 — đó là index gắn model sẵn của họ. App này tự embed: tạo index dense, cosine. Dễ nhất: chip 768 + Gemini. OpenAI: Custom settings, gõ 1536.'}
         </p>
+        <div className="mb-3 overflow-x-auto rounded-xl border border-white/10 text-[11px]">
+          <table className="w-full border-collapse text-left text-white/75">
+            <thead className="bg-white/5 text-white/50">
+              <tr>
+                <th className="px-2 py-1.5 font-medium">Index Pinecone</th>
+                <th className="px-2 py-1.5 font-medium">Embedding trên /quantri</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(embeddingDim?.pairings || [
+                {
+                  dim: 768,
+                  recommended: true,
+                  pineconeUi: 'Chip 768 có sẵn',
+                  models: ['Gemini text-embedding-004'],
+                },
+                {
+                  dim: 1536,
+                  recommended: false,
+                  pineconeUi: 'Custom settings, gõ 1536',
+                  models: ['OpenAI text-embedding-3-small'],
+                },
+              ]).map((row) => (
+                <tr key={row.dim} className="border-t border-white/10">
+                  <td className="px-2 py-1.5 align-top">
+                    <span className="font-mono text-white">{row.dim}</span>
+                    {row.recommended ? (
+                      <span className="ml-1.5 rounded-full bg-emerald-400/20 px-1.5 py-0.5 text-[10px] text-emerald-100">
+                        nên dùng
+                      </span>
+                    ) : null}
+                    <div className="mt-0.5 text-white/45">{row.pineconeUi}</div>
+                  </td>
+                  <td className="px-2 py-1.5">{(row.models || []).join(' · ')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {embeddingDim?.indexDim && embeddingDim.recommend ? (
+          <p className="mb-3 rounded-xl bg-amber-500/15 px-3 py-2 text-xs text-amber-50">
+            Index đang là {embeddingDim.indexDim} chiều → embedding phải là{' '}
+            {(embeddingDim.recommend.models || []).join(' / ')}. Mục «Embedding (vector)» bên dưới
+            chọn đúng nhà cung cấp đó rồi Lưu.
+          </p>
+        ) : null}
+        {embeddingDim && embeddingDim.ok === false ? (
+          <p className="mb-3 rounded-xl bg-rose-500/20 px-3 py-2 text-xs text-rose-100">
+            Lệch chiều: model {embeddingDim.model || 'embedding'} = {embeddingDim.expectedDim}{' '}
+            chiều, index Pinecone = {embeddingDim.indexDim} chiều. Đổi embedding cho khớp, hoặc tạo
+            index mới rồi số hóa lại toàn bộ.
+          </p>
+        ) : null}
+        {fromEnv.pinecone ? (
+          <p className="mb-3 text-[11px] text-white/45">Đã có key Pinecone trong .env — để trống ô key nếu giữ nguyên.</p>
+        ) : null}
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="text-xs text-white/60">
             API key {config.pinecone?.hasKey ? `(${config.pinecone.apiKeyHint})` : ''}
@@ -208,6 +288,7 @@ export default function QuantriBrain() {
           </label>
           <label className="text-xs text-white/60">
             Index
+            {embeddingDim?.indexDim ? ` (${embeddingDim.indexDim} chiều)` : ''}
             <input
               value={config.pinecone?.indexName || ''}
               onChange={(e) =>
@@ -276,6 +357,7 @@ export default function QuantriBrain() {
           </label>
           <label className="text-xs text-white/60">
             Embedding (vector)
+            {embeddingDim?.expectedDim ? ` · ${embeddingDim.expectedDim} chiều` : ''}
             <select
               value={config.embeddingPrimary}
               onChange={(e) => setConfig((c) => ({ ...c, embeddingPrimary: e.target.value }))}
@@ -412,6 +494,10 @@ export default function QuantriBrain() {
                           onChange={(e) => patchProvider(spec.id, { embeddingModel: e.target.value })}
                           className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm"
                         />
+                        <span className="mt-1 block text-[11px] text-white/45">
+                          Gemini embedding-004 = 768 (chip có sẵn). OpenAI 3-small = 1536 (Custom
+                          settings, gõ 1536). Phải trùng index.
+                        </span>
                       </label>
                     ) : null}
                     {spec.id === 'openrouter' ? (

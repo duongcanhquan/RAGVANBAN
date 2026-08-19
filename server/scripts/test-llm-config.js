@@ -57,3 +57,19 @@ test('applySavedKeys giữ key cũ khi client gửi rỗng', () => {
   );
   assert.equal(next.providers.groq.apiKey, 'gsk-keep-this-key-ok');
 });
+
+test('assertDurableSave chặn ghi local trên Vercel', () => {
+  const { assertDurableSave } = require('../src/services/appSettings');
+  assert.throws(
+    () => assertDurableSave({ ok: true, source: 'local' }, 'bộ não', { VERCEL: '1' }),
+    /Supabase|app_settings|SERVICE_ROLE/i
+  );
+  assert.throws(
+    () => assertDurableSave({ ok: false, error: 'RLS' }, 'bộ não', {}),
+    /RLS/
+  );
+  assert.doesNotThrow(() =>
+    assertDurableSave({ ok: true, source: 'supabase' }, 'bộ não', { VERCEL: '1' })
+  );
+  assert.doesNotThrow(() => assertDurableSave({ ok: true, source: 'local' }, 'bộ não', {}));
+});

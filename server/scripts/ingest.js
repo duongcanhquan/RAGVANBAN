@@ -21,6 +21,7 @@ const {
   hasLiveKeys,
   listAvailableProviders,
   ensureBrain,
+  brainNotReadyMessage,
 } = require('../src/services/clients');
 
 function defaultUrlForFile(filePath) {
@@ -99,9 +100,7 @@ async function runIngest(options = {}) {
   if (!dryRun) {
     await ensureBrain();
     if (!hasLiveKeys()) {
-      throw new Error(
-        'Thiếu cấu hình Multi-LLM / Pinecone. Điền key trong .env hoặc /quantri/bo-nao.'
-      );
+      throw new Error(brainNotReadyMessage());
     }
   }
 

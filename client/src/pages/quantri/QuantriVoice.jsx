@@ -38,13 +38,15 @@ export default function QuantriVoice() {
   const [talkOk, setTalkOk] = useState('')
 
   const load = useCallback(async () => {
-    const res = await adminFetch('/api/quantri/voice')
+    const [res, talkRes] = await Promise.all([
+      adminFetch('/api/quantri/voice'),
+      adminFetch('/api/quantri/voice-talk'),
+    ])
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(data.error || 'Không tải được giọng AI')
     setVoice(data.voice)
     setHardRules(data.hardRules || '')
     setPresets(data.presets || [])
-    const talkRes = await adminFetch('/api/quantri/voice-talk')
     const talkData = await talkRes.json().catch(() => ({}))
     if (talkRes.ok) setTalk(talkData.talk || talkData)
   }, [])

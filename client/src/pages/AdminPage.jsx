@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Globe, GripVertical, Pencil, RefreshCw, Sparkles, Trash2, Type, UploadCloud } from 'lucide-react'
 import { adminFetch } from '../lib/adminApi'
+import { apiUrl } from '../lib/apiBase'
+import { DIRECT_UPLOAD_MAX_BYTES, formatBytes, splitUploadFiles } from '../lib/uploadLimits'
 
 const ALLOWED_RE =
   /\.(pdf|doc|docx|ppt|pptx|png|jpe?g|webp|gif|bmp|tiff?|txt|md|csv)$/i
@@ -132,6 +134,9 @@ export default function AdminPage() {
   const [bulkCategoryId, setBulkCategoryId] = useState('')
   const [detailId, setDetailId] = useState('')
   const [dropHint, setDropHint] = useState('')
+  const [uploadMaxBytes, setUploadMaxBytes] = useState(40 * 1024 * 1024)
+  const [httpUploadMaxBytes, setHttpUploadMaxBytes] = useState(DIRECT_UPLOAD_MAX_BYTES)
+  const [driveHint, setDriveHint] = useState(null)
   const inputRef = useRef(null)
 
   const loadStats = useCallback(async () => {
@@ -188,6 +193,18 @@ export default function AdminPage() {
     loadDocs()
   }, [loadStats, loadCategories, loadDocs])
 
+  useEffect(() => {
+    fetch(apiUrl('/api/settings/rag'))
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}))
+        const n = Number(data.uploadMaxBytes)
+        if (Number.isFinite(n) && n > 0) setUploadMaxBytes(n)
+        const http = Number(data.httpUploadMaxBytes)
+        if (Number.isFinite(http) && http > 0) setHttpUploadMaxBytes(http)
+      })
+      .catch(() => {})
+  }, [])
+
   const groups = useMemo(() => buildGroups(docs, categoryOptions), [docs, categoryOptions])
   const detailDoc = docs.find((d) => d.id === detailId) || null
   const uploadR2Hint = r2PrefixFromLabel(
@@ -197,12 +214,28 @@ export default function AdminPage() {
   function acceptFiles(list) {
     const next = [...list].filter((f) => ALLOWED_RE.test(f.name))
     if (!next.length) {
-      setError('Hỗ trợ: PDF, DOC/DOCX, PPT/PPTX, ảnh (OCR), TXT/MD')
+      setError('Chỉ nhận PDF, Word, PowerPoint, ảnh, hoặc file chữ (TXT/MD).')
       return
     }
-    setError('')
+    const { direct, useDrive, tooLarge } = splitUploadFiles(next, {
+      uploadMaxBytes,
+      httpUploadMaxBytes,
+    })
+    if (useDrive.length) {
+      setDriveHint({
+        names: useDrive.map((f) => `${f.name} (${formatBytes(f.size)})`),
+        limit: formatBytes(httpUploadMaxBytes),
+        keptSmall: direct.length > 0,
+      })
+      setIngestTab('url')
+    }
+    if (direct.length) setFiles((prev) => [...prev, ...direct])
+    setError(
+      tooLarge.length
+        ? `Không nhận ${tooLarge.map((f) => `«${f.name}» (${formatBytes(f.size)})`).join(', ')} — lớn hơn mức cho phép (${formatBytes(uploadMaxBytes)}).`
+        : ''
+    )
     setResult(null)
-    setFiles((prev) => [...prev, ...next])
   }
 
   async function readSse(res, { onProgress, onDone }) {
@@ -361,6 +394,7 @@ export default function AdminPage() {
           setResult(data)
           setProgress({ percent: 100, message: 'Hoàn tất' })
           setWebUrl('')
+          setDriveHint(null)
           loadStats()
           loadDocs()
         },
@@ -557,7 +591,8 @@ export default function AdminPage() {
           <section className="glass-panel flex min-h-0 flex-col overflow-y-auto rounded-3xl p-5 sm:p-6 lg:max-h-[calc(100dvh-8rem)]">
             <h2 className="m-0 mb-1 text-lg font-semibold text-white">Tải tài liệu</h2>
             <p className="m-0 mb-4 text-sm text-white/70">
-              File gốc lên Cloudflare R2 theo thư mục chuyên mục. Link Drive giữ file trên Drive.
+              File nhỏ (vài chục KB) vẫn tải được. File trên {formatBytes(httpUploadMaxBytes)}: đưa lên
+              Google Drive rồi dán link — hệ thống tự chuyển sang bước đó.
             </p>
 
             <div className="mb-4 flex flex-wrap gap-1 rounded-full border border-white/15 bg-white/5 p-1">
@@ -632,7 +667,10 @@ export default function AdminPage() {
                   <p className="m-0 text-base font-medium text-white">
                     {files.length ? `${files.length} file đã chọn` : 'Kéo thả hoặc chọn nhiều file'}
                   </p>
-                  <p className="m-0 mt-1 text-sm text-white/50">PDF, Word, PPTX, ảnh…</p>
+                  <p className="m-0 mt-1 text-sm text-white/50">
+                    PDF, Word, ảnh… từ file rất nhỏ đến {formatBytes(httpUploadMaxBytes)} / lần tải
+                    trực tiếp
+                  </p>
                   <input
                     ref={inputRef}
                     type="file"
@@ -713,14 +751,55 @@ export default function AdminPage() {
 
             {ingestTab === 'url' && (
               <div className="space-y-3">
-                <p className="m-0 text-xs text-white/50">
-                  Dán link Google Drive — hệ thống đọc rồi vector hóa, file gốc giữ trên Drive.
-                </p>
+                {driveHint ? (
+                  <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-3 py-3 text-sm text-amber-50">
+                    <p className="m-0 font-medium">
+                      File lớn hơn {driveHint.limit} — dùng Google Drive
+                    </p>
+                    <ul className="mt-2 mb-2 list-disc space-y-0.5 pl-4 text-xs text-amber-50/90">
+                      {driveHint.names.map((n, i) => (
+                        <li key={`${n}-${i}`}>{n}</li>
+                      ))}
+                    </ul>
+                    <ol className="m-0 list-decimal space-y-1 pl-4 text-xs leading-relaxed text-white/80">
+                      <li>
+                        Mở{' '}
+                        <a
+                          href="https://drive.google.com"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline text-[var(--hcc-gold-bright)]"
+                        >
+                          Google Drive
+                        </a>
+                        , bấm Mới → Tải tệp lên.
+                      </li>
+                      <li>Chuột phải file → Chia sẻ → «Bất kỳ ai có đường liên kết».</li>
+                      <li>Copy link, dán vào ô bên dưới, bấm Số hóa.</li>
+                    </ol>
+                    {driveHint.keptSmall ? (
+                      <p className="m-0 mt-2 text-xs text-white/70">
+                        File nhỏ hơn {driveHint.limit} vẫn nằm ở tab File — tải như bình thường.
+                      </p>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="mt-2 text-[11px] text-white/50 underline"
+                      onClick={() => setDriveHint(null)}
+                    >
+                      Đóng hướng dẫn
+                    </button>
+                  </div>
+                ) : (
+                  <p className="m-0 text-sm text-white/65">
+                    Dán link Google Drive. File gốc ở lại Drive — phù hợp tài liệu lớn.
+                  </p>
+                )}
                 <textarea
                   rows={4}
                   value={webUrl}
                   onChange={(e) => setWebUrl(e.target.value)}
-                  placeholder="https://drive.google.com/file/d/xxxxx/view"
+                  placeholder="Dán link Google Drive vào đây"
                   className="w-full resize-y rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-white/40"
                 />
                 <button
@@ -730,7 +809,7 @@ export default function AdminPage() {
                   className="btn-gold inline-flex cursor-pointer items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold disabled:opacity-40"
                 >
                   <Globe className="h-4 w-4" />
-                  {uploading ? 'Đang lấy & số hóa…' : 'Số hóa từ link Drive / web'}
+                  {uploading ? 'Đang lấy & số hóa…' : 'Số hóa từ link Drive'}
                 </button>
               </div>
             )}

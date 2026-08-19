@@ -17,15 +17,18 @@ const {
   withProviderFallback,
   hasLiveKeys,
   ensureBrain,
+  brainNotReadyMessage,
 } = require('./clients');
 const { insertDocument, getDocumentByFileName, updateDocument } = require('./supabase');
+const { providerCreds } = require('./llmConfig');
+const { assertExpectedFitsIndex, getPineconeIndexDimension } = require('./embeddingDim');
 const {
   listCategories,
   suggestCategoryId,
   pathForCategory,
   setLocalDocCategory,
 } = require('./taxonomyStore');
-const { getRagConfig } = require('./ragConfig');
+const { getRagConfig, assertUploadSize } = require('./ragConfig');
 
 function defaultUrlForFile(filePath) {
   const base = process.env.PUBLIC_DOCS_BASE_URL || '';
@@ -67,6 +70,7 @@ async function ingestTextContent(text, options = {}) {
   progress(onProgress, 'read', 15, `Đã nhận ${cleaned.length} ký tự (${sourceKind})`);
 
   progress(onProgress, 'metadata', 30, 'Đang bóc tách metadata…');
+  if (!dryRun) await ensureBrain();
   let llm = null;
   let extractProvider = 'heuristic';
   if (!dryRun && hasLiveKeys()) {
@@ -103,14 +107,18 @@ async function ingestTextContent(text, options = {}) {
 
   if (!dryRun) {
     if (!hasLiveKeys()) {
-      throw new Error('Thiếu cấu hình Multi-LLM / Pinecone để số hóa');
+      throw new Error(brainNotReadyMessage());
     }
-    await ensureBrain();
     progress(onProgress, 'embed', 65, 'Đang embed & đẩy lên Pinecone…');
-    const emb = await withProviderFallback('embedding', async (p) => getEmbeddings(p));
-    embeddingProvider = emb.provider;
     const pinecone = getPinecone();
     const pc = pineconeIndexTarget();
+    const indexDim = await getPineconeIndexDimension(pinecone, pc.indexName);
+    const emb = await withProviderFallback('embedding', async (p) => {
+      const creds = providerCreds(p);
+      assertExpectedFitsIndex({ model: creds.embeddingModel, indexDim });
+      return getEmbeddings(p);
+    });
+    embeddingProvider = emb.provider;
 
     const existing =
       options.replaceDocumentId
@@ -236,11 +244,14 @@ async function ingestSingleFile(source, options = {}) {
     (typeof source === 'string' ? path.basename(source) : 'upload.bin');
 
   progress(onProgress, 'read', 10, `Đang trích xuất nội dung: ${fileName}`);
-  const rag = options.ocrLangs ? null : await getRagConfig();
+  const rag = await getRagConfig();
+  if (Buffer.isBuffer(source)) {
+    assertUploadSize(source.length, rag.uploadMaxBytes);
+  }
   const extracted = await extractAnyText(source, {
     fileName,
     mimeType,
-    ocrLangs: options.ocrLangs || rag?.ocrLangs,
+    ocrLangs: options.ocrLangs || rag.ocrLangs,
   });
   if (!extracted.text) {
     throw new Error(`Không trích xuất được text từ ${fileName}`);

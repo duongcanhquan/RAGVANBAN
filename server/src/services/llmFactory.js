@@ -34,6 +34,7 @@ function parseProviderList(envValue, fallbackList) {
 
 function isFallbackableError(err) {
   if (isAbortError(err)) return false;
+  if (err?.code === 'EMBEDDING_DIM_MISMATCH') return true;
   const msg = String(err?.message || err || '').toLowerCase();
   const status = err?.status || err?.response?.status || err?.statusCode;
   if (status === 429 || status === 500 || status === 502 || status === 503 || status === 504) {
@@ -217,13 +218,6 @@ function shouldAttemptNextProvider(err, hasMoreProviders) {
   return isFallbackableError(err) || Boolean(hasMoreProviders);
 }
 
-function hasLiveKeys() {
-  const pineconeOk = pineconeCreds().hasKey;
-  const chatOk = chainFor('chat').length > 0;
-  const embedOk = chainFor('embedding').length > 0;
-  return pineconeOk && chatOk && embedOk;
-}
-
 function listAvailableProviders() {
   return {
     chat: CHAT_PROVIDERS.filter(hasProviderKey),
@@ -232,12 +226,39 @@ function listAvailableProviders() {
   };
 }
 
+function liveKeysReport() {
+  const providers = listAvailableProviders();
+  const missing = [];
+  if (!providers.chat.length) missing.push('chat');
+  if (!providers.embedding.length) missing.push('embedding');
+  if (!providers.pinecone) missing.push('pinecone');
+  return { ready: missing.length === 0, missing, providers };
+}
+
+function hasLiveKeys() {
+  return liveKeysReport().ready;
+}
+
+function brainNotReadyMessage(report = liveKeysReport()) {
+  const hints = {
+    chat: 'key chat (OpenAI / Gemini / OpenRouter / DeepSeek…)',
+    embedding:
+      'key embedding (OpenAI, Gemini hoặc OpenRouter — DeepSeek/Groq không embed được)',
+    pinecone: 'Pinecone API key và tên index',
+  };
+  const missing = report?.missing?.length ? report.missing : ['chat', 'embedding', 'pinecone'];
+  const detail = missing.map((k) => hints[k] || k).join('; ');
+  return `Chưa đủ bộ não: thiếu ${detail}. Super-admin vào /quantri/bo-nao dán key rồi bấm Lưu.`;
+}
+
 module.exports = {
   getLLM,
   getEmbeddings,
   withProviderFallback,
   hasProviderKey,
   hasLiveKeys,
+  liveKeysReport,
+  brainNotReadyMessage,
   listAvailableProviders,
   isFallbackableError,
   shouldAttemptNextProvider,

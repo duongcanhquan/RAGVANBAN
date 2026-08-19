@@ -84,6 +84,19 @@ function serializeAdmin(admin) {
   };
 }
 
+/** Super-admin không cần load cả cây chuyên mục trên mỗi request. */
+function attachCategoryAccess(profile, grantCategoryIds, categoryItems) {
+  const grant = (grantCategoryIds || []).filter(Boolean);
+  if (isSuperAdmin(profile)) {
+    return { ...profile, grantCategoryIds: grant, allowedCategoryIds: new Set() };
+  }
+  return {
+    ...profile,
+    grantCategoryIds: grant,
+    allowedCategoryIds: collectDescendantIds(categoryItems || [], grant),
+  };
+}
+
 module.exports = {
   collectDescendantIds,
   isSuperAdmin,
@@ -91,4 +104,5 @@ module.exports = {
   assertCanUseCategory,
   assertCanManageCategory,
   serializeAdmin,
+  attachCategoryAccess,
 };

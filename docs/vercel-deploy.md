@@ -12,7 +12,7 @@ Cần sẵn:
 
 - [ ] Repo GitHub đã nối với Vercel
 - [ ] Project [Supabase](https://supabase.com/dashboard) + đã chạy SQL (mục 3)
-- [ ] Index [Pinecone](https://app.pinecone.io) tên `van-ban-hanh-chinh`, metric `cosine`, **dimension 1536** (`text-embedding-3-small`)
+- [ ] Index [Pinecone](https://app.pinecone.io): dense, **cosine**. Dễ: dimension **768** + Gemini `text-embedding-004`. OpenAI: **Custom settings**, gõ **1536** (console thường không hiện chip 1536).
 - [ ] Ít nhất một LLM key: OpenAI / DeepSeek / Gemini
 - [ ] OpenAI hoặc Gemini cho **embedding** (DeepSeek không có embedding)
 
@@ -94,10 +94,10 @@ CHUNK_SIZE=900
 CHUNK_OVERLAP=150
 UPSERT_BATCH_SIZE=64
 RAG_TOP_K=6
-UPLOAD_MAX_BYTES=4500000
+UPLOAD_MAX_BYTES=41943040
 ```
 
-`UPLOAD_MAX_BYTES=4500000` — Vercel giới hạn body **~4.5 MB**. File lớn hơn: dán **link Google Drive** (không upload tay).
+`UPLOAD_MAX_BYTES` mặc định 40 MB (cấu hình 1–512 MB tại `/quantri/rag`). Vercel vẫn giới hạn **HTTP body ~4.5 MB** khi upload tay — file lớn hơn dán **link Google Drive** (server tải từ Drive theo giới hạn đã đặt).
 
 ### Cloudflare R2 — bắt buộc nếu upload file tay
 
@@ -151,14 +151,14 @@ Kiểm tra:
 
 ## 4) Pinecone index
 
-Create Index:
+Create Index (dense, **không** gắn model sẵn của Pinecone):
 
 - Name: `van-ban-hanh-chinh`
-- Dimensions: **1536**
 - Metric: **cosine**
-- Cloud/region: ghi đúng vào `PINECONE_ENVIRONMENT`
+- Dimensions: **768** nếu embedding Gemini `text-embedding-004` (chip có sẵn trên console)
+- Hoặc **1536** nếu OpenAI `text-embedding-3-small` — console không có chip 1536: **Custom settings**, gõ `1536`
 
-Sai dimension → ingest/chat lỗi embedding.
+Chip 384 / 512 / 1024 / 2048 là preset model của Pinecone, không dùng với bộ não RAGVANBAN trừ khi model embedding ra đúng số chiều đó.
 
 ---
 

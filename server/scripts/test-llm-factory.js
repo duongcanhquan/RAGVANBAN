@@ -33,6 +33,7 @@ test('isFallbackableError nhận 429/rate limit', () => {
   assert.strictEqual(isFallbackableError({ status: 429 }), true);
   assert.strictEqual(isFallbackableError(new Error('Rate limit exceeded')), true);
   assert.strictEqual(isFallbackableError(new Error('invalid api key xyz')), false);
+  assert.strictEqual(isFallbackableError({ code: 'EMBEDDING_DIM_MISMATCH', message: '768 vs 1536' }), true);
 });
 
 test('buildMetadataFilter dùng $in ACTIVE statuses', () => {
@@ -76,6 +77,22 @@ test('resolveProviderChain loại trùng & giữ thứ tự', () => {
   assert.ok(Array.isArray(chain));
   const uniq = new Set(chain);
   assert.strictEqual(uniq.size, chain.length);
+});
+
+test('brainNotReadyMessage nêu đúng phần thiếu', () => {
+  const { brainNotReadyMessage } = require('../src/services/llmFactory');
+  const msg = brainNotReadyMessage({ missing: ['embedding', 'pinecone'] });
+  assert.match(msg, /embedding/i);
+  assert.match(msg, /Pinecone/i);
+  assert.match(msg, /quantri\/bo-nao/);
+  assert.ok(!/thiếu chat/i.test(msg), msg);
+});
+
+test('liveKeysReport.ready khớp hasLiveKeys', () => {
+  const { liveKeysReport, hasLiveKeys } = require('../src/services/llmFactory');
+  const report = liveKeysReport();
+  assert.strictEqual(report.ready, hasLiveKeys());
+  assert.ok(Array.isArray(report.missing));
 });
 
 console.log(`\nKết quả: ${passed} passed, ${failed} failed`);

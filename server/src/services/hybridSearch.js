@@ -11,6 +11,7 @@ const {
 } = require('../ingestion/legalChunker');
 const { rerankLegal } = require('./rerank');
 const { raceAbort, throwIfAborted } = require('./abortControl');
+const { assertEmbeddingFitsIndex, getPineconeIndexDimension } = require('./embeddingDim');
 
 function buildMetadataFilter(intent = {}) {
   const onlyActive = intent.onlyActive !== false;
@@ -138,6 +139,12 @@ async function hybridSearch(question, intent, deps) {
   const anchors = parseQuestionAnchors(question);
   const vector = await raceAbort(embeddings.embedQuery(question), signal);
   throwIfAborted(signal);
+  const indexDim = await getPineconeIndexDimension(pinecone, indexName);
+  assertEmbeddingFitsIndex({
+    vectors: vector,
+    indexDim,
+    model: embeddings.model || embeddings.modelName,
+  });
   const onlyActive = intent?.onlyActive !== false && anchors.onlyActive !== false;
   const filter = buildMetadataFilter({ ...intent, onlyActive });
 

@@ -174,6 +174,76 @@ Bãi bỏ Nghị định số 99/2015/NĐ-CP.
     assert.throws(() => assertUploadSize(5000, 2000), /vượt/);
   });
 
+  test('normalizeRag cho phép upload 200MB (không kẹp 80MB)', () => {
+    const twoHundred = 200 * 1024 * 1024;
+    assert.strictEqual(normalizeRag({ uploadMaxBytes: twoHundred }).uploadMaxBytes, twoHundred);
+  });
+
+  test('assertUploadSize cho phép file nhỏ hơn 1MB', () => {
+    const { assertUploadSize } = require('../src/services/ragConfig');
+    assert.doesNotThrow(() => assertUploadSize(200, 40 * 1024 * 1024));
+    assert.doesNotThrow(() => assertUploadSize(500_000, 40 * 1024 * 1024));
+  });
+
+  test('normalizeRag kẹp dung lượng file trong 64KB–512MB', () => {
+    const {
+      UPLOAD_MAX_BYTES_MIN,
+      UPLOAD_MAX_BYTES_MAX,
+      publicRagPayload,
+    } = require('../src/services/ragConfig');
+    assert.strictEqual(UPLOAD_MAX_BYTES_MIN, 64 * 1024);
+    assert.strictEqual(UPLOAD_MAX_BYTES_MAX, 512 * 1024 * 1024);
+    assert.strictEqual(normalizeRag({ uploadMaxBytes: 1000 }).uploadMaxBytes, UPLOAD_MAX_BYTES_MIN);
+    assert.strictEqual(normalizeRag({ uploadMaxBytes: 2_000_000_000 }).uploadMaxBytes, UPLOAD_MAX_BYTES_MAX);
+    assert.strictEqual(publicRagPayload({ uploadMaxBytes: twoHundredMb() }).uploadMaxBytes, twoHundredMb());
+  });
+
+  test('file > 4.5MB thì gợi ý Drive, file nhỏ đi thẳng', () => {
+    const { splitUploadFiles, uploadLimits, DIRECT_UPLOAD_MAX_BYTES } = require('../src/services/ragConfig');
+    const limits = uploadLimits({ uploadMaxBytes: 40 * 1024 * 1024 });
+    assert.ok(DIRECT_UPLOAD_MAX_BYTES <= 4.5 * 1024 * 1024);
+    assert.equal(limits.httpUploadMaxBytes, DIRECT_UPLOAD_MAX_BYTES);
+    const parts = splitUploadFiles(
+      [
+        { name: 'nho.pdf', size: 80_000 },
+        { name: 'vua.pdf', size: 5_000_000 },
+        { name: 'khong.pdf', size: 600 * 1024 * 1024 },
+      ],
+      limits
+    );
+    assert.deepEqual(
+      parts.direct.map((f) => f.name),
+      ['nho.pdf']
+    );
+    assert.deepEqual(
+      parts.useDrive.map((f) => f.name),
+      ['vua.pdf']
+    );
+    assert.deepEqual(
+      parts.tooLarge.map((f) => f.name),
+      ['khong.pdf']
+    );
+    const pub = require('../src/services/ragConfig').publicRagPayload({});
+    assert.ok(pub.httpUploadMaxBytes > 0);
+    assert.ok(pub.httpUploadMaxBytes <= DIRECT_UPLOAD_MAX_BYTES);
+  });
+
+  test('formatBytes ghi 4.5 MB cho ngưỡng upload web', () => {
+    const { formatBytes, DIRECT_UPLOAD_MAX_BYTES } = require('../src/services/ragConfig');
+    assert.match(formatBytes(DIRECT_UPLOAD_MAX_BYTES), /4[,.]5/);
+    assert.match(formatBytes(80_000), /KB/);
+  });
+
+  test('multer dùng trần cấu hình chứ không cứng 80MB', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, '../src/routes/upload.js'), 'utf8');
+    assert.ok(/UPLOAD_MAX_BYTES_MAX/.test(src), 'upload.js phải lấy giới hạn từ ragConfig');
+    assert.ok(!/fileSize:\s*80\s*\*/.test(src), 'không còn hardcode 80MB');
+  });
+
+  function twoHundredMb() {
+    return 200 * 1024 * 1024;
+  }
+
   test('prompt extract schema có van_ban_bai_bo', () => {
     const src = fs.readFileSync(
       path.resolve(__dirname, '../src/ingestion/extractMetadata.js'),

@@ -12,21 +12,35 @@ const SECTIONS = [
 
 export default function QuantriSettings() {
   const [section, setSection] = useState('chuyen-muc')
+  const [seen, setSeen] = useState(() => new Set(['chuyen-muc']))
   const [items, setItems] = useState([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [draft, setDraft] = useState({ label: '', query: '', mode: 'both' })
+  const [keywordsLoaded, setKeywordsLoaded] = useState(false)
+
+  function go(id) {
+    setSection(id)
+    setSeen((cur) => {
+      if (cur.has(id)) return cur
+      const next = new Set(cur)
+      next.add(id)
+      return next
+    })
+  }
 
   async function loadKeywords() {
     const res = await adminFetch('/api/quantri/quick-keywords')
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(data.error || 'Không tải được từ khóa')
     setItems(data.items || [])
+    setKeywordsLoaded(true)
   }
 
   useEffect(() => {
+    if (section !== 'tu-khoa' || keywordsLoaded) return
     loadKeywords().catch((e) => setError(e.message))
-  }, [])
+  }, [section, keywordsLoaded])
 
   async function save(nextItems) {
     setBusy(true)
@@ -71,7 +85,7 @@ export default function QuantriSettings() {
           <button
             key={s.id}
             type="button"
-            onClick={() => setSection(s.id)}
+            onClick={() => go(s.id)}
             className={`rounded-full px-3 py-1.5 text-xs font-medium ${
               section === s.id ? 'bg-white text-[var(--hcc-red)]' : 'bg-white/10 text-white/80'
             }`}
@@ -81,10 +95,14 @@ export default function QuantriSettings() {
         ))}
       </nav>
 
-      {section === 'chuyen-muc' ? <CategoryTreeEditor /> : null}
+      {seen.has('chuyen-muc') ? (
+        <div hidden={section !== 'chuyen-muc'}>
+          <CategoryTreeEditor />
+        </div>
+      ) : null}
 
-      {section === 'tu-khoa' ? (
-        <section>
+      {seen.has('tu-khoa') ? (
+        <section hidden={section !== 'tu-khoa'}>
           <h2 className="m-0 text-lg font-semibold">Từ khóa tìm nhanh</h2>
           <p className="m-0 mt-1 mb-4 text-sm text-white/65">
             Chip gợi ý trên chat và tab Nhanh. Nhãn ngắn — câu hỏi đầy đủ khi bấm.
@@ -153,7 +171,11 @@ export default function QuantriSettings() {
         </section>
       ) : null}
 
-      {section === 'drive-n8n' ? <QuantriIntegrations /> : null}
+      {seen.has('drive-n8n') ? (
+        <div hidden={section !== 'drive-n8n'}>
+          <QuantriIntegrations />
+        </div>
+      ) : null}
     </div>
   )
 }

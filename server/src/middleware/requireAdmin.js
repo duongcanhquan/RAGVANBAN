@@ -5,6 +5,7 @@
 const { getSupabase, isConfigured } = require('../services/supabase');
 const { loadAdminById, ensureSuperAdminProfile } = require('../services/quantriStore');
 const { isSuperAdmin } = require('../services/adminAccess');
+const { getCachedAdmin, setCachedAdmin } = require('../services/adminAuthCache');
 
 function bearerToken(req) {
   const h = String(req.headers.authorization || '');
@@ -21,6 +22,13 @@ async function requireAdmin(req, res, next) {
     const token = bearerToken(req);
     if (!token) {
       res.status(401).json({ error: 'Chưa đăng nhập' });
+      return;
+    }
+    const cached = getCachedAdmin(token);
+    if (cached?.admin && cached?.user) {
+      req.admin = cached.admin;
+      req.authUser = cached.user;
+      next();
       return;
     }
     const sb = getSupabase();
@@ -47,6 +55,7 @@ async function requireAdmin(req, res, next) {
       res.status(403).json({ error: 'Tài khoản không có quyền quản trị' });
       return;
     }
+    setCachedAdmin(token, { admin, user: data.user });
     req.admin = admin;
     req.authUser = data.user;
     next();

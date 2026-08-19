@@ -3,7 +3,7 @@
  * Key không bao giờ trả raw ra client (chỉ hasKey + 4 ký tự cuối).
  */
 
-const { getSetting, setSetting } = require('./appSettings');
+const { getSetting, setSetting, assertDurableSave } = require('./appSettings');
 
 const BRAIN_KEY = 'llm_brain';
 const KEEP = '__KEEP__';
@@ -47,7 +47,7 @@ const PROVIDER_CATALOG = [
     envKey: 'GEMINI_API_KEY',
     defaultChat: 'gemini-2.0-flash',
     defaultEmbed: 'text-embedding-004',
-    note: 'Key Google AI Studio. Antigravity là agent sandbox (chạy code/web) — không dùng để trả lời văn bản pháp lý. Cùng key Gemini, chọn model Flash/Pro cho RAG.',
+    note: 'Key Google AI Studio. Embedding mặc định text-embedding-004 = 768 chiều — khớp chip 768 trên Pinecone. Chat dùng Flash/Pro. Antigravity không dùng để trả lời văn bản.',
   },
   {
     id: 'deepseek',
@@ -395,7 +395,8 @@ async function saveBrain(incoming) {
   const previous = await refreshBrain();
   const next = applySavedKeys(incoming, previous);
   delete next._fromDb;
-  await setSetting(BRAIN_KEY, next);
+  const persisted = await setSetting(BRAIN_KEY, next);
+  assertDurableSave(persisted, 'bộ não');
   cache = { ...next, _fromDb: true, _loadedAt: Date.now() };
   return cache;
 }

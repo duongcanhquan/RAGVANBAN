@@ -3,6 +3,10 @@
  */
 
 const { compactSoHieu } = require('./legalChunker');
+const {
+  assertEmbeddingFitsIndex,
+  getPineconeIndexDimension,
+} = require('../services/embeddingDim');
 
 function asList(v) {
   if (Array.isArray(v)) return v.map(String).map((s) => compactSoHieu(s) || s).filter(Boolean);
@@ -98,6 +102,12 @@ async function upsertChunksToPinecone(chunks, deps) {
     String(chunks[0]?.metadata?.ten_file || '').trim();
   const texts = chunks.map((c) => c.pageContent);
   const vectors = await embeddings.embedDocuments(texts);
+  const indexDim = await getPineconeIndexDimension(pinecone, indexName);
+  assertEmbeddingFitsIndex({
+    vectors,
+    indexDim,
+    model: embeddings.model || embeddings.modelName,
+  });
   const records = buildPineconeRecords(chunks, vectors);
 
   if (fileName || (Array.isArray(previousIds) && previousIds.length)) {

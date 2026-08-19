@@ -35,8 +35,17 @@ const {
   saveBrain,
   sanitizeBrain,
   providerCreds,
+  pineconeCreds,
+  getBrainSync,
 } = require('../services/llmConfig');
-const { getLLM, getEmbeddings, hasLiveKeys, listAvailableProviders } = require('../services/llmFactory');
+const { getLLM, getEmbeddings, hasLiveKeys, listAvailableProviders, liveKeysReport } = require('../services/llmFactory');
+const { getPinecone } = require('../services/clients');
+const {
+  embeddingAlignmentReport,
+  getPineconeIndexDimension,
+  peekPineconeIndexDimension,
+  expectedEmbeddingDim,
+} = require('../services/embeddingDim');
 const {
   getVoice,
   setVoice,
@@ -49,6 +58,36 @@ const { getRagConfig, setRagConfig, publicRagPayload } = require('../services/ra
 const { reingestDocument, reingestAll } = require('../services/reingest');
 
 const router = express.Router();
+
+async function embeddingDimPayload({ waitForIndex = false } = {}) {
+  try {
+    const creds = providerCreds(getBrainSync().embeddingPrimary || 'openai');
+    const pc = pineconeCreds();
+    let indexDim = peekPineconeIndexDimension(pc.indexName);
+    if (indexDim == null && waitForIndex) {
+      indexDim = await getPineconeIndexDimension(getPinecone(), pc.indexName);
+    } else if (indexDim == null) {
+      getPineconeIndexDimension(getPinecone(), pc.indexName).catch(() => {});
+    }
+    return embeddingAlignmentReport({ model: creds.embeddingModel, indexDim });
+  } catch {
+    return embeddingAlignmentReport({});
+  }
+}
+
+function embeddingDimPayloadFast() {
+  try {
+    const creds = providerCreds(getBrainSync().embeddingPrimary || 'openai');
+    const pc = pineconeCreds();
+    getPineconeIndexDimension(getPinecone(), pc.indexName).catch(() => {});
+    return embeddingAlignmentReport({
+      model: creds.embeddingModel,
+      indexDim: peekPineconeIndexDimension(pc.indexName),
+    });
+  } catch {
+    return embeddingAlignmentReport({});
+  }
+}
 
 router.get('/status', async (_req, res, next) => {
   try {
@@ -116,8 +155,7 @@ router.put('/quick-keywords', requireSuperAdmin, async (req, res, next) => {
 router.get('/integrations', requireAdmin, async (req, res, next) => {
   try {
     const isSuper = req.admin.role === 'super_admin';
-    const health = await getIntegrationHealth();
-    const sources = await listDriveSources();
+    const [health, sources] = await Promise.all([getIntegrationHealth(), listDriveSources()]);
     res.json({
       ok: true,
       r2: r2Status(),
@@ -247,8 +285,19 @@ router.get('/brain', requireSuperAdmin, async (_req, res, next) => {
       ok: true,
       ragReady: hasLiveKeys(),
       status: listAvailableProviders(),
+      missing: liveKeysReport().missing,
+      embeddingDim: embeddingDimPayloadFast(),
       ...publicBrainPayload(),
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/brain/embedding-dim', requireSuperAdmin, async (_req, res, next) => {
+  try {
+    await ensureBrain();
+    res.json({ ok: true, embeddingDim: await embeddingDimPayload({ waitForIndex: true }) });
   } catch (err) {
     next(err);
   }
@@ -261,6 +310,8 @@ router.put('/brain', requireSuperAdmin, async (req, res, next) => {
       ok: true,
       ragReady: hasLiveKeys(),
       status: listAvailableProviders(),
+      missing: liveKeysReport().missing,
+      embeddingDim: await embeddingDimPayload({ waitForIndex: true }),
       config: sanitizeBrain(saved),
       ...publicBrainPayload(),
     });
@@ -286,7 +337,21 @@ router.post('/brain/test', requireSuperAdmin, async (req, res, next) => {
     if (purpose === 'embedding') {
       const emb = getEmbeddings(provider);
       const vec = await emb.embedQuery('thử nghiệm embedding văn bản hành chính');
-      res.json({ ok: true, purpose, provider, dims: Array.isArray(vec) ? vec.length : 0 });
+      const dims = Array.isArray(vec) ? vec.length : 0;
+      const expected = expectedEmbeddingDim(creds.embeddingModel);
+      const pc = pineconeCreds();
+      const indexDim = await getPineconeIndexDimension(getPinecone(), pc.indexName);
+      const align = embeddingAlignmentReport({ model: creds.embeddingModel, indexDim });
+      res.json({
+        ok: true,
+        purpose,
+        provider,
+        dims,
+        expectedDim: expected,
+        indexDim,
+        mismatch: Boolean(indexDim && dims && indexDim !== dims),
+        hint: align.hint,
+      });
       return;
     }
     const llm = getLLM(provider, { temperature: 0, streaming: false });

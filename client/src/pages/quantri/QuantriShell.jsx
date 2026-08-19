@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { Brain, FileText, KeyRound, LogOut, Settings, Users, PenLine, Search } from 'lucide-react'
 import { supabase, supabaseConfigured } from '../../lib/supabase'
-import { adminFetch } from '../../lib/adminApi'
+import { adminFetch, clearAuthTokenCache } from '../../lib/adminApi'
 import { explainLoginError } from '../../lib/authErrors'
 import { apiUrl } from '../../lib/apiBase'
 import logoVietmy from '../../assets/logo-vietmy.png'
+import KeepAliveOutlet from '../../components/KeepAliveOutlet'
 
 export default function QuantriShell() {
   const [session, setSession] = useState(null)
@@ -128,6 +129,7 @@ export default function QuantriShell() {
 
   async function onLogout() {
     loadedUserId.current = null
+    clearAuthTokenCache()
     await supabase?.auth.signOut()
     setMe(null)
     setSession(null)
@@ -281,7 +283,7 @@ export default function QuantriShell() {
         </p>
       ) : null}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <Outlet context={{ me, session, refreshMe }} />
+        <KeepAliveOutlet context={{ me, session, refreshMe }} />
       </div>
     </div>
   )

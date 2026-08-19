@@ -5,7 +5,8 @@
 
 const { getSupabase, isConfigured } = require('./supabase');
 const { listCategories } = require('./taxonomyStore');
-const { collectDescendantIds, serializeAdmin } = require('./adminAccess');
+const { collectDescendantIds, serializeAdmin, attachCategoryAccess, isSuperAdmin } = require('./adminAccess');
+const { invalidateAdminAuth } = require('./adminAuthCache');
 
 const SUPER_EMAIL = () =>
   String(process.env.SUPER_ADMIN_EMAIL || 'quan.duong@caodangvietmy.edu.vn')
@@ -30,6 +31,10 @@ async function loadAdminById(userId) {
   if (error) throw error;
   if (!profile) return null;
 
+  if (isSuperAdmin(profile)) {
+    return attachCategoryAccess(profile, [], []);
+  }
+
   const { data: grants, error: gErr } = await sb
     .from('admin_category_grants')
     .select('category_id')
@@ -38,13 +43,7 @@ async function loadAdminById(userId) {
 
   const grantCategoryIds = (grants || []).map((g) => g.category_id);
   const cats = await listCategories();
-  const allowedCategoryIds = collectDescendantIds(cats.items || [], grantCategoryIds);
-
-  return {
-    ...profile,
-    grantCategoryIds,
-    allowedCategoryIds,
-  };
+  return attachCategoryAccess(profile, grantCategoryIds, cats.items || []);
 }
 
 async function replaceGrants(userId, categoryIds) {
@@ -223,6 +222,7 @@ async function createAdmin({ email, password, display_name, role, categoryIds, i
   if (role !== 'super_admin') {
     await replaceGrants(user.id, categoryIds);
   }
+  invalidateAdminAuth(user.id);
   return loadAdminById(user.id);
 }
 
@@ -259,6 +259,7 @@ async function updateAdmin(id, patch) {
     await replaceGrants(id, []);
   }
 
+  invalidateAdminAuth(id);
   return loadAdminById(next.id);
 }
 
@@ -272,6 +273,7 @@ async function deleteAdmin(id, actorId) {
   await sb.from('admin_profiles').delete().eq('id', id);
   const { error } = await sb.auth.admin.deleteUser(id);
   if (error) throw error;
+  invalidateAdminAuth(id);
   return { ok: true };
 }
 
@@ -282,6 +284,7 @@ async function markPasswordChanged(id) {
     .update({ must_change_password: false, updated_at: new Date().toISOString() })
     .eq('id', id);
   if (error) throw error;
+  invalidateAdminAuth(id);
   return loadAdminById(id);
 }
 

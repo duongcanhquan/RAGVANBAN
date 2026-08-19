@@ -9,6 +9,21 @@ const { getSupabase, isConfigured } = require('./supabase');
 
 const LOCAL_PATH = path.resolve(__dirname, '../../data/taxonomy.json');
 
+let listCache = null;
+let listCacheAt = 0;
+const LIST_TTL_MS = 15_000;
+
+function invalidateCategoryListCache() {
+  listCache = null;
+  listCacheAt = 0;
+}
+
+function rememberList(value) {
+  listCache = value;
+  listCacheAt = Date.now();
+  return value;
+}
+
 /** Bộ chuyên mục mặc định — hành chính công Việt Nam */
 const DEFAULT_TREE = [
   {
@@ -160,6 +175,7 @@ function pathForCategory(flat, categoryId) {
 }
 
 async function listCategories() {
+  if (listCache && Date.now() - listCacheAt < LIST_TTL_MS) return listCache;
   const sb = getSupabase();
   if (sb && isConfigured()) {
     const { data, error } = await sb
@@ -167,7 +183,7 @@ async function listCategories() {
       .select('*')
       .order('sort_order', { ascending: true });
     if (!error && data?.length) {
-      return { ok: true, source: 'supabase', items: data, tree: buildCategoryTree(data) };
+      return rememberList({ ok: true, source: 'supabase', items: data, tree: buildCategoryTree(data) });
     }
     if (error) console.warn('[taxonomy] list supabase:', error.message);
     // empty table → seed
@@ -175,12 +191,12 @@ async function listCategories() {
       await seedSupabase(sb);
       const retry = await sb.from('doc_categories').select('*').order('sort_order', { ascending: true });
       if (!retry.error) {
-        return {
+        return rememberList({
           ok: true,
           source: 'supabase',
           items: retry.data || [],
           tree: buildCategoryTree(retry.data || []),
-        };
+        });
       }
     }
   }
@@ -190,12 +206,12 @@ async function listCategories() {
     local.categories = flattenSeed(DEFAULT_TREE);
     writeLocal(local);
   }
-  return {
+  return rememberList({
     ok: true,
     source: 'local',
     items: local.categories,
     tree: buildCategoryTree(local.categories),
-  };
+  });
 }
 
 async function seedSupabase(sb) {
@@ -224,6 +240,7 @@ async function seedSupabase(sb) {
 }
 
 async function createCategory({ name, parentId = null, kind = 'folder', description = '', sortOrder = 0 }) {
+  invalidateCategoryListCache();
   const row = {
     name: String(name || '').trim(),
     parent_id: parentId || null,
@@ -254,6 +271,7 @@ async function createCategory({ name, parentId = null, kind = 'folder', descript
 }
 
 async function updateCategory(id, patch) {
+  invalidateCategoryListCache();
   const updates = {};
   if (patch.name != null) {
     updates.name = String(patch.name).trim();
@@ -294,6 +312,7 @@ function wouldCycle(flat, id, newParentId) {
 }
 
 async function reorderCategories(moves) {
+  invalidateCategoryListCache();
   const list = Array.isArray(moves) ? moves : [];
   if (!list.length) return { ok: true, updated: 0 };
 
@@ -330,6 +349,7 @@ async function reorderCategories(moves) {
 }
 
 async function deleteCategory(id) {
+  invalidateCategoryListCache();
   const sb = getSupabase();
   if (sb && isConfigured()) {
     const { error } = await sb.from('doc_categories').delete().eq('id', id);

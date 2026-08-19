@@ -5,9 +5,11 @@
 const fs = require('fs');
 const path = require('path');
 const { getSupabase, isConfigured } = require('./supabase');
+const { createTtlMap } = require('./ttlMap');
 
 const LOCAL_PATH = path.resolve(__dirname, '../../data/app-settings.json');
 const QUICK_KEY = 'quick_keywords';
+const settingCache = createTtlMap({ ttlMs: 15_000, max: 40 });
 
 const DEFAULT_KEYWORDS = [
   { id: 'k1', label: 'CCCD', query: 'Thủ tục cấp lại CCCD cần giấy tờ gì?', mode: 'advise' },
@@ -48,19 +50,27 @@ function writeLocal(data) {
 }
 
 async function getSetting(key) {
+  const cached = settingCache.get(key);
+  if (cached !== undefined) return cached;
   const sb = getSupabase();
   if (sb && isConfigured()) {
     const { data, error } = await sb.from('app_settings').select('value').eq('key', key).maybeSingle();
-    if (!error && data) return data.value;
+    if (!error && data) {
+      settingCache.set(key, data.value);
+      return data.value;
+    }
     if (error && !/does not exist|schema cache/i.test(error.message || '')) {
       console.warn('[appSettings] get', key, error.message);
     }
   }
   const local = readLocal();
-  return local[key] ?? null;
+  const value = local[key] ?? null;
+  settingCache.set(key, value);
+  return value;
 }
 
 async function setSetting(key, value) {
+  settingCache.delete(key);
   const sb = getSupabase();
   if (sb && isConfigured()) {
     const { error } = await sb.from('app_settings').upsert({
@@ -68,17 +78,47 @@ async function setSetting(key, value) {
       value,
       updated_at: new Date().toISOString(),
     });
-    if (!error) return { ok: true, source: 'supabase', value };
+    if (!error) {
+      settingCache.set(key, value);
+      return { ok: true, source: 'supabase', value };
+    }
     const missing = /does not exist|schema cache/i.test(error.message || '');
     if (!missing) {
       console.warn('[appSettings] set', key, error.message);
       return { ok: false, source: 'supabase', error: error.message };
     }
+    return {
+      ok: false,
+      source: 'supabase',
+      error:
+        'Thiếu bảng app_settings. Chạy supabase/migrations/006_app_settings.sql trên project Supabase.',
+    };
+  }
+  if (process.env.VERCEL) {
+    return {
+      ok: false,
+      source: 'none',
+      error:
+        'Vercel cần SUPABASE_SERVICE_ROLE_KEY (service role, không phải anon) để lưu bộ não. Không ghi được file local.',
+    };
   }
   const local = readLocal();
   local[key] = value;
   writeLocal(local);
+  settingCache.set(key, value);
   return { ok: true, source: 'local', value };
+}
+
+function assertDurableSave(result, label = 'cài đặt', env = process.env) {
+  if (!result?.ok) {
+    throw new Error(result?.error || `Không lưu được ${label}`);
+  }
+  if (env.VERCEL && result.source === 'local') {
+    throw new Error(
+      `Vercel không giữ file local. Kiểm tra SUPABASE_SERVICE_ROLE_KEY (service role, không phải anon) và đã chạy supabase/migrations/006_app_settings.sql.`
+    );
+  }
+  return result;
 }
 
 async function getQuickKeywords() {
@@ -97,6 +137,7 @@ async function getQuickKeywords() {
 
 async function setQuickKeywords(input) {
   const value = normalizeKeywords(input);
+  settingCache.delete(QUICK_KEY);
   const sb = getSupabase();
   if (sb && isConfigured()) {
     const { error } = await sb.from('app_settings').upsert({
@@ -120,6 +161,7 @@ module.exports = {
   setQuickKeywords,
   getSetting,
   setSetting,
+  assertDurableSave,
   DEFAULT_KEYWORDS,
   QUICK_KEY,
   LOCAL_PATH,
