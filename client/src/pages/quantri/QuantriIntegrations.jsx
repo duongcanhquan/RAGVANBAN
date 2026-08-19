@@ -73,6 +73,7 @@ export default function QuantriIntegrations() {
     label: '',
     isShared: false,
   })
+  const [driveTab, setDriveTab] = useState('sources')
   const [categories, setCategories] = useState([])
   const [syncOut, setSyncOut] = useState('')
 
@@ -223,151 +224,199 @@ export default function QuantriIntegrations() {
             missingLabel="CHƯA KEY"
           />
         </div>
-        <p className="m-0 mb-4 text-sm text-white/65">
-          Một tài khoản máy (service account) dùng chung cho cả trường. Mỗi cán bộ tạo thư mục Drive của
-          phần mình, chia sẻ Viewer cho email bên dưới, rồi dán link thư mục + chọn chuyên mục.
-        </p>
 
-        {isSuper ? (
-          <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
-            <span className="text-sm">Bật đọc Drive (file riêng / thư mục đã share)</span>
-            <Toggle
-              on={data.drive.enabled}
-              disabled={busy}
-              onChange={(v) => patchFlags({ driveEnabled: v })}
-            />
-          </div>
-        ) : null}
-
-        <ol className="m-0 mb-4 list-decimal space-y-2 pl-5 text-sm text-white/75">
-          <li>
-            Super-admin vào{' '}
-            <a
-              className="text-[var(--hcc-gold-bright)] underline"
-              href="https://console.cloud.google.com/"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Google Cloud Console
-            </a>{' '}
-            → tạo project → bật <strong>Google Drive API</strong> → IAM → Service accounts → Create → Keys
-            → JSON.
-          </li>
-          <li>Dán nguyên nội dung file JSON vào ô dưới (chỉ làm một lần). Không đưa file này cho cán bộ khác.</li>
-          <li>
-            Mỗi người: trên Drive, Share thư mục với email service account (quyền Viewer) → copy link thư
-            mục (dạng <code className="text-white/90">drive.google.com/drive/folders/...</code>).
-          </li>
-        </ol>
-
-        {data.drive.email ? (
-          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm">
-            <span className="text-white/70">Share thư mục với:</span>
-            <code className="break-all text-emerald-100">{data.drive.email}</code>
-            <CopyBtn text={data.drive.email} />
-          </div>
-        ) : (
-          <p className="mb-4 text-sm text-amber-200">Chưa có service account — super-admin dán JSON bên dưới.</p>
-        )}
-
-        {isSuper ? (
-          <form onSubmit={saveSa} className="mb-5 space-y-2">
-            <textarea
-              rows={5}
-              value={saJson}
-              onChange={(e) => setSaJson(e.target.value)}
-              placeholder='{"type":"service_account","project_id":"...","private_key":"...","client_email":"..."}'
-              className="w-full rounded-2xl border border-white/15 bg-black/20 px-3 py-2 font-mono text-xs"
-            />
-            <button
-              type="submit"
-              disabled={busy || !saJson.trim()}
-              className="rounded-xl bg-[var(--hcc-red)] px-4 py-2 text-sm font-semibold disabled:opacity-40"
-            >
-              Lưu JSON (một lần)
-            </button>
-          </form>
-        ) : null}
-
-        <h3 className="m-0 mb-1 text-sm font-semibold">Nguồn Drive theo cán bộ + chuyên mục mặc định</h3>
-        <p className="m-0 mb-3 text-xs text-white/60">
-          Mỗi <strong>nguồn Drive</strong> là 1 thư mục Drive của 1 cán bộ. Khi App quét thư mục này,
-          <strong> file mới</strong> sẽ tự được gắn vào <strong>chuyên mục mặc định</strong> (nếu bạn chọn).
-        </p>
-        <form onSubmit={addFolder} className="mb-3 grid gap-2 sm:grid-cols-2">
-          <input
-            value={draft.folderUrls[0] || ''}
-            onChange={(e) =>
-              setDraft({
-                ...draft,
-                folderUrls: [e.target.value],
-              })
-            }
-            placeholder="https://drive.google.com/drive/folders/...."
-            className="rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm sm:col-span-2"
-          />
-          <select
-            value={draft.categoryId}
-            onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}
-            required={!isSuper}
-            className="rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm"
-          >
-            {isSuper ? <option value="">— (tuỳ chọn) Không gắn chuyên mục —</option> : null}
-            {allowedCats.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <p className="sm:col-span-2 m-0 -mt-1 text-[11px] text-white/45">
-            Chuyên mục này chỉ là mặc định để tự gắn khi số hóa từ thư mục Drive. Bạn vẫn có thể đổi chuyên mục tài liệu sau khi đã vào danh mục.
-          </p>
-          {isSuper ? (
-            <label className="flex items-center gap-2 text-xs text-white/70">
-              <input
-                type="checkbox"
-                checked={draft.isShared}
-                onChange={(e) => setDraft({ ...draft, isShared: e.target.checked })}
-              />
-              Thư mục chung (mọi cán bộ dùng)
-            </label>
-          ) : (
-            <span />
-          )}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           <button
-            type="submit"
-            disabled={busy}
-            className="inline-flex items-center justify-center gap-1 rounded-xl bg-[var(--hcc-red)] px-3 py-2 text-sm font-semibold sm:col-span-2 disabled:opacity-40"
+            type="button"
+            onClick={() => setDriveTab('sa')}
+            className={`rounded-xl border px-3 py-1.5 text-xs font-semibold ${
+              driveTab === 'sa'
+                ? 'border-[var(--hcc-red)] bg-[var(--hcc-red)]/20 text-white'
+                : 'border-white/10 bg-black/20 text-white/70 hover:bg-black/30'
+            }`}
           >
-            <Plus className="h-4 w-4" />
-            Thêm nguồn Drive
+            1. Service account
           </button>
-        </form>
+          <button
+            type="button"
+            onClick={() => setDriveTab('sources')}
+            className={`rounded-xl border px-3 py-1.5 text-xs font-semibold ${
+              driveTab === 'sources'
+                ? 'border-[var(--hcc-red)] bg-[var(--hcc-red)]/20 text-white'
+                : 'border-white/10 bg-black/20 text-white/70 hover:bg-black/30'
+            }`}
+          >
+            2. Nguồn Drive
+          </button>
+          <button
+            type="button"
+            onClick={() => setDriveTab('sync')}
+            className={`rounded-xl border px-3 py-1.5 text-xs font-semibold ${
+              driveTab === 'sync'
+                ? 'border-[var(--hcc-red)] bg-[var(--hcc-red)]/20 text-white'
+                : 'border-white/10 bg-black/20 text-white/70 hover:bg-black/30'
+            }`}
+          >
+            3. Đồng bộ & n8n
+          </button>
+        </div>
 
-        <ul className="m-0 list-none space-y-2 p-0">
-          {(data.sources || []).map((s) => (
-            <li
-              key={s.id}
-              className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm"
-            >
-              <span className="font-medium">{s.label || 'Thư mục Drive'}</span>
-              <span className="text-white/45">{s.isShared ? 'Chung' : s.email}</span>
-              <span className="min-w-0 flex-1 truncate text-xs text-white/50">{s.folderUrl}</span>
-              <span className="text-[11px] text-white/60">{catLabel(s.categoryId)}</span>
-              <CopyBtn text={s.folderUrl} />
-              <button
-                type="button"
-                onClick={() => removeFolder(s.id)}
-                className="rounded-full bg-red-500/20 p-1.5 text-red-100"
+        {driveTab === 'sa' ? (
+          <>
+            <p className="m-0 mb-4 text-sm text-white/65">
+              Một tài khoản máy (service account) dùng chung cho cả trường. Mỗi cán bộ tạo thư mục Drive của
+              phần mình, chia sẻ Viewer cho email bên dưới, rồi dán link thư mục + chọn chuyên mục.
+            </p>
+
+            {isSuper ? (
+              <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
+                <span className="text-sm">Bật đọc Drive (file riêng / thư mục đã share)</span>
+                <Toggle
+                  on={data.drive.enabled}
+                  disabled={busy}
+                  onChange={(v) => patchFlags({ driveEnabled: v })}
+                />
+              </div>
+            ) : null}
+
+            <ol className="m-0 mb-4 list-decimal space-y-2 pl-5 text-sm text-white/75">
+              <li>
+                Super-admin vào{' '}
+                <a
+                  className="text-[var(--hcc-gold-bright)] underline"
+                  href="https://console.cloud.google.com/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Google Cloud Console
+                </a>{' '}
+                → tạo project → bật <strong>Google Drive API</strong> → IAM → Service accounts → Create → Keys
+                → JSON.
+              </li>
+              <li>
+                Dán nguyên nội dung file JSON vào ô dưới (chỉ làm một lần). Không đưa file này cho cán bộ khác.
+              </li>
+              <li>
+                Mỗi người: trên Drive, Share thư mục với email service account (quyền Viewer) → copy link thư
+                mục (dạng <code className="text-white/90">drive.google.com/drive/folders/...</code>).
+              </li>
+            </ol>
+
+            {data.drive.email ? (
+              <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm">
+                <span className="text-white/70">Share thư mục với:</span>
+                <code className="break-all text-emerald-100">{data.drive.email}</code>
+                <CopyBtn text={data.drive.email} />
+              </div>
+            ) : (
+              <p className="mb-4 text-sm text-amber-200">Chưa có service account — super-admin dán JSON bên dưới.</p>
+            )}
+
+            {isSuper ? (
+              <form onSubmit={saveSa} className="mb-5 space-y-2">
+                <textarea
+                  rows={5}
+                  value={saJson}
+                  onChange={(e) => setSaJson(e.target.value)}
+                  placeholder='{"type":"service_account","project_id":"...","private_key":"...","client_email":"..."}'
+                  className="w-full rounded-2xl border border-white/15 bg-black/20 px-3 py-2 font-mono text-xs"
+                />
+                <button
+                  type="submit"
+                  disabled={busy || !saJson.trim()}
+                  className="rounded-xl bg-[var(--hcc-red)] px-4 py-2 text-sm font-semibold disabled:opacity-40"
+                >
+                  Lưu JSON (một lần)
+                </button>
+              </form>
+            ) : null}
+          </>
+        ) : null}
+
+        {driveTab === 'sources' ? (
+          <>
+            <h3 className="m-0 mb-1 text-sm font-semibold">Nguồn Drive theo cán bộ + chuyên mục mặc định</h3>
+            <p className="m-0 mb-3 text-xs text-white/60">
+              Mỗi <strong>nguồn Drive</strong> là 1 thư mục Drive của 1 cán bộ. Khi App quét thư mục này,
+              <strong> file mới</strong> sẽ tự được gắn vào <strong>chuyên mục mặc định</strong> (nếu bạn chọn).
+            </p>
+            <form onSubmit={addFolder} className="mb-3 grid gap-2 sm:grid-cols-2">
+              <input
+                value={draft.folderUrls[0] || ''}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    folderUrls: [e.target.value],
+                  })
+                }
+                placeholder="https://drive.google.com/drive/folders/...."
+                className="rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm sm:col-span-2"
+              />
+              <select
+                value={draft.categoryId}
+                onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}
+                required={!isSuper}
+                className="rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm"
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                {isSuper ? <option value="">— (tuỳ chọn) Không gắn chuyên mục —</option> : null}
+                {allowedCats.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <p className="sm:col-span-2 m-0 -mt-1 text-[11px] text-white/45">
+                Chuyên mục này chỉ là mặc định để tự gắn khi số hóa từ thư mục Drive. Bạn vẫn có thể đổi chuyên mục tài liệu sau khi đã vào danh mục.
+              </p>
+              {isSuper ? (
+                <label className="flex items-center gap-2 text-xs text-white/70">
+                  <input
+                    type="checkbox"
+                    checked={draft.isShared}
+                    onChange={(e) => setDraft({ ...draft, isShared: e.target.checked })}
+                  />
+                  Thư mục chung (mọi cán bộ dùng)
+                </label>
+              ) : (
+                <span />
+              )}
+              <button
+                type="submit"
+                disabled={busy}
+                className="inline-flex items-center justify-center gap-1 rounded-xl bg-[var(--hcc-red)] px-3 py-2 text-sm font-semibold sm:col-span-2 disabled:opacity-40"
+              >
+                <Plus className="h-4 w-4" />
+                Thêm nguồn Drive
               </button>
-            </li>
-          ))}
-        </ul>
+            </form>
+
+            <ul className="m-0 list-none space-y-2 p-0">
+              {(data.sources || []).map((s) => (
+                <li
+                  key={s.id}
+                  className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm"
+                >
+                  <span className="font-medium">{s.label || 'Thư mục Drive'}</span>
+                  <span className="text-white/45">{s.isShared ? 'Chung' : s.email}</span>
+                  <span className="min-w-0 flex-1 truncate text-xs text-white/50">{s.folderUrl}</span>
+                  <span className="text-[11px] text-white/60">{catLabel(s.categoryId)}</span>
+                  <CopyBtn text={s.folderUrl} />
+                  <button
+                    type="button"
+                    onClick={() => removeFolder(s.id)}
+                    className="rounded-full bg-red-500/20 p-1.5 text-red-100"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
       </section>
 
-      <section className="rounded-3xl border border-white/10 bg-white/5 p-5">
+      {driveTab === 'sync' ? (
+        <section className="rounded-3xl border border-white/10 bg-white/5 p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="m-0 text-lg font-semibold">Tự số hóa file Drive mới</h2>
           <StatusPill on={data.drive.on} reason={data.drive.reason} missingLabel="CHƯA KEY" />
@@ -508,8 +557,8 @@ export default function QuantriIntegrations() {
             <pre className="m-0 overflow-x-auto text-[11px] text-white/80">{`{ "fileId": "{{ $json.id }}" }`}</pre>
           </div>
         </div>
-      </section>
-
+        </section>
+      ) : null}
       <section className="rounded-2xl border border-white/10 bg-black/20 p-4">
         <div className="mb-2 flex items-center justify-between gap-2">
           <h2 className="m-0 text-lg font-semibold">Cloudflare R2</h2>
