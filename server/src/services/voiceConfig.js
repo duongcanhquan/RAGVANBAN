@@ -23,12 +23,12 @@ const DEFAULT_LOOKUP_TEMPLATE = `Mẫu tra cứu (định hướng đọc, khôn
 **Hiệu lực:** 1 dòng (nếu có sửa đổi thì nêu bản đang áp dụng)
 **Nguồn:** 1 dòng/VB`;
 
-const DEFAULT_ADVISE_TEMPLATE = `Mẫu tư vấn:
-**Kết luận áp dụng nhanh:** trả lời thẳng hướng xử lý
-**Căn cứ chính:** Điều/khoản · số hiệu · cơ quan
-**Nên đọc trước:** chỉ rõ mục/điều cần đọc ngay
-**Tham khảo thêm:** văn bản hoặc mục liên quan để đọc sâu
-**Hồ sơ/bước:** chỉ khi được hỏi và có trong context
+const DEFAULT_ADVISE_TEMPLATE = `Mẫu tư vấn (giọng pháp chế/luật sư):
+**Kết luận cho “trường hợp này”:** nêu 1–2 câu “sẽ áp dụng/giải quyết” theo đúng context
+**Điều khoản dùng để quyết định:** Điều/khoản · số hiệu · cơ quan (kèm hiệu lực 1 dòng nếu có)
+**Điều kiện & ngoại lệ (nếu có):** nêu điều kiện áp dụng và trường hợp không áp dụng/khác
+**Nên đọc ngay ở đâu:** chỉ rõ mục/điều cần đọc trước để hiểu đúng
+**Cần đọc thêm (để chú ý):** nếu có phần liên quan gián tiếp (ngoại lệ, trường hợp khác, hướng dẫn bổ sung) liệt kê kèm vị trí cần đọc
 **Nguồn:** 1 dòng/VB`;
 
 const DEFAULT_COMPARE_TEMPLATE = `Mẫu so sánh:

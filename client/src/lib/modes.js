@@ -15,8 +15,8 @@ export const MODES = {
     id: 'advise',
     label: 'Tư vấn',
     short: 'Phân tích và áp dụng',
-    hint: 'Phân tích sâu theo văn bản: nêu ý chính, cách áp dụng nhanh vào tình huống; chỉ rõ nên đọc mục/điều nào trước và tham khảo thêm ở đâu.',
-    placeholder: 'Mô tả tình huống để tư vấn: cần áp dụng quy định nào, đọc mục/điều nào trước, tham khảo thêm mục nào?',
+    hint: 'Phong cách pháp chế/luật sư: kết luận “trường hợp này” sẽ áp dụng gì; nêu điều kiện/ngoại lệ (ngắn) và chỉ rõ nên đọc mục/điều nào ngay + cần đọc thêm phần nào để chú ý.',
+    placeholder: 'Mô tả tình huống để tư vấn: cần áp dụng quy định nào, điều kiện/ngoại lệ ra sao, nên đọc mục nào ngay và đọc thêm mục nào?',
     examples: [],
   },
 }

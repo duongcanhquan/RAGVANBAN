@@ -252,7 +252,7 @@ async function streamAnswer(question, matches, deps, onToken) {
 
   const modeHint =
     mode === 'advise'
-      ? 'TƯ VẤN: phân tích sâu theo context; kết luận cách áp dụng nhanh vào tình huống; chỉ rõ nên đọc mục/điều nào trước và tham khảo thêm mục nào liên quan.'
+      ? 'TƯ VẤN (pháp chế/luật sư): phân tích theo context; kết luận “trường hợp này” sẽ áp dụng gì; nêu điều kiện/ngoại lệ (nếu có) và hướng xử lý tương ứng; chỉ rõ nên đọc mục/điều nào ngay + cần đọc thêm phần nào để chú ý.'
       : mode === 'compare'
         ? 'SO SÁNH: tách bản còn hiệu lực và điểm đã sửa.'
         : 'TRA CỨU: chỉ định hướng văn bản liên quan để người dùng tự đọc (không phân tích áp dụng); nêu rõ văn bản liên quan trực tiếp + điều/khoản/mục cần đọc ngay; nếu còn liên quan gián tiếp thì liệt kê thêm “Tham khảo thêm” kèm mục/điều/khoản cần đọc; nêu hiệu lực; không giải thích cách áp dụng.';
