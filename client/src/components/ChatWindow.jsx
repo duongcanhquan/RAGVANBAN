@@ -25,40 +25,69 @@ export default function ChatWindow({
         wide ? 'max-w-none px-3 sm:px-4 xl:px-6' : 'safe-x max-w-3xl'
       }`}
     >
-      {/* Desktop: hướng dẫn + gợi ý bấm nhanh. Mobile: ẩn hết để chat rộng, nhập trực tiếp ở ô dưới. */}
       {empty && (
-        <section className="glass-panel hidden rounded-2xl px-3 py-3 sm:px-5 sm:py-4 xl:block">
+        <section className="glass-panel rounded-2xl px-3 py-3 sm:px-5 sm:py-4">
           <h1 className="m-0 text-base font-semibold tracking-tight text-[var(--hcc-ink)] sm:text-xl">
-            {modeConfig?.id === 'advise'
-              ? 'Tư vấn tình huống theo văn bản'
-              : 'Tra cứu văn bản nhanh'}
+            {modeConfig?.id === 'advise' ? 'Tư vấn tình huống theo văn bản' : 'Tra cứu văn bản nhanh'}
           </h1>
+
           <p className="m-0 mt-1 max-w-3xl text-sm text-[var(--hcc-muted)]">
-            {modeConfig?.hint ||
-              'Hỏi bên trái · dùng bàn làm việc bên phải để chọn VB, mẫu, lịch sử.'}
+            {modeConfig?.id === 'lookup' ? (
+              <>
+                {/* Chỉ hiện hướng dẫn tra cứu nhanh dài trên desktop rất rộng */}
+                <span className="hidden 2xl:inline">
+                  {modeConfig?.hint || 'Hỏi bên trái · dùng bàn làm việc bên phải để chọn VB, mẫu, lịch sử.'}
+                </span>
+                {/* Các màn hình còn lại: giữ gọn để chat rộng rãi + dễ thao tác */}
+                <span className="2xl:hidden">Nhập câu hỏi để tra cứu văn bản.</span>
+              </>
+            ) : (
+              modeConfig?.hint || 'Hỏi bên trái · dùng bàn làm việc bên phải để chọn VB, mẫu, lịch sử.'
+            )}
           </p>
+
+          <p className="m-0 mt-1.5 text-[11px] text-white/40 xl:hidden">
+            Lịch sử chỉ trên phiên đang mở. Đóng tab hoặc bấm Hết phiên để xóa.
+          </p>
+
           {(modeConfig?.examples || []).length ? (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {(modeConfig?.examples || []).map((ex) => {
-                const label = typeof ex === 'string' ? ex : ex.label || ex.query
-                const query = typeof ex === 'string' ? ex : ex.query || ex.label
-                return (
-                  <button
-                    key={ex.id || query}
-                    type="button"
-                    disabled={streaming}
-                    onClick={() => !streaming && onExampleClick(query)}
-                    className="min-h-11 cursor-pointer rounded-2xl border border-white/15 bg-white/10 px-3 py-2 text-left text-xs text-slate-100 transition hover:border-[var(--hcc-gold)] hover:text-[var(--hcc-gold-bright)] disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-0 sm:rounded-full sm:text-sm"
-                  >
-                    {label}
-                  </button>
-                )
-              })}
-            </div>
+            <>
+              {/* Ẩn toàn bộ nút bấm nhanh (chip/gợi ý) trên mobile & đa số màn hình để tránh che chat */}
+              <div className="mt-3 hidden flex-wrap gap-2 2xl:flex">
+                {(modeConfig?.examples || []).map((ex) => {
+                  const label = typeof ex === 'string' ? ex : ex.label || ex.query
+                  const query = typeof ex === 'string' ? ex : ex.query || ex.label
+                  return (
+                    <button
+                      key={ex.id || query}
+                      type="button"
+                      disabled={streaming}
+                      onClick={() => !streaming && onExampleClick(query)}
+                      className="min-h-11 cursor-pointer rounded-2xl border border-white/15 bg-white/10 px-3 py-2 text-left text-xs text-slate-100 transition hover:border-[var(--hcc-gold)] hover:text-[var(--hcc-gold-bright)] disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-0 sm:rounded-full sm:text-sm"
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {modeConfig?.id === 'lookup' ? (
+                <p className="m-0 mt-3 text-xs text-[var(--hcc-muted)] 2xl:hidden">Nhập câu hỏi của bạn.</p>
+              ) : null}
+            </>
           ) : (
             <p className="m-0 mt-3 text-xs text-[var(--hcc-muted)]">
-              Gợi ý nhanh lấy từ văn bản đã số hóa. Chưa có tài liệu thì ô gợi ý để trống — hỏi theo
-              tên hoặc số hiệu văn bản bạn đã tải lên.
+              {modeConfig?.id === 'lookup' ? (
+                <>
+                  <span className="hidden 2xl:inline">
+                    Gợi ý nhanh lấy từ văn bản đã số hóa. Chưa có tài liệu thì ô gợi ý để trống — hỏi theo tên
+                    hoặc số hiệu văn bản bạn đã tải lên.
+                  </span>
+                  <span className="2xl:hidden">Nhập câu hỏi của bạn.</span>
+                </>
+              ) : (
+                'Gợi ý nhanh lấy từ văn bản đã số hóa. Chưa có tài liệu thì ô gợi ý để trống — hỏi theo tên hoặc số hiệu văn bản bạn đã tải lên.'
+              )}
             </p>
           )}
         </section>
