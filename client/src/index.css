@@ -36,10 +36,12 @@
   --font-sans: 'Be Vietnam Pro', system-ui, sans-serif;
   --radius-lg: 1.25rem;
   --nav-h: 3.25rem;
-  /* Khớp đúng với .safe-bottom (padding-bottom: max(0.75rem, env(safe-area-inset-bottom))) */
-  --bottom-nav-h: calc(3.75rem + max(0.75rem, env(safe-area-inset-bottom, 0px)));
-  /* Composer có thể cao lên khi textarea nhiều dòng; tăng để tránh che mất phần chat phía dưới */
-  --chat-composer-h: calc(8.5rem + env(safe-area-inset-bottom, 0px));
+  /* Tab bar mobile: icon h-8 + label + py + safe-bottom — cộng thêm khe hở phía trên tab */
+  --bottom-nav-h: calc(5rem + max(0.75rem, env(safe-area-inset-bottom, 0px)));
+  --composer-lift: 0.5rem;
+  --composer-bottom: calc(var(--bottom-nav-h) + var(--composer-lift));
+  /* Composer: Phạm vi + ô gõ cao hơn; padding đáy vùng chat để không bị che */
+  --chat-composer-h: calc(12rem + max(0.75rem, env(safe-area-inset-bottom, 0px)));
   --workbench-w: 0px;
 }
 
@@ -281,6 +283,8 @@ body {
   :root {
     --nav-h: 4.35rem;
     --bottom-nav-h: 0px;
+    --composer-lift: 0px;
+    --composer-bottom: 0px;
     --chat-composer-h: 0px;
   }
 }

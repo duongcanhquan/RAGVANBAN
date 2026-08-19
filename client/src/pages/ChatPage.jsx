@@ -632,7 +632,7 @@ export default function ChatPage() {
         </main>
 
         {/* Mobile: ghim ô gõ ngay trên tab bar — luôn thấy đầy đủ, không bị lấp */}
-        <div className="chat-composer fixed inset-x-0 bottom-[var(--bottom-nav-h)] z-30 shrink-0 border-t border-white/10 bg-[#1a080c]/95 backdrop-blur-xl xl:static xl:bottom-auto xl:z-auto xl:border-t-0 xl:bg-transparent">
+        <div className="chat-composer fixed inset-x-0 bottom-[var(--composer-bottom)] z-30 shrink-0 border-t border-white/10 bg-[#1a080c]/95 pb-1 backdrop-blur-xl xl:static xl:bottom-auto xl:z-auto xl:border-t-0 xl:bg-transparent xl:pb-0">
           {error && (
             <div role="alert" className="px-4 py-1 text-sm text-[var(--color-destructive)] xl:px-6">
               {error}

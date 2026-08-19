@@ -29,8 +29,9 @@ export default function ChatInput({
     if (!el) return
     el.style.height = 'auto'
     // Giới hạn chiều cao composer để không che mất phần chat phía dưới
+    const minH = typeof window !== 'undefined' && window.matchMedia('(max-width: 1279px)').matches ? 56 : 48
     const next = Math.min(el.scrollHeight, 128)
-    el.style.height = `${Math.max(next, 48)}px`
+    el.style.height = `${Math.max(next, minH)}px`
   }, [value])
 
   function handleKeyDown(e) {
@@ -64,7 +65,7 @@ export default function ChatInput({
         </p>
       ) : null}
       <div
-        className={`mx-auto flex w-full items-end gap-2 py-2 sm:gap-3 sm:py-3 ${
+        className={`mx-auto flex w-full items-end gap-2 py-2.5 sm:gap-3 sm:py-3 xl:py-3 ${
           wide ? 'max-w-none px-3 sm:px-4 xl:px-6' : 'safe-x max-w-3xl'
         }`}
       >
@@ -81,7 +82,7 @@ export default function ChatInput({
           onKeyDown={handleKeyDown}
           placeholder={placeholder || 'Nhập câu hỏi…'}
           enterKeyHint="send"
-          className="field-glass min-h-12 max-h-32 flex-1 resize-none overflow-y-auto rounded-2xl border px-4 py-3 text-base leading-normal transition disabled:opacity-50"
+          className="field-glass min-h-14 max-h-32 flex-1 resize-none overflow-y-auto rounded-2xl border px-4 py-3.5 text-base leading-normal transition disabled:opacity-50 xl:min-h-12 xl:py-3"
         />
         {voiceEnabled && !listening ? (
           <button
