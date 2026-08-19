@@ -33,8 +33,18 @@ export default function ChatWindow({
               : 'Tra cứu văn bản nhanh'}
           </h1>
           <p className="m-0 mt-1 max-w-3xl text-sm text-[var(--hcc-muted)]">
-            {modeConfig?.hint ||
-              'Hỏi bên trái · dùng bàn làm việc bên phải để chọn VB, mẫu, lịch sử.'}
+            {modeConfig?.id === 'lookup' ? (
+              <>
+                {/* Mobile: tránh nội dung hướng dẫn tra cứu nhanh quá dài/chiếm chỗ */}
+                <span className="hidden lg:inline">
+                  {modeConfig?.hint ||
+                    'Hỏi bên trái · dùng bàn làm việc bên phải để chọn VB, mẫu, lịch sử.'}
+                </span>
+                <span className="lg:hidden">Nhập câu hỏi để tra cứu văn bản.</span>
+              </>
+            ) : (
+              modeConfig?.hint || 'Hỏi bên trái · dùng bàn làm việc bên phải để chọn VB, mẫu, lịch sử.'
+            )}
           </p>
           <p className="m-0 mt-1.5 text-[11px] text-white/40 xl:hidden">
             Lịch sử chỉ trên phiên đang mở. Đóng tab hoặc bấm Hết phiên để xóa.
@@ -59,8 +69,17 @@ export default function ChatWindow({
             </div>
           ) : (
             <p className="m-0 mt-3 text-xs text-[var(--hcc-muted)]">
-              Gợi ý nhanh lấy từ văn bản đã số hóa. Chưa có tài liệu thì ô gợi ý để trống — hỏi theo
-              tên hoặc số hiệu văn bản bạn đã tải lên.
+              {modeConfig?.id === 'lookup' ? (
+                <>
+                  <span className="hidden lg:inline">
+                    Gợi ý nhanh lấy từ văn bản đã số hóa. Chưa có tài liệu thì ô gợi ý để trống — hỏi theo
+                    tên hoặc số hiệu văn bản bạn đã tải lên.
+                  </span>
+                  <span className="lg:hidden">Nhập câu hỏi của bạn.</span>
+                </>
+              ) : (
+                'Gợi ý nhanh lấy từ văn bản đã số hóa. Chưa có tài liệu thì ô gợi ý để trống — hỏi theo tên hoặc số hiệu văn bản bạn đã tải lên.'
+              )}
             </p>
           )}
         </section>
