@@ -278,11 +278,7 @@ export default function QuantriScenarios() {
 
       {!items.length ? (
         <p className="mt-4 text-sm text-white/50">
-          Chưa có tình huống. Bấm Thêm Q&A hoặc kiểm tra hạng mục ở{' '}
-          <Link to="/quantri/cai-dat" className="text-[var(--hcc-gold-bright)] underline">
-            Cài đặt
-          </Link>
-          .
+          Chưa có tình huống. Bấm Thêm Q&A hoặc kiểm tra hạng mục ở <Link to="/quantri" className="text-[var(--hcc-gold-bright)] underline">Tài liệu</Link>.
         </p>
       ) : null}
     </div>

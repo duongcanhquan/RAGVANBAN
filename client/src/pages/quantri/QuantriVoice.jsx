@@ -118,15 +118,7 @@ export default function QuantriVoice() {
         </h1>
         <p className="m-0 mt-1 text-sm text-white/65">
           Phong cách soạn câu trả lời theo vai trò nhà trường (giảng viên, học sinh, cán bộ nhân viên).
-          Luật cứng mặc định khóa; mở khóa mới sửa được. Bật/tắt mic:{' '}
-          <Link to="/quantri/cai-dat" className="text-[var(--hcc-gold-bright)] underline">
-            Cài đặt
-          </Link>
-          {' · '}
-          <Link to="/quantri/day-ai" className="text-[var(--hcc-gold-bright)] underline">
-            Dạy AI
-          </Link>
-          .
+          Luật cứng mặc định khóa; mở khóa mới sửa được.
         </p>
       </header>
 

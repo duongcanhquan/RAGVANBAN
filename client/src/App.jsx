@@ -6,7 +6,6 @@ import LibraryPage from './pages/LibraryPage'
 import ScenariosPage from './pages/ScenariosPage'
 import QuantriShell from './pages/quantri/QuantriShell'
 import QuantriUsers from './pages/quantri/QuantriUsers'
-import QuantriSettings from './pages/quantri/QuantriSettings'
 import QuantriAccount from './pages/quantri/QuantriAccount'
 import QuantriBrain from './pages/quantri/QuantriBrain'
 import QuantriVoice from './pages/quantri/QuantriVoice'
@@ -25,13 +24,12 @@ export default function App() {
         </Route>
         <Route path="/quantri" element={<QuantriShell />}>
           <Route index element={<AdminPage />} />
-          <Route path="cai-dat" element={<QuantriSettings />} />
           <Route path="bo-nao" element={<QuantriBrain />} />
           <Route path="day-ai" element={<QuantriTeach />} />
           <Route path="tinh-huong" element={<QuantriScenarios />} />
           <Route path="giong-ai" element={<QuantriVoice />} />
           <Route path="rag" element={<QuantriRag />} />
-          <Route path="chuyen-muc" element={<Navigate to="/quantri/cai-dat" replace />} />
+          <Route path="chuyen-muc" element={<Navigate to="/quantri" replace />} />
           <Route path="nhan-su" element={<QuantriUsers />} />
           <Route path="tai-khoan" element={<QuantriAccount />} />
         </Route>
