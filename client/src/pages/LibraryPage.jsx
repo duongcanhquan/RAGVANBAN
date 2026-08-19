@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, ExternalLink, FileText, FolderTree, Search } from 'lucide-react'
+import { ChevronDown, ChevronRight, ExternalLink, FileText, FolderTree, GripVertical, Search } from 'lucide-react'
 import { apiUrl } from '../lib/apiBase'
 
 const KIND_LABEL = {
@@ -61,21 +61,70 @@ function DocRow({ doc }) {
   )
 }
 
-function CategoryNode({ node, depth, open, toggle }) {
+function CategoryNode({ node, depth, open, toggle, siblingsIds, parentId, onReorder, allowReorder }) {
   const isOpen = open[node.id]
   const hasKids = (node.children || []).length > 0 || (node.documents || []).length > 0
   const pad = Math.min(depth, 5) * 12
+  const [over, setOver] = useState('')
 
   return (
     <li className={depth === 0 ? 'glass-panel overflow-hidden rounded-2xl' : ''}>
       <div
+        onDragOver={(e) => {
+          if (!allowReorder) return
+          e.preventDefault()
+          const rect = e.currentTarget.getBoundingClientRect()
+          setOver(e.clientX > rect.right - 96 ? 'after' : 'before')
+        }}
+        onDragLeave={() => setOver('')}
+        onDrop={async (e) => {
+          if (!allowReorder) return
+          e.preventDefault()
+          e.stopPropagation()
+          const fromId = e.dataTransfer.getData('text/plain')
+          if (!fromId || fromId === node.id) return
+          if (!Array.isArray(siblingsIds) || siblingsIds.length < 2) return
+
+          const rect = e.currentTarget.getBoundingClientRect()
+          const asAfter = e.clientX > rect.right - 96
+
+          const nextWithout = siblingsIds.filter((id) => id !== fromId)
+          const targetIdx = nextWithout.indexOf(node.id)
+          if (targetIdx < 0) return
+          const insertAt = asAfter ? Math.min(nextWithout.length, targetIdx + 1) : targetIdx
+          nextWithout.splice(insertAt, 0, fromId)
+
+          try {
+            await onReorder?.({ parentId, ids: nextWithout })
+          } finally {
+            setOver('')
+          }
+        }}
         className={`flex w-full items-center gap-1.5 py-2.5 pr-2 text-left ${
           depth === 0
             ? 'px-3 font-semibold text-[var(--hcc-ink)] hover:bg-[var(--hcc-red-soft)]/40'
             : 'border-t border-[var(--hcc-line)]/60 text-sm text-[var(--hcc-ink)] hover:bg-[var(--hcc-canvas)]'
         }`}
-        style={{ paddingLeft: depth === 0 ? undefined : `${12 + pad}px` }}
+        style={{
+          paddingLeft: depth === 0 ? undefined : `${12 + pad}px`,
+          background:
+            over === 'before' ? 'rgba(255,255,255,0.06)' : over === 'after' ? 'rgba(245,158,11,0.12)' : undefined,
+        }}
       >
+        {allowReorder ? (
+          <GripVertical
+            className="h-4 w-4 shrink-0 cursor-grab text-[var(--hcc-muted)]"
+            title="Kéo thả đổi thứ tự"
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData('text/plain', node.id)
+              e.dataTransfer.effectAllowed = 'move'
+            }}
+          />
+        ) : (
+          <span className="w-4 shrink-0" />
+        )}
+
         <button
           type="button"
           onClick={() => toggle(node.id)}
@@ -105,7 +154,17 @@ function CategoryNode({ node, depth, open, toggle }) {
       {isOpen && (
         <ul className="m-0 list-none p-0">
           {(node.children || []).map((child) => (
-            <CategoryNode key={child.id} node={child} depth={depth + 1} open={open} toggle={toggle} />
+            <CategoryNode
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              open={open}
+              toggle={toggle}
+              parentId={node.id}
+              siblingsIds={(node.children || []).map((c) => c.id)}
+              allowReorder={allowReorder}
+              onReorder={onReorder}
+            />
           ))}
           {(node.documents || []).map((doc) => (
             <DocRow key={doc.id} doc={doc} />
@@ -128,6 +187,9 @@ export default function LibraryPage() {
   const [open, setOpen] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [reorderBusy, setReorderBusy] = useState(false)
+
+  const allowReorder = !q.trim()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -149,6 +211,24 @@ export default function LibraryPage() {
       setLoading(false)
     }
   }, [])
+
+  async function reorderCategories(parentId, ids) {
+    if (!ids?.length) return
+    setReorderBusy(true)
+    try {
+      const items = ids.map((id, sortOrder) => ({ id, parentId, sortOrder }))
+      const res = await fetch(apiUrl('/api/library/categories/reorder'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.ok === false) throw new Error(data.error || 'Không đổi được thứ tự')
+      await load()
+    } finally {
+      setReorderBusy(false)
+    }
+  }
 
   useEffect(() => {
     load()
@@ -199,7 +279,17 @@ export default function LibraryPage() {
 
       <ul className="m-0 flex list-none flex-col gap-2 p-0">
         {filtered.map((node) => (
-          <CategoryNode key={node.id} node={node} depth={0} open={open} toggle={toggle} />
+          <CategoryNode
+            key={node.id}
+            node={node}
+            depth={0}
+            open={open}
+            toggle={toggle}
+            parentId={null}
+            siblingsIds={filtered.map((n) => n.id)}
+            allowReorder={allowReorder && !reorderBusy}
+            onReorder={(payload) => reorderCategories(payload.parentId, payload.ids)}
+          />
         ))}
       </ul>
     </div>
