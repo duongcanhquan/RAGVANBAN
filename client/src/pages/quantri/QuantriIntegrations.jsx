@@ -296,57 +296,16 @@ export default function QuantriIntegrations() {
         </p>
         <form onSubmit={addFolder} className="mb-3 grid gap-2 sm:grid-cols-2">
           <input
-            value={draft.label}
-            onChange={(e) => setDraft({ ...draft, label: e.target.value })}
-            placeholder="Tên gợi nhớ (tên cán bộ/đơn vị) — tuỳ chọn"
-            className="rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm"
-          />
-          <input
             value={draft.folderUrls[0] || ''}
             onChange={(e) =>
               setDraft({
                 ...draft,
-                folderUrls: [e.target.value, ...(draft.folderUrls || []).slice(1)],
+                folderUrls: [e.target.value],
               })
             }
             placeholder="https://drive.google.com/drive/folders/...."
             className="rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm sm:col-span-2"
           />
-          {(draft.folderUrls || []).slice(1).map((url, i) => (
-            <div key={i + 1} className="flex gap-2 sm:col-span-2">
-              <input
-                value={url}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    folderUrls: draft.folderUrls.map((x, idx) => (idx === i + 1 ? e.target.value : x)),
-                  })
-                }
-                placeholder="Link thư mục Drive thêm"
-                className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm"
-              />
-              <button
-                type="button"
-                onClick={() =>
-                  setDraft({
-                    ...draft,
-                    folderUrls: draft.folderUrls.filter((_, idx) => idx !== i + 1),
-                  })
-                }
-                className="rounded-xl bg-white/10 px-3 text-xs text-white/70"
-              >
-                Bỏ
-              </button>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={() => setDraft({ ...draft, folderUrls: [...(draft.folderUrls || ['']), ''] })}
-            className="inline-flex items-center justify-center gap-1 rounded-xl bg-white/10 px-3 py-2 text-xs sm:col-span-2"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Thêm link thư mục
-          </button>
           <select
             value={draft.categoryId}
             onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}
