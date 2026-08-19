@@ -41,14 +41,21 @@ async function testAsync(name, fn) {
   }
 }
 
+/** Giống Pinecone JS SDK 8: upsert({ records }) / deleteMany({ ids|filter }). */
 function mockPinecone() {
   const calls = { deleteMany: [], upsert: [], update: [] };
   const ns = {
     deleteMany: async (arg) => {
+      if (Array.isArray(arg) || (!arg?.ids && !arg?.filter)) {
+        throw new Error('Either `ids` or `filter` must be provided.');
+      }
       calls.deleteMany.push(arg);
     },
-    upsert: async (batch) => {
-      calls.upsert.push(batch);
+    upsert: async (arg) => {
+      if (!arg?.records || arg.records.length === 0) {
+        throw new Error('Must pass in at least 1 record to upsert.');
+      }
+      calls.upsert.push(arg);
     },
     update: async (arg) => {
       calls.update.push(arg);
@@ -123,6 +130,10 @@ Bãi bỏ Nghị định số 99/2015/NĐ-CP.
     assert.ok(calls.deleteMany.length >= 1, 'không gọi xóa');
     assert.deepStrictEqual(calls.deleteMany[0], { filter: { ten_file: { $eq: 'vb.pdf' } } });
     assert.ok(calls.upsert.length >= 1);
+    assert.ok(Array.isArray(calls.upsert[0].records), 'SDK 8 cần { records }');
+    assert.ok(calls.upsert[0].records.length >= 1);
+    assert.ok(calls.upsert[0].records[0].id);
+    assert.ok(Array.isArray(calls.upsert[0].records[0].values));
   });
 
   await testAsync('deleteVectorsByFileName còn xóa theo pinecone_ids', async () => {
@@ -132,9 +143,9 @@ Bãi bỏ Nghị định số 99/2015/NĐ-CP.
       indexName: 'idx',
       ids: ['doc-old.pdf-0', 'doc-old.pdf-1'],
     });
-    const idDelete = calls.deleteMany.find((a) => Array.isArray(a));
-    assert.ok(idDelete, 'phải xóa theo mảng id');
-    assert.deepStrictEqual(idDelete, ['doc-old.pdf-0', 'doc-old.pdf-1']);
+    const idDelete = calls.deleteMany.find((a) => Array.isArray(a?.ids));
+    assert.ok(idDelete, 'phải xóa theo { ids }');
+    assert.deepStrictEqual(idDelete.ids, ['doc-old.pdf-0', 'doc-old.pdf-1']);
   });
 
   await testAsync('xóa vector 404 (index mới / host cũ) không chặn upsert', async () => {
@@ -149,8 +160,11 @@ Bãi bỏ Nghị định số 99/2015/NĐ-CP.
         deleteMany: async () => {
           throw err404;
         },
-        upsert: async (batch) => {
-          calls.upsert.push(batch);
+        upsert: async (arg) => {
+          if (!arg?.records || arg.records.length === 0) {
+            throw new Error('Must pass in at least 1 record to upsert.');
+          }
+          calls.upsert.push(arg);
         },
       }),
       describeIndex: async () => ({ dimension: 2, host: 'fresh-host.svc.aped.pinecone.io' }),

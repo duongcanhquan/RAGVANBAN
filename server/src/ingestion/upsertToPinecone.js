@@ -24,6 +24,44 @@ function pineconeHandle(pinecone, indexName, namespace = '', host = '') {
   return namespace ? index.namespace(namespace) : index;
 }
 
+/** Pinecone JS SDK 8: upsert({ records }), không còn upsert(mảng). */
+function asUpsertPayload(records) {
+  const list = (Array.isArray(records) ? records : []).filter(
+    (r) => r && r.id && (Array.isArray(r.values) ? r.values.length : r.sparseValues)
+  );
+  return { records: list };
+}
+
+async function upsertRecords(target, records) {
+  const payload = asUpsertPayload(records);
+  if (!payload.records.length) {
+    throw new Error(
+      'Không có vector để ghi lên Pinecone (file không tách được đoạn văn hoặc embed rỗng).'
+    );
+  }
+  await target.upsert(payload);
+  return payload.records.length;
+}
+
+async function deleteManyRecords(target, { ids, filter } = {}) {
+  const idList = Array.isArray(ids) ? ids.filter(Boolean) : [];
+  if (idList.length) {
+    if (typeof target.deleteMany === 'function') {
+      await target.deleteMany({ ids: idList });
+    } else if (typeof target.delete === 'function') {
+      await target.delete({ ids: idList });
+    }
+    return;
+  }
+  if (filter && typeof filter === 'object') {
+    if (typeof target.deleteMany === 'function') {
+      await target.deleteMany({ filter });
+    } else if (typeof target.delete === 'function') {
+      await target.delete({ filter });
+    }
+  }
+}
+
 function isPineconeNotFound(err) {
   const msg = String(err?.message || err || '');
   const name = String(err?.name || '');
@@ -118,7 +156,11 @@ async function upsertChunksToPinecone(chunks, deps) {
     previousIds,
   } = deps;
 
-  if (!chunks.length) return { upserted: 0, ids: [] };
+  if (!chunks.length) {
+    throw new Error(
+      'Không tách được đoạn văn nào để ghi vector. File có thể là PDF scan/ảnh không có lớp chữ.'
+    );
+  }
 
   if (!embeddings || !pinecone || !indexName) {
     throw new Error('upsertChunksToPinecone: thiếu embeddings / pinecone / indexName');
@@ -135,7 +177,12 @@ async function upsertChunksToPinecone(chunks, deps) {
     indexDim,
     model: embeddings.model || embeddings.modelName,
   });
-  const records = buildPineconeRecords(chunks, vectors);
+  const records = asUpsertPayload(buildPineconeRecords(chunks, vectors)).records;
+  if (!records.length) {
+    throw new Error(
+      'Embed xong nhưng không còn record hợp lệ để ghi Pinecone. Kiểm tra model embedding và nội dung file.'
+    );
+  }
 
   if (fileName || (Array.isArray(previousIds) && previousIds.length)) {
     const deleted = await deleteVectorsByFileName(fileName, {
@@ -155,11 +202,11 @@ async function upsertChunksToPinecone(chunks, deps) {
   const target = pineconeHandle(pinecone, indexName, namespace, host);
 
   let upserted = 0;
-  for (let i = 0; i < records.length; i += batchSize) {
-    const batch = records.slice(i, i + batchSize);
-    await target.upsert(batch);
-    upserted += batch.length;
-    console.log(`  upsert batch ${Math.floor(i / batchSize) + 1}: +${batch.length} (total ${upserted})`);
+  const size = Math.max(1, Number(batchSize) || 64);
+  for (let i = 0; i < records.length; i += size) {
+    const batch = records.slice(i, i + size);
+    upserted += await upsertRecords(target, batch);
+    console.log(`  upsert batch ${Math.floor(i / size) + 1}: +${batch.length} (total ${upserted})`);
   }
 
   return { upserted, ids: records.map((r) => r.id) };
@@ -176,17 +223,11 @@ async function deleteVectorsByFileName(fileName, deps = {}) {
   try {
     const idList = Array.isArray(knownIds) ? knownIds.filter(Boolean) : [];
     if (idList.length) {
-      if (typeof target.deleteMany === 'function') {
-        await target.deleteMany(idList);
-      } else if (typeof target.delete === 'function') {
-        await target.delete({ ids: idList });
-      }
+      await deleteManyRecords(target, { ids: idList });
     }
     if (name) {
-      if (typeof target.deleteMany === 'function') {
-        await target.deleteMany({ filter: { ten_file: { $eq: name } } });
-      } else if (typeof target.delete === 'function') {
-        await target.delete({ filter: { ten_file: { $eq: name } } });
+      if (typeof target.deleteMany === 'function' || typeof target.delete === 'function') {
+        await deleteManyRecords(target, { filter: { ten_file: { $eq: name } } });
       } else if (!idList.length) {
         return { ok: false, error: 'Pinecone SDK không hỗ trợ xóa theo filter' };
       }
@@ -257,6 +298,7 @@ async function updateVectorsMetadataByFileName(fileName, patch, deps = {}) {
 
 module.exports = {
   buildPineconeRecords,
+  asUpsertPayload,
   upsertChunksToPinecone,
   deleteVectorsByFileName,
   updateVectorsMetadataByFileName,

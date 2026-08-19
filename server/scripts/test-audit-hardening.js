@@ -54,8 +54,11 @@ function mockPinecone() {
     deleteMany: async (arg) => {
       calls.deleteMany.push(arg);
     },
-    upsert: async (batch) => {
-      calls.upsert.push(batch);
+    upsert: async (arg) => {
+      if (!arg?.records || arg.records.length === 0) {
+        throw new Error('Must pass in at least 1 record to upsert.');
+      }
+      calls.upsert.push(arg);
     },
     query: async () => ({ matches: [] }),
   };
@@ -110,9 +113,14 @@ async function run() {
     assert.ok(docs.length >= 1);
   });
 
-  test('từ chối .ppt legacy ngay từ isAllowedUpload', () => {
-    assert.strictEqual(isAllowedUpload('bao-cao.ppt', 'application/vnd.ms-powerpoint'), false);
+  test('nhận PDF, Word, PowerPoint (kể cả .ppt), Excel', () => {
+    assert.strictEqual(isAllowedUpload('vb.pdf', 'application/pdf'), true);
+    assert.strictEqual(isAllowedUpload('vb.doc', 'application/msword'), true);
+    assert.strictEqual(isAllowedUpload('vb.docx', ''), true);
+    assert.strictEqual(isAllowedUpload('bao-cao.ppt', 'application/vnd.ms-powerpoint'), true);
     assert.strictEqual(isAllowedUpload('bao-cao.pptx', ''), true);
+    assert.strictEqual(isAllowedUpload('bang.xlsx', ''), true);
+    assert.strictEqual(isAllowedUpload('malware.exe', ''), false);
   });
 
   await testAsync('extractMetadataFromPrefix fallback khi LLM không trả JSON', async () => {
@@ -255,6 +263,70 @@ async function run() {
       else delete require.cache[tessPath];
       delete require.cache[require.resolve('../src/ingestion/extractAnyText')];
     }
+  });
+
+  await testAsync('extractAnyText đọc PPTX và XLSX tối giản', async () => {
+    const JSZip = require('jszip');
+    const { extractAnyText } = require('../src/ingestion/extractAnyText');
+
+    const pptx = new JSZip();
+    pptx.file(
+      'ppt/slides/slide1.xml',
+      '<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:t>Thông tư 55/2026/TT-BGDĐT</a:t></p:sld>'
+    );
+    const pptxBuf = await pptx.generateAsync({ type: 'nodebuffer' });
+    const fromPptx = await extractAnyText(pptxBuf, { fileName: 'quy-dinh.pptx' });
+    assert.ok(/55\/2026/.test(fromPptx.text), fromPptx.text);
+    assert.strictEqual(fromPptx.kind, 'pptx');
+
+    const asPpt = await extractAnyText(pptxBuf, { fileName: 'quy-dinh.ppt' });
+    assert.ok(/55\/2026/.test(asPpt.text), asPpt.text);
+
+    const xlsx = new JSZip();
+    xlsx.file(
+      'xl/sharedStrings.xml',
+      '<?xml version="1.0"?><sst><si><t>Chuẩn chương trình GDNN</t></si></sst>'
+    );
+    xlsx.file(
+      'xl/worksheets/sheet1.xml',
+      '<?xml version="1.0"?><worksheet><sheetData><row><c t="s"><v>0</v></c></row></sheetData></worksheet>'
+    );
+    const xlsxBuf = await xlsx.generateAsync({ type: 'nodebuffer' });
+    const fromXlsx = await extractAnyText(xlsxBuf, { fileName: 'bang.xlsx' });
+    assert.ok(/GDNN/.test(fromXlsx.text), fromXlsx.text);
+  });
+
+  await testAsync('PDF scan sparse thì OCR từng trang', async () => {
+    const { ocrPdfPages } = require('../src/ingestion/extractAnyText');
+    const pages = [];
+    const r = await ocrPdfPages(Buffer.from('%PDF'), {
+      pageCount: 2,
+      ocrLangs: 'vie+eng',
+      onProgress: (p) => pages.push(p),
+    }, {
+      PDFParse: class {
+        async getScreenshot() {
+          return {
+            pages: [
+              { data: Buffer.from('png1'), pageNumber: 1 },
+              { data: Buffer.from('png2'), pageNumber: 2 },
+            ],
+          };
+        }
+        async destroy() {}
+      },
+      createWorker: async () => ({
+        recognize: async (buf) => ({
+          data: { text: Buffer.isBuffer(buf) && buf.toString() === 'png2' ? 'Điều 2. Phạm vi' : 'Thông tư 55/2026/TT-BGDĐT' },
+        }),
+        terminate: async () => {},
+      }),
+    });
+    assert.ok(/Thông tư 55/.test(r.text));
+    assert.ok(/Điều 2/.test(r.text));
+    assert.strictEqual(r.pageCount, 2);
+    assert.strictEqual(r.ocr, true);
+    assert.ok(pages.length >= 1);
   });
 
   test('SSE abort: kết thúc bình thường không bị coi là hủy', () => {

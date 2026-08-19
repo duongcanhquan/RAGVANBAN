@@ -136,6 +136,13 @@ const ALLOWED_DRIVE_MIME = new Set([
   'application/vnd.google-apps.document',
   'application/vnd.google-apps.spreadsheet',
   'application/vnd.google-apps.presentation',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/rtf',
+  'text/rtf',
+  'application/vnd.oasis.opendocument.text',
+  'application/vnd.oasis.opendocument.presentation',
+  'application/vnd.oasis.opendocument.spreadsheet',
   'text/plain',
   'text/markdown',
 ]);

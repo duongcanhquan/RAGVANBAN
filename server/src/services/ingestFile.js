@@ -113,6 +113,11 @@ async function ingestTextContent(text, options = {}) {
     chunkSize,
     chunkOverlap,
   });
+  if (!chunks.length) {
+    throw new Error(
+      `Không tách được đoạn văn từ ${fileName}. File có thể là PDF scan/ảnh không có lớp chữ — bật OCR hoặc tải bản Word.`
+    );
+  }
 
   let upserted = 0;
   let embeddingProvider = null;
@@ -293,6 +298,9 @@ async function ingestSingleFile(source, options = {}) {
     fileName,
     mimeType,
     ocrLangs: options.ocrLangs || rag.ocrLangs,
+    onProgress: (p) => {
+      if (p && p.message) progress(onProgress, p.stage || 'ocr', p.percent ?? 20, p.message);
+    },
   });
   if (!extracted.text) {
     throw new Error(`Không trích xuất được text từ ${fileName}`);

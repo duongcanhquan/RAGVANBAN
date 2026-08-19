@@ -7,7 +7,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const { listPdfFiles } = require('../src/ingestion/listPdfs');
-const { extractPdfText } = require('../src/ingestion/extractPdfText');
+const { extractPdfText, isSparsePdfText, stripPdfExtractorNoise } = require('../src/ingestion/extractPdfText');
 const {
   parseMetadataJson,
   normalizeMetadata,
@@ -15,7 +15,7 @@ const {
   extractMetadataFromPrefix,
 } = require('../src/ingestion/extractMetadata');
 const { chunkTextWithMetadata } = require('../src/ingestion/chunkDocuments');
-const { buildPineconeRecords } = require('../src/ingestion/upsertToPinecone');
+const { buildPineconeRecords, asUpsertPayload } = require('../src/ingestion/upsertToPinecone');
 
 let passed = 0;
 let failed = 0;
@@ -95,9 +95,23 @@ async function run() {
 
   await testAsync('extractPdfText đọc được text từ sample PDF', async () => {
     const { text, pageCount } = await extractPdfText(samplePdfPath);
+    assert.ok(text.length > 10, 'PDF sample không ra text');
     assert.ok(pageCount >= 1);
-    assert.ok(text.length > 0, 'PDF phải có text');
     assert.ok(/Nghi dinh|01\/2024/i.test(text), `text unexpected: ${text}`);
+    assert.strictEqual(isSparsePdfText(text, pageCount), false);
+  });
+
+  test('PDF scan chỉ có -- n of m -- thì coi là sparse', () => {
+    const markers = Array.from({ length: 28 }, (_, i) => `-- ${i + 1} of 28 --`).join('\n\n');
+    assert.strictEqual(stripPdfExtractorNoise(markers), '');
+    assert.strictEqual(isSparsePdfText(markers, 28), true);
+    assert.strictEqual(
+      isSparsePdfText(
+        'BỘ GIÁO DỤC VÀ ĐÀO TẠO\nTHÔNG TƯ\nQuy định chuẩn chương trình đào tạo giáo dục nghề nghiệp\nCăn cứ Luật Giáo dục nghề nghiệp số 124/2025/QH15',
+        1
+      ),
+      false
+    );
   });
 
   test('parseMetadataJson đọc JSON thuần', () => {
@@ -165,6 +179,10 @@ async function run() {
     assert.strictEqual(records.length, 1);
     assert.strictEqual(records[0].metadata.trang_thai, 'Còn hiệu lực');
     assert.deepStrictEqual(records[0].values, [0.1, 0.2]);
+    const payload = asUpsertPayload(records);
+    assert.ok(payload.records.length >= 1);
+    assert.strictEqual(asUpsertPayload([]).records.length, 0);
+    assert.strictEqual(asUpsertPayload(records).records[0].id, records[0].id);
   });
 
   console.log(`\nKết quả: ${passed} passed, ${failed} failed`);

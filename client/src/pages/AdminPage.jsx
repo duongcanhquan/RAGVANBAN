@@ -6,7 +6,7 @@ import { apiUrl } from '../lib/apiBase'
 import { DIRECT_UPLOAD_MAX_BYTES, formatBytes, splitUploadFiles } from '../lib/uploadLimits'
 
 const ALLOWED_RE =
-  /\.(pdf|doc|docx|ppt|pptx|png|jpe?g|webp|gif|bmp|tiff?|txt|md|csv)$/i
+  /\.(pdf|docx?|docm|pptx?|pptm|xlsx?|xlsm|rtf|od[tsp]|png|jpe?g|webp|gif|bmp|tiff?|txt|md|csv)$/i
 
 function errorFromResponseBody(text, status) {
   const raw = String(text || '').trim()
@@ -233,7 +233,7 @@ export default function AdminPage() {
   function acceptFiles(list) {
     const next = [...list].filter((f) => ALLOWED_RE.test(f.name))
     if (!next.length) {
-      setError('Chỉ nhận PDF, Word, PowerPoint, ảnh, hoặc file chữ (TXT/MD).')
+      setError('Chỉ nhận PDF, Word, PowerPoint, Excel, OpenDocument, RTF, ảnh, TXT/MD.')
       return
     }
     const { direct, useDrive, tooLarge } = splitUploadFiles(next, {
@@ -677,11 +677,11 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="admin-shell relative min-h-[calc(100dvh-4.75rem)] overflow-hidden text-slate-100">
+    <div className="admin-shell relative text-slate-100">
       <div className="pointer-events-none absolute inset-0 admin-aurora" aria-hidden="true" />
 
-      <div className="relative z-10 mx-auto flex min-h-[calc(100dvh-4.75rem)] w-full max-w-[1600px] flex-col px-4 py-4 sm:px-6">
-        <p className="m-0 mb-3 shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/75">
+      <div className="relative z-10 mx-auto w-full max-w-[1600px] px-4 py-4 sm:px-6">
+        <p className="m-0 mb-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/75">
           Câu hỏi đã phục vụ:{' '}
           <span className="font-semibold tabular-nums text-white">{stats.totalQuestions || 0}</span>
           <span className="mx-2 text-white/25">·</span>
@@ -689,15 +689,14 @@ export default function AdminPage() {
           <span className="font-semibold tabular-nums text-white">{stats.totalDocuments || 0}</span>
         </p>
 
-        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(18rem,38%)_minmax(0,1fr)]">
-          <section className="glass-panel flex min-h-0 flex-col overflow-y-auto rounded-3xl p-5 sm:p-6 lg:max-h-[calc(100dvh-8rem)]">
-            <h2 className="m-0 mb-1 text-lg font-semibold text-white">Tải tài liệu</h2>
-            <p className="m-0 mb-4 text-sm text-white/70">
-              File nhỏ (vài chục KB) vẫn tải được. File trên {formatBytes(httpUploadMaxBytes)}: đưa lên
-              Google Drive rồi dán link — hệ thống tự chuyển sang bước đó.
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(18rem,38%)_minmax(0,1fr)]">
+          <section className="glass-panel rounded-3xl p-4 sm:p-5">
+            <h2 className="m-0 mb-1 text-base font-semibold text-white">Tải tài liệu</h2>
+            <p className="m-0 mb-3 text-xs text-white/65">
+              File trên {formatBytes(httpUploadMaxBytes)}: đưa Drive rồi dán link.
             </p>
 
-            <div className="mb-4 flex flex-wrap gap-1 rounded-full border border-white/15 bg-white/5 p-1">
+            <div className="mb-3 flex flex-wrap gap-1 rounded-full border border-white/15 bg-white/5 p-0.5">
               {[
                 { id: 'file', label: 'File', Icon: UploadCloud },
                 { id: 'text', label: 'Dán text', Icon: Type },
@@ -707,7 +706,7 @@ export default function AdminPage() {
                   key={id}
                   type="button"
                   onClick={() => setIngestTab(id)}
-                  className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition sm:text-sm ${
+                  className={`inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                     ingestTab === id ? 'btn-gold' : 'text-white/70 hover:bg-white/10 hover:text-white'
                   }`}
                 >
@@ -717,14 +716,14 @@ export default function AdminPage() {
               ))}
             </div>
 
-            <label className="mb-4 block">
-              <span className="mb-1.5 block text-xs font-medium text-white/70">
+            <label className="mb-3 block">
+              <span className="mb-1 block text-xs font-medium text-white/70">
                 Ngành / hạng mục / chủ đề {isSuper ? '(tuỳ chọn)' : '(bắt buộc)'}
               </span>
               <select
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value)}
-                className="w-full rounded-2xl border border-white/20 bg-white/10 px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--hcc-gold)]"
+                className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white outline-none focus:border-[var(--hcc-gold)]"
               >
                 <option value="" className="text-[var(--hcc-ink)]">
                   {isSuper ? 'Tự gợi ý theo nội dung văn bản' : '— Chọn phần bạn được giao —'}
@@ -735,37 +734,9 @@ export default function AdminPage() {
                   </option>
                 ))}
               </select>
-              <span className="mt-1.5 block font-mono text-[11px] text-white/40">
+              <span className="mt-1 block font-mono text-[11px] text-white/40">
                 R2: {uploadR2Hint}/
               </span>
-            </label>
-
-            <label className="mb-3 block">
-              <span className="mb-1.5 block text-xs font-medium text-white/70">Tên tài liệu</span>
-              <input
-                value={ingestTab === 'text' ? pasteTitle : docTitle}
-                onChange={(e) =>
-                  ingestTab === 'text' ? setPasteTitle(e.target.value) : setDocTitle(e.target.value)
-                }
-                placeholder={
-                  ingestTab === 'file'
-                    ? files.length === 1
-                      ? 'Tên hiện trên danh mục (mặc định = tên file)'
-                      : 'Một file: điền tên. Nhiều file: mỗi file dùng tên file'
-                    : 'Tên hiện trên danh mục'
-                }
-                className="w-full rounded-2xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/40"
-              />
-            </label>
-            <label className="mb-4 block">
-              <span className="mb-1.5 block text-xs font-medium text-white/70">Mô tả (hiện trên danh mục)</span>
-              <textarea
-                rows={2}
-                value={docDescription}
-                onChange={(e) => setDocDescription(e.target.value)}
-                placeholder="Ví dụ: Quy định thời gian làm việc, áp dụng từ năm học 2025–2026"
-                className="w-full resize-y rounded-2xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/40"
-              />
             </label>
 
             {ingestTab === 'file' && (
@@ -782,7 +753,7 @@ export default function AdminPage() {
                     if (e.dataTransfer.files?.length) acceptFiles(e.dataTransfer.files)
                   }}
                   onClick={() => inputRef.current?.click()}
-                  className={`group cursor-pointer rounded-3xl border border-dashed px-4 py-10 text-center transition duration-300 ${
+                  className={`mb-3 flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-dashed px-3 py-2.5 text-left transition ${
                     dragOver
                       ? 'border-[var(--hcc-gold)]/80 bg-white/15'
                       : 'border-white/20 bg-white/5 hover:border-white/40 hover:bg-white/10'
@@ -793,19 +764,20 @@ export default function AdminPage() {
                     if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click()
                   }}
                 >
-                  <UploadCloud className="mx-auto mb-3 h-11 w-11 text-white/70" />
-                  <p className="m-0 text-base font-medium text-white">
-                    {files.length ? `${files.length} file đã chọn` : 'Kéo thả hoặc chọn nhiều file'}
-                  </p>
-                  <p className="m-0 mt-1 text-sm text-white/50">
-                    PDF, Word, ảnh… từ file rất nhỏ đến {formatBytes(httpUploadMaxBytes)} / lần tải
-                    trực tiếp
-                  </p>
+                  <UploadCloud className="h-5 w-5 shrink-0 text-white/70" />
+                  <div className="min-w-0 flex-1">
+                    <p className="m-0 text-sm font-medium text-white">
+                      {files.length ? `${files.length} file đã chọn` : 'Kéo thả hoặc chọn file'}
+                    </p>
+                    <p className="m-0 text-[11px] text-white/50">
+                      PDF, Word, PPT, Excel, ảnh · tối đa {formatBytes(httpUploadMaxBytes)} / lần
+                    </p>
+                  </div>
                   <input
                     ref={inputRef}
                     type="file"
                     multiple
-                    accept=".pdf,.doc,.docx,.pptx,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.txt,.md,.csv,application/pdf,image/*"
+                    accept=".pdf,.doc,.docx,.docm,.ppt,.pptx,.pptm,.xls,.xlsx,.xlsm,.rtf,.odt,.odp,.ods,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.txt,.md,.csv,application/pdf,application/msword,application/vnd.ms-powerpoint,application/vnd.ms-excel,image/*"
                     className="hidden"
                     onChange={(e) => {
                       acceptFiles(e.target.files)
@@ -814,13 +786,13 @@ export default function AdminPage() {
                   />
                 </div>
                 {files.length ? (
-                  <ul className="mt-3 max-h-36 space-y-1 overflow-y-auto p-0 text-xs text-white/70">
+                  <ul className="mb-3 max-h-24 space-y-1 overflow-y-auto p-0 text-xs text-white/70">
                     {files.map((f, i) => (
                       <li key={`${f.name}-${i}`} className="flex list-none justify-between gap-2">
                         <span className="truncate">{f.name}</span>
                         <button
                           type="button"
-                          className="shrink-0 text-white/45 hover:text-white"
+                          className="min-h-8 shrink-0 text-white/45 hover:text-white"
                           onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
                         >
                           Bỏ
@@ -829,52 +801,21 @@ export default function AdminPage() {
                     ))}
                   </ul>
                 ) : null}
-                <div className="mt-5 flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    disabled={!files.length || uploading}
-                    onClick={handleUpload}
-                    className="btn-gold inline-flex cursor-pointer items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold disabled:opacity-40"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    {uploading ? 'Đang số hóa…' : `Tải lên & số hóa (${files.length || 0})`}
-                  </button>
-                  {files.length ? (
-                    <button
-                      type="button"
-                      className="cursor-pointer text-sm text-white/70"
-                      onClick={() => setFiles([])}
-                    >
-                      Xóa danh sách chọn
-                    </button>
-                  ) : null}
-                </div>
               </>
             )}
 
             {ingestTab === 'text' && (
-              <div className="space-y-3">
-                <textarea
-                  rows={8}
-                  value={pasteText}
-                  onChange={(e) => setPasteText(e.target.value)}
-                  placeholder="Dán nội dung văn bản…"
-                  className="w-full resize-y rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-white/40"
-                />
-                <button
-                  type="button"
-                  disabled={!pasteText.trim() || uploading}
-                  onClick={handlePasteText}
-                  className="btn-gold inline-flex cursor-pointer items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold disabled:opacity-40"
-                >
-                  <Type className="h-4 w-4" />
-                  {uploading ? 'Đang số hóa…' : 'Số hóa text'}
-                </button>
-              </div>
+              <textarea
+                rows={5}
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value)}
+                placeholder="Dán nội dung văn bản…"
+                className="mb-3 w-full resize-y rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-white outline-none placeholder:text-white/40"
+              />
             )}
 
             {ingestTab === 'url' && (
-              <div className="space-y-3">
+              <div className="mb-3 space-y-2">
                 {driveHint ? (
                   <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-3 py-3 text-sm text-amber-50">
                     <p className="m-0 font-medium">
@@ -945,22 +886,88 @@ export default function AdminPage() {
                   <button
                     type="button"
                     onClick={() => setDriveLinks((prev) => [...prev, ''])}
-                    className="inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 text-xs text-white/80"
+                    className="inline-flex min-h-9 items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 text-xs text-white/80"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Thêm link
                   </button>
                 </div>
+              </div>
+            )}
+
+            <label className="mb-2 block">
+              <span className="mb-1 block text-xs font-medium text-white/70">Tên tài liệu</span>
+              <input
+                value={ingestTab === 'text' ? pasteTitle : docTitle}
+                onChange={(e) =>
+                  ingestTab === 'text' ? setPasteTitle(e.target.value) : setDocTitle(e.target.value)
+                }
+                placeholder={
+                  ingestTab === 'file'
+                    ? files.length === 1
+                      ? 'Tên hiện trên danh mục (mặc định = tên file)'
+                      : 'Một file: điền tên. Nhiều file: mỗi file dùng tên file'
+                    : 'Tên hiện trên danh mục'
+                }
+                className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-white outline-none placeholder:text-white/40"
+              />
+            </label>
+            <label className="mb-3 block">
+              <span className="mb-1 block text-xs font-medium text-white/70">Mô tả (hiện trên danh mục)</span>
+              <textarea
+                rows={2}
+                value={docDescription}
+                onChange={(e) => setDocDescription(e.target.value)}
+                placeholder="Ví dụ: Quy định thời gian làm việc, áp dụng từ năm học 2025–2026"
+                className="w-full resize-y rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-white outline-none placeholder:text-white/40"
+              />
+            </label>
+
+            {ingestTab === 'file' && (
+              <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  disabled={!driveLinks.some((s) => s.trim()) || uploading}
-                  onClick={handleWebUrl}
-                  className="btn-gold inline-flex cursor-pointer items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold disabled:opacity-40"
+                  disabled={!files.length || uploading}
+                  onClick={handleUpload}
+                  className="btn-gold inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold disabled:opacity-40"
                 >
-                  <Globe className="h-4 w-4" />
-                  {uploading ? 'Đang lấy & số hóa…' : 'Số hóa từ link Drive'}
+                  <Sparkles className="h-4 w-4" />
+                  {uploading ? 'Đang số hóa…' : `Tải lên & số hóa (${files.length || 0})`}
                 </button>
+                {files.length ? (
+                  <button
+                    type="button"
+                    className="min-h-11 cursor-pointer text-sm text-white/70"
+                    onClick={() => setFiles([])}
+                  >
+                    Xóa danh sách chọn
+                  </button>
+                ) : null}
               </div>
+            )}
+
+            {ingestTab === 'text' && (
+              <button
+                type="button"
+                disabled={!pasteText.trim() || uploading}
+                onClick={handlePasteText}
+                className="btn-gold inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold disabled:opacity-40"
+              >
+                <Type className="h-4 w-4" />
+                {uploading ? 'Đang số hóa…' : 'Số hóa text'}
+              </button>
+            )}
+
+            {ingestTab === 'url' && (
+              <button
+                type="button"
+                disabled={!driveLinks.some((s) => s.trim()) || uploading}
+                onClick={handleWebUrl}
+                className="btn-gold inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold disabled:opacity-40"
+              >
+                <Globe className="h-4 w-4" />
+                {uploading ? 'Đang lấy & số hóa…' : 'Số hóa từ link Drive'}
+              </button>
             )}
 
             {(uploading || progress.percent > 0) && (
@@ -1025,7 +1032,7 @@ export default function AdminPage() {
             ) : null}
           </section>
 
-          <section className="glass-panel flex min-h-0 max-h-[min(70vh,40rem)] flex-col rounded-3xl p-5 sm:p-6 lg:max-h-[calc(100dvh-8rem)]">
+          <section className="glass-panel flex min-h-0 flex-col rounded-3xl p-4 sm:p-5">
             <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 className="m-0 text-base font-semibold">Danh mục tài liệu</h2>

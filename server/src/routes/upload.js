@@ -36,7 +36,7 @@ function createUploader(maxBytes) {
     fileFilter: (_req, file, cb) => {
       if (!isAllowedUpload(file.originalname, file.mimetype)) {
         return cb(
-          new Error('Định dạng không hỗ trợ. Dùng PDF, DOC/DOCX, PPT/PPTX, ảnh, TXT/MD.')
+          new Error('Định dạng không hỗ trợ. Dùng PDF, Word, PowerPoint, Excel, ảnh, TXT/MD.')
         );
       }
       cb(null, true);

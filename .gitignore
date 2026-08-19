@@ -31,3 +31,6 @@ server/data/app-settings.json
 *.pem
 credentials.json
 *-service-account.json
+
+# Tesseract language packs downloaded at OCR runtime
+*.traineddata
