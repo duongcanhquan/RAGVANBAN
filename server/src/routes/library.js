@@ -15,7 +15,6 @@ const fs = require('fs');
 const path = require('path');
 const {
   listDocuments,
-  updateDocumentCategory,
   isConfigured,
 } = require('../services/supabase');
 const { listPdfFiles } = require('../ingestion/listPdfs');
@@ -24,12 +23,14 @@ const {
   createCategory,
   updateCategory,
   deleteCategory,
+  reorderCategories,
   pathForCategory,
   setLocalDocCategory,
   getAllLocalDocMap,
 } = require('../services/taxonomyStore');
-const { requireAdmin, requireSuperAdmin } = require('../middleware/requireAdmin');
-const { assertCanUseCategory } = require('../services/adminAccess');
+const { requireAdmin } = require('../middleware/requireAdmin');
+const { assertCanManageCategory } = require('../services/adminAccess');
+const { removeDocument, patchDocument, filterDocsForAdmin } = require('../services/documentAdmin');
 
 const router = express.Router();
 
@@ -164,11 +165,13 @@ router.get('/categories', async (_req, res, next) => {
   }
 });
 
-router.post('/categories', requireSuperAdmin, async (req, res, next) => {
+router.post('/categories', requireAdmin, async (req, res, next) => {
   try {
+    const parentId = req.body?.parentId || null;
+    assertCanManageCategory(req.admin, parentId, { creatingRoot: !parentId });
     const result = await createCategory({
       name: req.body?.name,
-      parentId: req.body?.parentId || null,
+      parentId,
       kind: req.body?.kind || 'folder',
       description: req.body?.description || '',
       sortOrder: req.body?.sortOrder,
@@ -183,8 +186,14 @@ router.post('/categories', requireSuperAdmin, async (req, res, next) => {
   }
 });
 
-router.patch('/categories/:id', requireSuperAdmin, async (req, res, next) => {
+router.patch('/categories/:id', requireAdmin, async (req, res, next) => {
   try {
+    assertCanManageCategory(req.admin, req.params.id);
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'parentId')) {
+      assertCanManageCategory(req.admin, req.body.parentId, {
+        creatingRoot: !req.body.parentId,
+      });
+    }
     const result = await updateCategory(req.params.id, {
       name: req.body?.name,
       parentId: req.body?.parentId,
@@ -202,10 +211,87 @@ router.patch('/categories/:id', requireSuperAdmin, async (req, res, next) => {
   }
 });
 
-router.delete('/categories/:id', requireSuperAdmin, async (req, res, next) => {
+router.delete('/categories/:id', requireAdmin, async (req, res, next) => {
   try {
+    assertCanManageCategory(req.admin, req.params.id);
     const result = await deleteCategory(req.params.id);
+    if (!result.ok) {
+      res.status(400).json(result);
+      return;
+    }
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/categories/reorder', requireAdmin, async (req, res, next) => {
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    const cats = await listCategories();
+    const byId = new Map((cats.items || []).map((c) => [c.id, c]));
+    for (const it of items) {
+      assertCanManageCategory(req.admin, it.id);
+      const current = byId.get(it.id);
+      const nextParent = it.parentId === undefined ? current?.parent_id || null : it.parentId || null;
+      const prevParent = current?.parent_id || null;
+      if (String(nextParent || '') !== String(prevParent || '')) {
+        assertCanManageCategory(req.admin, nextParent, { creatingRoot: !nextParent });
+      }
+    }
+    const result = await reorderCategories(items);
+    if (!result.ok) {
+      res.status(400).json(result);
+      return;
+    }
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/documents', requireAdmin, async (req, res, next) => {
+  try {
+    const listed = await listDocuments({ limit: 800 });
+    const items = filterDocsForAdmin(req.admin, listed.items || []);
+    res.json({ ok: true, items, total: items.length, source: listed.source });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/documents/bulk-delete', requireAdmin, async (req, res, next) => {
+  try {
+    const ids = [...new Set((req.body?.ids || []).map(String).filter(Boolean))].slice(0, 80);
+    const results = [];
+    for (const id of ids) {
+      try {
+        results.push({ id, ...(await removeDocument(req.admin, id)) });
+      } catch (e) {
+        results.push({ id, ok: false, error: e.message });
+      }
+    }
+    const failed = results.filter((r) => r.ok === false).length;
+    res.json({ ok: failed === 0, failed, results });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/documents/bulk-category', requireAdmin, async (req, res, next) => {
+  try {
+    const ids = [...new Set((req.body?.ids || []).map(String).filter(Boolean))].slice(0, 80);
+    const categoryId = req.body?.categoryId || null;
+    const results = [];
+    for (const id of ids) {
+      try {
+        results.push({ id, ...(await patchDocument(req.admin, id, { categoryId })) });
+      } catch (e) {
+        results.push({ id, ok: false, error: e.message });
+      }
+    }
+    const failed = results.filter((r) => r.ok === false).length;
+    res.json({ ok: failed === 0, failed, results });
   } catch (err) {
     next(err);
   }
@@ -213,26 +299,20 @@ router.delete('/categories/:id', requireSuperAdmin, async (req, res, next) => {
 
 router.patch('/documents/:id', requireAdmin, async (req, res, next) => {
   try {
-    const categoryId = req.body?.categoryId || null;
-    assertCanUseCategory(req.admin, categoryId);
-    const cats = await listCategories();
-    const folderPath = categoryId ? pathForCategory(cats.items || [], categoryId) : '';
-    const cat = (cats.items || []).find((c) => c.id === categoryId);
+    const result = await patchDocument(req.admin, req.params.id, req.body || {});
+    if (req.body?.categoryId !== undefined) {
+      setLocalDocCategory(req.params.id, req.body.categoryId || null);
+    }
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
 
-    setLocalDocCategory(req.params.id, categoryId);
-
-    const updated = await updateDocumentCategory(req.params.id, {
-      categoryId,
-      folderPath,
-      chuyenMon: cat?.name || null,
-    });
-
-    res.json({
-      ok: true,
-      categoryId,
-      folderPath,
-      supabase: updated,
-    });
+router.delete('/documents/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const result = await removeDocument(req.admin, req.params.id);
+    res.json(result);
   } catch (err) {
     next(err);
   }

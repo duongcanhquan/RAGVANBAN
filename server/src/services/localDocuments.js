@@ -88,10 +88,49 @@ function updateLocalDocumentCategory(id, { categoryId, folderPath, chuyenMon }) 
   return { ok: true, id, source: 'local' };
 }
 
+function deleteLocalDocument(id) {
+  const data = ensure();
+  const before = data.items.length;
+  data.items = data.items.filter((d) => d.id !== id);
+  if (data.items.length === before) return { ok: false, error: 'Không tìm thấy tài liệu local' };
+  write(data);
+  return { ok: true, source: 'local' };
+}
+
+function getLocalDocument(id) {
+  return ensure().items.find((d) => d.id === id) || null;
+}
+
+function updateLocalDocument(id, patch) {
+  const data = ensure();
+  const idx = data.items.findIndex((d) => d.id === id);
+  if (idx < 0) return { ok: false, error: 'Không tìm thấy tài liệu local' };
+  const cur = data.items[idx];
+  data.items[idx] = {
+    ...cur,
+    file_name: patch.file_name != null ? patch.file_name : cur.file_name,
+    so_hieu: patch.so_hieu !== undefined ? patch.so_hieu : cur.so_hieu,
+    loai_van_ban: patch.loai_van_ban !== undefined ? patch.loai_van_ban : cur.loai_van_ban,
+    trang_thai: patch.trang_thai !== undefined ? patch.trang_thai : cur.trang_thai,
+    category_id: patch.category_id !== undefined ? patch.category_id : cur.category_id,
+    folder_path: patch.folder_path !== undefined ? patch.folder_path : cur.folder_path,
+    chuyen_mon: patch.chuyen_mon !== undefined ? patch.chuyen_mon : cur.chuyen_mon,
+    metadata: {
+      ...(cur.metadata || {}),
+      ...(patch.metadata || {}),
+    },
+  };
+  write(data);
+  return { ok: true, source: 'local', item: data.items[idx] };
+}
+
 module.exports = {
   upsertLocalDocument,
   listLocalDocuments,
   countLocalDocuments,
   updateLocalDocumentCategory,
+  deleteLocalDocument,
+  getLocalDocument,
+  updateLocalDocument,
   LOCAL_PATH,
 };

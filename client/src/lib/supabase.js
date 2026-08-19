@@ -9,5 +9,12 @@ export const supabaseConfigured = Boolean(
 
 /** Anon client — đọc công khai + đăng nhập /quantri (email/password). */
 export const supabase = supabaseConfigured
-  ? createClient(url, anon)
+  ? createClient(url, anon, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storageKey: 'ragvanban-quantri-auth',
+      },
+    })
   : null

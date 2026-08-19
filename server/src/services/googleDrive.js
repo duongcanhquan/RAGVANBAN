@@ -1,13 +1,7 @@
 /**
- * Google Drive — đọc file có sẵn trên Drive của bạn.
- *
- * Env:
- *   GOOGLE_SERVICE_ACCOUNT_JSON  — đường dẫn file JSON, hoặc chuỗi JSON
- *   GOOGLE_DRIVE_FOLDER_ID       — thư mục mặc định (chỉ khi sync cả folder)
+ * Google Drive — đọc file đã share cho service account.
+ * Super-admin dán JSON một lần trong Cài đặt; mỗi cán bộ thêm link thư mục của mình.
  */
-
-const fs = require('fs');
-const path = require('path');
 
 let driveClient = null;
 
@@ -17,10 +11,31 @@ function hasDriveCredentials() {
   return true;
 }
 
-function isDriveConfigured() {
-  const folder = process.env.GOOGLE_DRIVE_FOLDER_ID;
-  if (!folder || String(folder).includes('your-')) return false;
-  return hasDriveCredentials();
+function resetDriveClient() {
+  driveClient = null;
+}
+
+async function loadCredentials() {
+  const { getSavedServiceAccount } = require('./integrations');
+  const saved = await getSavedServiceAccount();
+  if (saved.json) return saved.json;
+  throw new Error(
+    'Chưa có Google service account. Super-admin dán file JSON key trong Cài đặt → Google Drive.'
+  );
+}
+
+async function hasAnyDriveKey() {
+  try {
+    await loadCredentials();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Drive sẵn sàng đọc file riêng (không cần 1 folder ID toàn cục). */
+async function isDriveConfigured() {
+  return hasAnyDriveKey();
 }
 
 /**
@@ -54,31 +69,10 @@ function parseDriveResource(raw) {
   return null;
 }
 
-function loadCredentials() {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  if (!raw) throw new Error('Thiếu GOOGLE_SERVICE_ACCOUNT_JSON');
-
-  const asPath = path.resolve(raw);
-  if (fs.existsSync(asPath)) {
-    return JSON.parse(fs.readFileSync(asPath, 'utf8'));
-  }
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    const fixed = raw.replace(/\\n/g, '\n');
-    return JSON.parse(fixed);
-  }
-}
-
 async function getDrive() {
   if (driveClient) return driveClient;
-  if (!hasDriveCredentials()) {
-    throw new Error('Google Drive chưa cấu hình GOOGLE_SERVICE_ACCOUNT_JSON');
-  }
-
   const { google } = require('googleapis');
-  const credentials = loadCredentials();
+  const credentials = await loadCredentials();
   const auth = new google.auth.GoogleAuth({
     credentials,
     scopes: ['https://www.googleapis.com/auth/drive.readonly'],
@@ -88,8 +82,10 @@ async function getDrive() {
 }
 
 async function listPdfInFolder(folderId = process.env.GOOGLE_DRIVE_FOLDER_ID) {
+  const id = String(folderId || '').replace(/'/g, '');
+  if (!id) throw new Error('Thiếu folderId');
   const drive = await getDrive();
-  const q = `'${folderId}' in parents and mimeType='application/pdf' and trashed=false`;
+  const q = `'${id}' in parents and mimeType='application/pdf' and trashed=false`;
 
   const res = await drive.files.list({
     q,
@@ -169,8 +165,18 @@ async function downloadPublicDriveFile(fileId) {
   };
 }
 
+async function getFileParentIds(fileId) {
+  const drive = await getDrive();
+  const meta = await drive.files.get({
+    fileId,
+    fields: 'parents',
+    supportsAllDrives: true,
+  });
+  return meta.data.parents || [];
+}
+
 async function downloadPdf(fileId) {
-  if (hasDriveCredentials()) {
+  if (await hasAnyDriveKey()) {
     try {
       return await downloadViaApi(fileId);
     } catch (err) {
@@ -184,9 +190,12 @@ async function downloadPdf(fileId) {
 
 module.exports = {
   hasDriveCredentials,
+  hasAnyDriveKey,
   isDriveConfigured,
+  resetDriveClient,
   parseDriveResource,
   listPdfInFolder,
+  getFileParentIds,
   downloadPdf,
   getDrive,
 };

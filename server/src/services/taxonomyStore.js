@@ -279,6 +279,56 @@ async function updateCategory(id, patch) {
   return { ok: true, source: 'local', item: local.categories[idx] };
 }
 
+function wouldCycle(flat, id, newParentId) {
+  if (!newParentId) return false;
+  if (id === newParentId) return true;
+  const byId = new Map((flat || []).map((c) => [c.id, c]));
+  let cur = byId.get(newParentId);
+  const guard = new Set();
+  while (cur && !guard.has(cur.id)) {
+    if (cur.id === id) return true;
+    guard.add(cur.id);
+    cur = cur.parent_id ? byId.get(cur.parent_id) : null;
+  }
+  return false;
+}
+
+async function reorderCategories(moves) {
+  const list = Array.isArray(moves) ? moves : [];
+  if (!list.length) return { ok: true, updated: 0 };
+
+  const current = await listCategories();
+  const flat = current.items || [];
+  for (const m of list) {
+    const nextParent = m.parentId === undefined ? undefined : m.parentId || null;
+    if (nextParent && wouldCycle(flat, m.id, nextParent)) {
+      return { ok: false, error: 'Không chuyển được vào thư mục con của chính nó' };
+    }
+  }
+
+  const sb = getSupabase();
+  if (sb && isConfigured()) {
+    for (const m of list) {
+      const updates = { updated_at: new Date().toISOString() };
+      if (m.sortOrder != null) updates.sort_order = Number(m.sortOrder) || 0;
+      if (m.parentId !== undefined) updates.parent_id = m.parentId || null;
+      const { error } = await sb.from('doc_categories').update(updates).eq('id', m.id);
+      if (error) console.warn('[taxonomy] reorder:', error.message);
+    }
+  }
+
+  const local = ensureLocal();
+  for (const m of list) {
+    const idx = local.categories.findIndex((c) => c.id === m.id);
+    if (idx < 0) continue;
+    if (m.sortOrder != null) local.categories[idx].sort_order = Number(m.sortOrder) || 0;
+    if (m.parentId !== undefined) local.categories[idx].parent_id = m.parentId || null;
+    local.categories[idx].updated_at = new Date().toISOString();
+  }
+  writeLocal(local);
+  return { ok: true, updated: list.length };
+}
+
 async function deleteCategory(id) {
   const sb = getSupabase();
   if (sb && isConfigured()) {
@@ -382,6 +432,8 @@ module.exports = {
   createCategory,
   updateCategory,
   deleteCategory,
+  reorderCategories,
+  wouldCycle,
   buildCategoryTree,
   pathForCategory,
   suggestCategoryId,

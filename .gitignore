@@ -23,8 +23,9 @@ Thumbs.db
 *.swp
 .vercel
 
-# Local runtime catalogs (generated)
+# Local runtime catalogs / secrets stored via Cài đặt
 server/data/documents.json
+server/data/app-settings.json
 
 # Credentials
 *.pem

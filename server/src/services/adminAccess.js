@@ -50,6 +50,25 @@ function assertCanUseCategory(admin, categoryId) {
   }
 }
 
+function assertCanManageCategory(admin, categoryId, { creatingRoot = false } = {}) {
+  if (!admin || !admin.is_active) {
+    const err = new Error('Không có quyền quản trị');
+    err.status = 403;
+    throw err;
+  }
+  if (isSuperAdmin(admin)) return;
+  if (creatingRoot || !categoryId) {
+    const err = new Error('Chỉ super-admin được tạo chuyên mục gốc');
+    err.status = 403;
+    throw err;
+  }
+  if (!canUseCategory(admin, categoryId)) {
+    const err = new Error('Bạn không được quản lý chuyên mục này');
+    err.status = 403;
+    throw err;
+  }
+}
+
 function serializeAdmin(admin) {
   if (!admin) return null;
   const ids = admin.allowedCategoryIds;
@@ -70,5 +89,6 @@ module.exports = {
   isSuperAdmin,
   canUseCategory,
   assertCanUseCategory,
+  assertCanManageCategory,
   serializeAdmin,
 };

@@ -2,14 +2,16 @@
  * Google Drive sync API
  *   GET  /api/drive/status
  *   GET  /api/drive/list
- *   POST /api/drive/ingest   { fileId }  — SSE
- *   POST /api/drive/sync     { limit? }  — SSE
+ *   POST /api/drive/ingest   { fileId }
+ *   POST /api/drive/sync     { limit?, folderId? }
  */
 
 const express = require('express');
-const { isDriveConfigured, listPdfInFolder } = require('../services/googleDrive');
+const { hasAnyDriveKey, listPdfInFolder } = require('../services/googleDrive');
 const { ingestDriveFile, syncDriveFolder } = require('../services/driveIngest');
-const { requireSuperAdmin } = require('../middleware/requireAdmin');
+const { requireAdmin, requireSuperAdmin } = require('../middleware/requireAdmin');
+const { getFlags, listDriveSources } = require('../services/integrations');
+const { assertCanUseCategory } = require('../services/adminAccess');
 
 const router = express.Router();
 
@@ -25,30 +27,64 @@ function sendEvent(res, event, data) {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
-router.get('/status', (_req, res) => {
-  res.json({
-    configured: isDriveConfigured(),
-    folderId: process.env.GOOGLE_DRIVE_FOLDER_ID || null,
-  });
+router.get('/status', requireAdmin, async (_req, res, next) => {
+  try {
+    const [flags, hasKey] = await Promise.all([getFlags(), hasAnyDriveKey()]);
+    res.json({
+      configured: hasKey && flags.driveEnabled,
+      hasServiceAccount: hasKey,
+      driveEnabled: flags.driveEnabled,
+      n8nEnabled: flags.n8nEnabled,
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
-router.get('/list', requireSuperAdmin, async (_req, res) => {
+router.get('/list', requireAdmin, async (req, res) => {
   try {
-    if (!isDriveConfigured()) {
-      res.status(400).json({ error: 'Google Drive chưa cấu hình' });
+    if (!(await hasAnyDriveKey())) {
+      res.status(400).json({ error: 'Chưa dán Google service account trong Cài đặt' });
       return;
     }
-    const files = await listPdfInFolder();
+    const flags = await getFlags();
+    if (!flags.driveEnabled) {
+      res.status(403).json({ error: 'Google Drive đang tắt trong Cài đặt' });
+      return;
+    }
+    const folderId = String(req.query.folderId || '').trim();
+    const sources = await listDriveSources();
+    const ids = folderId
+      ? [folderId]
+      : sources.filter((s) => s.enabled).map((s) => s.folderId);
+    const files = [];
+    for (const id of ids) {
+      const listed = await listPdfInFolder(id);
+      files.push(...listed.map((f) => ({ ...f, folderId: id })));
+    }
     res.json({ files });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post('/ingest', requireSuperAdmin, async (req, res) => {
+router.post('/ingest', requireAdmin, async (req, res) => {
   const fileId = String(req.body?.fileId || '').trim();
   if (!fileId) {
     res.status(400).json({ error: 'Thiếu fileId' });
+    return;
+  }
+
+  try {
+    const flags = await getFlags();
+    if (!flags.driveEnabled) {
+      res.status(403).json({ error: 'Google Drive đang tắt trong Cài đặt' });
+      return;
+    }
+    const categoryId = req.body?.categoryId || null;
+    assertCanUseCategory(req.admin, categoryId);
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
     return;
   }
 
@@ -60,6 +96,7 @@ router.post('/ingest', requireSuperAdmin, async (req, res) => {
 
   try {
     const result = await ingestDriveFile(fileId, {
+      categoryId: req.body?.categoryId || null,
       onProgress: (p) => {
         if (!closed) sendEvent(res, 'progress', p);
       },
@@ -77,6 +114,17 @@ router.post('/ingest', requireSuperAdmin, async (req, res) => {
 });
 
 router.post('/sync', requireSuperAdmin, async (req, res) => {
+  try {
+    const flags = await getFlags();
+    if (!flags.driveEnabled) {
+      res.status(403).json({ error: 'Google Drive đang tắt trong Cài đặt' });
+      return;
+    }
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+    return;
+  }
+
   initSse(res);
   let closed = false;
   req.on('close', () => {
@@ -84,9 +132,10 @@ router.post('/sync', requireSuperAdmin, async (req, res) => {
   });
 
   try {
-    const limit = Number(req.body?.limit) || 20;
     const result = await syncDriveFolder({
-      limit,
+      limit: Number(req.body?.limit) || 20,
+      folderId: req.body?.folderId || null,
+      categoryId: req.body?.categoryId || null,
       onProgress: (p) => {
         if (!closed) sendEvent(res, 'progress', p);
       },

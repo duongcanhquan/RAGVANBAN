@@ -35,16 +35,20 @@ export default function ChatWindow({
               'Hỏi bên trái · dùng bàn làm việc bên phải để chọn VB, mẫu, lịch sử.'}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {(modeConfig?.examples || []).map((ex) => (
-              <button
-                key={ex}
-                type="button"
-                onClick={() => onExampleClick(ex)}
-                className="cursor-pointer rounded-full border border-[var(--hcc-line)] bg-white px-3 py-2 text-left text-xs text-[var(--hcc-ink)] transition hover:border-[var(--hcc-red)] hover:text-[var(--hcc-red)] sm:text-sm"
-              >
-                {ex}
-              </button>
-            ))}
+            {(modeConfig?.examples || []).map((ex) => {
+              const label = typeof ex === 'string' ? ex : ex.label || ex.query
+              const query = typeof ex === 'string' ? ex : ex.query || ex.label
+              return (
+                <button
+                  key={ex.id || query}
+                  type="button"
+                  onClick={() => onExampleClick(query)}
+                  className="cursor-pointer rounded-full border border-[var(--hcc-line)] bg-white px-3 py-2 text-left text-xs text-[var(--hcc-ink)] transition hover:border-[var(--hcc-red)] hover:text-[var(--hcc-red)] sm:text-sm"
+                >
+                  {label}
+                </button>
+              )
+            })}
           </div>
         </section>
       )}

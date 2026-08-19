@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { FileUp, KeyRound, LogOut, Users } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { FileText, KeyRound, LogOut, Settings, Users } from 'lucide-react'
 import { supabase, supabaseConfigured } from '../../lib/supabase'
 import { adminFetch } from '../../lib/adminApi'
 import { explainLoginError } from '../../lib/authErrors'
@@ -14,8 +14,8 @@ export default function QuantriShell() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const location = useLocation()
   const navigate = useNavigate()
+  const loadedUserId = useRef(null)
 
   const [gateStatus, setGateStatus] = useState(null)
 
@@ -36,7 +36,8 @@ export default function QuantriShell() {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session || null)
     })
-    const { data } = supabase.auth.onAuthStateChange((_event, next) => {
+    const { data } = supabase.auth.onAuthStateChange((event, next) => {
+      if (event === 'TOKEN_REFRESHED') return
       setSession(next)
     })
     unsub = () => data.subscription.unsubscribe()
@@ -57,19 +58,24 @@ export default function QuantriShell() {
   useEffect(() => {
     let cancelled = false
     async function load() {
-      if (!session) {
+      const userId = session?.user?.id || null
+      if (!userId) {
+        loadedUserId.current = null
         setMe(null)
+        setLoading(false)
+        return
+      }
+      if (loadedUserId.current === userId) {
         setLoading(false)
         return
       }
       setLoading(true)
       try {
-        const profile = await refreshMe()
-        if (!cancelled && profile?.must_change_password && location.pathname !== '/quantri/tai-khoan') {
-          navigate('/quantri/tai-khoan', { replace: true })
-        }
+        await refreshMe()
+        if (!cancelled) loadedUserId.current = userId
       } catch (e) {
         if (!cancelled) {
+          loadedUserId.current = null
           setError(e.message)
           setMe(null)
         }
@@ -81,7 +87,7 @@ export default function QuantriShell() {
     return () => {
       cancelled = true
     }
-  }, [session, refreshMe, location.pathname, navigate])
+  }, [session?.user?.id, refreshMe])
 
   async function onLogin(e) {
     e.preventDefault()
@@ -120,6 +126,7 @@ export default function QuantriShell() {
   }
 
   async function onLogout() {
+    loadedUserId.current = null
     await supabase?.auth.signOut()
     setMe(null)
     setSession(null)
@@ -137,7 +144,7 @@ export default function QuantriShell() {
     )
   }
 
-  if (loading) {
+  if (loading && !me) {
     return (
       <Gate>
         <p className="m-0 text-sm text-white/70">Đang kiểm tra phiên…</p>
@@ -213,9 +220,10 @@ export default function QuantriShell() {
   }
 
   const links = [
-    { to: '/quantri', end: true, label: 'Nạp tài liệu', Icon: FileUp },
+    { to: '/quantri', end: true, label: 'Tài liệu', Icon: FileText },
+    { to: '/quantri/cai-dat', end: false, label: 'Cài đặt', Icon: Settings },
     ...(me.role === 'super_admin'
-      ? [{ to: '/quantri/nhan-su', end: false, label: 'Người quản trị', Icon: Users }]
+      ? [{ to: '/quantri/nhan-su', end: false, label: 'Nhân sự', Icon: Users }]
       : []),
     { to: '/quantri/tai-khoan', end: false, label: 'Đổi mật khẩu', Icon: KeyRound },
   ]
@@ -256,6 +264,14 @@ export default function QuantriShell() {
           Thoát
         </button>
       </header>
+      {me.must_change_password ? (
+        <p className="m-0 border-b border-amber-400/30 bg-amber-500/15 px-4 py-2 text-xs text-amber-100">
+          Nên đổi mật khẩu tạm.{' '}
+          <NavLink to="/quantri/tai-khoan" className="underline">
+            Đổi ngay
+          </NavLink>
+        </p>
+      ) : null}
       <div className="min-h-0 flex-1 overflow-y-auto">
         <Outlet context={{ me, session, refreshMe }} />
       </div>

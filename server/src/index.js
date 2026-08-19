@@ -21,8 +21,8 @@ const quantriRouter = require('./routes/quantri');
 const { requireAdmin } = require('./middleware/requireAdmin');
 const { hasLiveKeys, listAvailableProviders } = require('./services/clients');
 const { isConfigured: isSupabaseConfigured } = require('./services/supabase');
-const { isDriveConfigured } = require('./services/googleDrive');
 const { isR2Configured } = require('./services/r2');
+const { hasDriveCredentials, hasAnyDriveKey } = require('./services/googleDrive');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
@@ -68,17 +68,27 @@ app.use(
 );
 app.use(express.json({ limit: '2mb' }));
 
-app.get('/api/health', (_req, res) => {
+app.get('/api/health', async (_req, res) => {
+  let driveOn = hasDriveCredentials();
+  let n8nOn = Boolean(
+    process.env.N8N_WEBHOOK_SECRET && !String(process.env.N8N_WEBHOOK_SECRET).includes('your-')
+  );
+  try {
+    const { getN8nSecret, getFlags } = require('./services/integrations');
+    const [flags, n8n, hasKey] = await Promise.all([getFlags(), getN8nSecret(), hasAnyDriveKey()]);
+    driveOn = Boolean(hasKey && flags.driveEnabled);
+    n8nOn = Boolean(n8n.secret && flags.n8nEnabled);
+  } catch {
+    /* keep env fallback */
+  }
   res.json({
     status: 'ok',
     service: 'rag-van-ban-hanh-chinh',
     ragReady: hasLiveKeys(),
     supabase: isSupabaseConfigured(),
     r2: isR2Configured(),
-    googleDrive: isDriveConfigured(),
-    n8nWebhook: Boolean(
-      process.env.N8N_WEBHOOK_SECRET && !String(process.env.N8N_WEBHOOK_SECRET).includes('your-')
-    ),
+    googleDrive: driveOn,
+    n8nWebhook: n8nOn,
     vercel: Boolean(process.env.VERCEL),
     providers: listAvailableProviders(),
     port: PORT,
@@ -118,6 +128,7 @@ app.use('/api/webhooks', webhooksRouter);
 app.use('/api/history', require('./routes/history'));
 app.use('/api/library', require('./routes/library'));
 app.use('/api/scenarios', require('./routes/scenarios'));
+app.use('/api/settings', require('./routes/settings'));
 
 // 404 JSON rõ ràng (tránh HTML "Cannot GET")
 app.use((req, res) => {
@@ -139,7 +150,7 @@ function startServer() {
     console.log(`[server] Local:   http://localhost:${PORT}/api/health`);
     console.log(`[server] RAG:     ${hasLiveKeys() ? 'LIVE' : 'DEMO (thiếu API keys)'}`);
     console.log(`[server] Supabase:${isSupabaseConfigured() ? ' ON' : ' OFF'}`);
-    console.log(`[server] Drive:   ${isDriveConfigured() ? 'ON' : 'OFF'}`);
+    console.log(`[server] Drive:   ${hasDriveCredentials() ? 'ON' : 'OFF'}`);
     console.log(
       `[server] n8n:     ${
         process.env.N8N_WEBHOOK_SECRET && !String(process.env.N8N_WEBHOOK_SECRET).includes('your-')

@@ -4,6 +4,7 @@ const {
   collectDescendantIds,
   canUseCategory,
   assertCanUseCategory,
+  assertCanManageCategory,
   isSuperAdmin,
 } = require('../src/services/adminAccess');
 
@@ -42,4 +43,12 @@ test('editor thiếu chuyên mục → 403', () => {
   const editor = { is_active: true, role: 'editor', allowedCategoryIds: new Set(['hang']) };
   assert.throws(() => assertCanUseCategory(editor, null), /Chọn chuyên mục/);
   assert.throws(() => assertCanUseCategory(editor, 'khac'), /không được upload/);
+});
+
+test('editor được sửa chuyên mục trong cây được giao, không tạo gốc', () => {
+  const allowed = collectDescendantIds(flat, ['hang']);
+  const editor = { is_active: true, role: 'editor', allowedCategoryIds: allowed };
+  assert.doesNotThrow(() => assertCanManageCategory(editor, 'chude'));
+  assert.throws(() => assertCanManageCategory(editor, null, { creatingRoot: true }), /chuyên mục gốc/);
+  assert.throws(() => assertCanManageCategory(editor, 'khac'), /không được quản lý/);
 });

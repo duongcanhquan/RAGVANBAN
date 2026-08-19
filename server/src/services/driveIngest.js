@@ -2,7 +2,7 @@
  * Ingest file từ Google Drive — file gốc ở lại Drive, chỉ đưa text vào Pinecone.
  * Tải về = link Drive. Không copy sang R2. Không copy sang Supabase trừ khi DRIVE_MIRROR_TO_SUPABASE=true.
  */
-const { downloadPdf, listPdfInFolder, isDriveConfigured, hasDriveCredentials } = require('./googleDrive');
+const { downloadPdf, listPdfInFolder, hasAnyDriveKey } = require('./googleDrive');
 const { ingestSingleFile } = require('./ingestFile');
 const { uploadPdfToStorage, isConfigured: isSupabaseConfigured } = require('./supabase');
 
@@ -56,37 +56,53 @@ async function ingestDriveFile(fileId, options = {}) {
 
 async function syncDriveFolder(options = {}) {
   const { onProgress, limit = 20, folderId, categoryId } = options;
-  if (!folderId && !isDriveConfigured()) {
-    throw new Error('Thiếu link thư mục Drive hoặc GOOGLE_DRIVE_FOLDER_ID');
-  }
-  if (!hasDriveCredentials() && !folderId) {
-    throw new Error('Google Drive chưa cấu hình');
-  }
-  const files = await listPdfInFolder(folderId || process.env.GOOGLE_DRIVE_FOLDER_ID);
-  const slice = files.slice(0, limit);
-  const results = [];
-
-  for (let i = 0; i < slice.length; i += 1) {
-    const f = slice[i];
-    if (typeof onProgress === 'function') {
-      onProgress({
-        stage: 'sync',
-        percent: Math.round((i / Math.max(slice.length, 1)) * 100),
-        message: `Đồng bộ ${i + 1}/${slice.length}: ${f.name}`,
-      });
+  let targets = [];
+  if (folderId) {
+    targets = [{ folderId, categoryId: categoryId || null }];
+  } else {
+    const { listDriveSources } = require('./integrations');
+    const sources = (await listDriveSources()).filter((s) => s.enabled);
+    if (sources.length) {
+      targets = sources.map((s) => ({ folderId: s.folderId, categoryId: s.categoryId || categoryId || null }));
+    } else if (process.env.GOOGLE_DRIVE_FOLDER_ID && !String(process.env.GOOGLE_DRIVE_FOLDER_ID).includes('your-')) {
+      targets = [{ folderId: process.env.GOOGLE_DRIVE_FOLDER_ID, categoryId: categoryId || null }];
     }
-    try {
-      const r = await ingestDriveFile(f.id, { onProgress, categoryId });
-      results.push({ ok: true, fileId: f.id, name: f.name, ...r });
-    } catch (err) {
-      results.push({ ok: false, fileId: f.id, name: f.name, error: err.message });
+  }
+  if (!targets.length) {
+    throw new Error('Chưa có thư mục Drive. Thêm link folder trong Cài đặt → Google Drive.');
+  }
+  if (!(await hasAnyDriveKey())) {
+    throw new Error('Chưa có Google service account. Super-admin dán JSON trong Cài đặt.');
+  }
+
+  const allResults = [];
+  let totalListed = 0;
+  for (const t of targets) {
+    const files = await listPdfInFolder(t.folderId);
+    totalListed += files.length;
+    const slice = files.slice(0, limit);
+    for (let i = 0; i < slice.length; i += 1) {
+      const f = slice[i];
+      if (typeof onProgress === 'function') {
+        onProgress({
+          stage: 'sync',
+          percent: Math.round((i / Math.max(slice.length, 1)) * 100),
+          message: `Đồng bộ ${i + 1}/${slice.length}: ${f.name}`,
+        });
+      }
+      try {
+        const r = await ingestDriveFile(f.id, { onProgress, categoryId: t.categoryId });
+        allResults.push({ ok: true, fileId: f.id, name: f.name, ...r });
+      } catch (err) {
+        allResults.push({ ok: false, fileId: f.id, name: f.name, error: err.message });
+      }
     }
   }
 
   return {
-    totalListed: files.length,
-    processed: results.length,
-    results,
+    totalListed,
+    processed: allResults.length,
+    results: allResults,
   };
 }
 

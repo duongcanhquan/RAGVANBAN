@@ -22,11 +22,26 @@ export default function ChatPage() {
   const [error, setError] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
   const [sideOpen, setSideOpen] = useState(true)
+  const [quickKeywords, setQuickKeywords] = useState([])
   const abortRef = useRef(null)
   const sessionId = getSessionId()
   const location = useLocation()
   const navigate = useNavigate()
   const modeConfig = useMemo(() => getMode(mode), [mode])
+  const chipExamples = useMemo(() => {
+    const filtered = (quickKeywords || []).filter(
+      (k) => !k.mode || k.mode === 'both' || k.mode === mode
+    )
+    if (filtered.length) return filtered
+    return (modeConfig.examples || []).map((q) => ({ id: q, label: q, query: q }))
+  }, [quickKeywords, mode, modeConfig])
+
+  useEffect(() => {
+    fetch('/api/settings/quick-keywords')
+      .then((r) => r.json())
+      .then((d) => setQuickKeywords(d.items || []))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     const prefill = location.state?.prefill
@@ -286,7 +301,7 @@ export default function ChatPage() {
             messages={messages}
             streaming={streaming}
             onExampleClick={sendMessage}
-            modeConfig={modeConfig}
+            modeConfig={{ ...modeConfig, examples: chipExamples }}
             statusText={streaming ? statusText : ''}
             wide
           />
@@ -318,6 +333,7 @@ export default function ChatPage() {
             onRestore={restoreFromHistory}
             sessionId={sessionId}
             streaming={streaming}
+            quickKeywords={chipExamples}
           />
         </div>
       )}

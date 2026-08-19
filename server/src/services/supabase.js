@@ -9,6 +9,9 @@ const {
   listLocalDocuments,
   countLocalDocuments,
   updateLocalDocumentCategory,
+  deleteLocalDocument,
+  getLocalDocument,
+  updateLocalDocument,
 } = require('./localDocuments');
 
 const STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'documents';
@@ -312,6 +315,51 @@ async function updateDocumentCategory(id, { categoryId, folderPath, chuyenMon })
   return { ok: true, id: data?.id || id };
 }
 
+async function getDocument(id) {
+  const sb = getSupabase();
+  if (sb) {
+    const { data, error } = await sb.from('documents').select('*').eq('id', id).maybeSingle();
+    if (!error && data) return { ok: true, source: 'supabase', item: data };
+  }
+  const local = getLocalDocument(id);
+  if (local) return { ok: true, source: 'local', item: local };
+  return { ok: false, error: 'Không tìm thấy tài liệu' };
+}
+
+async function updateDocument(id, patch) {
+  const sb = getSupabase();
+  const payload = {};
+  if (patch.file_name != null) payload.file_name = String(patch.file_name).trim();
+  if (patch.so_hieu !== undefined) payload.so_hieu = patch.so_hieu || null;
+  if (patch.loai_van_ban !== undefined) payload.loai_van_ban = patch.loai_van_ban || null;
+  if (patch.trang_thai !== undefined) payload.trang_thai = patch.trang_thai || null;
+  if (patch.category_id !== undefined) payload.category_id = patch.category_id || null;
+  if (patch.folder_path !== undefined) payload.folder_path = patch.folder_path || null;
+  if (patch.chuyen_mon !== undefined) payload.chuyen_mon = patch.chuyen_mon || null;
+
+  if (sb && Object.keys(payload).length) {
+    const { data, error } = await sb.from('documents').update(payload).eq('id', id).select('*').maybeSingle();
+    if (!error && data) return { ok: true, source: 'supabase', item: data };
+    if (error) console.warn('[supabase] updateDocument:', error.message);
+  }
+  return updateLocalDocument(id, payload);
+}
+
+async function deleteDocumentRow(id) {
+  const found = await getDocument(id);
+  if (!found.ok) return found;
+  const sb = getSupabase();
+  if (sb) {
+    const { error } = await sb.from('documents').delete().eq('id', id);
+    if (error) {
+      console.warn('[supabase] deleteDocument:', error.message);
+      return { ok: false, error: error.message };
+    }
+  }
+  deleteLocalDocument(id);
+  return { ok: true, item: found.item };
+}
+
 module.exports = {
   getSupabase,
   isConfigured,
@@ -326,5 +374,8 @@ module.exports = {
   listDocuments,
   insertDocument,
   updateDocumentCategory,
+  getDocument,
+  updateDocument,
+  deleteDocumentRow,
   STORAGE_BUCKET,
 };

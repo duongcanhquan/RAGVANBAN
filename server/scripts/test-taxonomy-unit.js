@@ -13,6 +13,7 @@ const {
   pathForCategory,
   suggestCategoryId,
   slugify,
+  wouldCycle,
   DEFAULT_TREE,
 } = require('../src/services/taxonomyStore');
 
@@ -178,6 +179,17 @@ function run() {
       }
       process.chdir(origCwd);
     }
+  });
+
+  test('wouldCycle chặn kéo mục vào con của chính nó', () => {
+    const flat = [
+      { id: 'a', parent_id: null, name: 'A' },
+      { id: 'b', parent_id: 'a', name: 'B' },
+      { id: 'c', parent_id: 'b', name: 'C' },
+    ];
+    assert.strictEqual(wouldCycle(flat, 'a', 'c'), true);
+    assert.strictEqual(wouldCycle(flat, 'c', 'a'), false);
+    assert.strictEqual(wouldCycle(flat, 'b', null), false);
   });
 
   console.log(`\nKết quả: ${passed} passed, ${failed} failed`);

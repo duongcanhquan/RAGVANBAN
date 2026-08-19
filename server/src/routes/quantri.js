@@ -16,6 +16,20 @@ const {
   markPasswordChanged,
 } = require('../services/quantriStore');
 const { listCategories } = require('../services/taxonomyStore');
+const { getQuickKeywords, setQuickKeywords } = require('../services/appSettings');
+const { isR2Configured } = require('../services/r2');
+const {
+  getFlags,
+  setFlags,
+  getSavedServiceAccount,
+  saveServiceAccount,
+  getN8nSecret,
+  ensureN8nSecret,
+  listDriveSources,
+  upsertDriveSource,
+  removeDriveSource,
+  sourcesVisibleTo,
+} = require('../services/integrations');
 
 const router = express.Router();
 
@@ -61,6 +75,106 @@ router.get('/categories', requireAdmin, async (_req, res, next) => {
   try {
     const cats = await listCategories();
     res.json(cats);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/quick-keywords', requireAdmin, async (_req, res, next) => {
+  try {
+    res.json(await getQuickKeywords());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/quick-keywords', requireAdmin, async (req, res, next) => {
+  try {
+    res.json(await setQuickKeywords(req.body || {}));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/integrations', requireAdmin, async (req, res, next) => {
+  try {
+    const [flags, sa, n8n, sources] = await Promise.all([
+      getFlags(),
+      getSavedServiceAccount(),
+      getN8nSecret(),
+      listDriveSources(),
+    ]);
+    const isSuper = req.admin.role === 'super_admin';
+    res.json({
+      ok: true,
+      r2: isR2Configured(),
+      drive: {
+        enabled: flags.driveEnabled,
+        hasKey: Boolean(sa.json),
+        email: sa.json?.client_email || null,
+        source: sa.source,
+      },
+      n8n: {
+        enabled: flags.n8nEnabled,
+        secretConfigured: Boolean(n8n.secret),
+        secret: isSuper && n8n.secret ? n8n.secret : null,
+        webhookPath: '/api/webhooks/n8n',
+      },
+      sources: sourcesVisibleTo(req.admin, sources),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch('/integrations/flags', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const flags = await setFlags(req.body || {}, req.admin);
+    res.json({ ok: true, ...flags });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/integrations/google-sa', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const result = await saveServiceAccount(req.body?.json || req.body, req.admin);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/integrations/n8n-secret', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const result = await ensureN8nSecret(req.admin);
+    res.json({ ok: true, secret: result.secret, source: result.source });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/integrations/drive-sources', requireAdmin, async (req, res, next) => {
+  try {
+    const row = await upsertDriveSource(req.admin, req.body || {});
+    res.status(201).json({ ok: true, item: row });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch('/integrations/drive-sources/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const row = await upsertDriveSource(req.admin, { ...(req.body || {}), id: req.params.id });
+    res.json({ ok: true, item: row });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/integrations/drive-sources/:id', requireAdmin, async (req, res, next) => {
+  try {
+    res.json(await removeDriveSource(req.admin, req.params.id));
   } catch (err) {
     next(err);
   }

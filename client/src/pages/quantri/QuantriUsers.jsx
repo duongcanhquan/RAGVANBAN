@@ -106,10 +106,10 @@ export default function QuantriUsers() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 text-slate-100">
-      <h1 className="m-0 text-2xl font-semibold">Người quản trị</h1>
+      <h1 className="m-0 text-2xl font-semibold">Nhân sự</h1>
       <p className="m-0 mt-1 mb-6 text-sm text-white/65">
-        Super-admin tạo cán bộ và gán ngành / hạng mục / chủ đề. Cán bộ chỉ nạp tài liệu trong phần được giao
-        (kèm thư mục con).
+        Super-admin tạo cán bộ và gán chuyên mục được quản lý. Cán bộ chỉ nạp / sửa tài liệu trong phần được
+        giao (kèm thư mục con).
       </p>
       {error ? <p className="mb-4 text-sm text-red-200">{error}</p> : null}
 

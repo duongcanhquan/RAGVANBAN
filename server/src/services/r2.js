@@ -119,6 +119,34 @@ async function uploadToR2(buffer, originalName, contentType = 'application/octet
   };
 }
 
+async function deleteFromR2(objectKey) {
+  const key = String(objectKey || '').replace(/^\//, '');
+  if (!hasR2Credentials() || !key || !key.startsWith('van-ban/')) {
+    return { ok: false, skipped: true };
+  }
+  const { S3Client, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+  const client = new S3Client({
+    region: 'auto',
+    endpoint: `https://${r2AccountId()}.r2.cloudflarestorage.com`,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: envTrim('R2_ACCESS_KEY_ID'),
+      secretAccessKey: envTrim('R2_SECRET_ACCESS_KEY'),
+    },
+  });
+  try {
+    await client.send(
+      new DeleteObjectCommand({
+        Bucket: envTrim('R2_BUCKET'),
+        Key: key,
+      })
+    );
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: formatR2Error(err) };
+  }
+}
+
 module.exports = {
   isR2Configured,
   hasR2Credentials,
@@ -126,4 +154,5 @@ module.exports = {
   publicUrlForKey,
   objectKeyForFile,
   uploadToR2,
+  deleteFromR2,
 };

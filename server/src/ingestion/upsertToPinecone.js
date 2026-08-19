@@ -83,4 +83,26 @@ async function upsertChunksToPinecone(chunks, deps) {
   return { upserted };
 }
 
-module.exports = { buildPineconeRecords, upsertChunksToPinecone };
+async function deleteVectorsByFileName(fileName, deps = {}) {
+  const { pinecone, indexName, namespace = '' } = deps;
+  const name = String(fileName || '').trim();
+  if (!name || !pinecone || !indexName) return { ok: false, skipped: true };
+
+  const index = pinecone.Index(indexName);
+  const target = namespace ? index.namespace(namespace) : index;
+  try {
+    if (typeof target.deleteMany === 'function') {
+      await target.deleteMany({ filter: { ten_file: { $eq: name } } });
+    } else if (typeof target.delete === 'function') {
+      await target.delete({ filter: { ten_file: { $eq: name } } });
+    } else {
+      return { ok: false, error: 'Pinecone SDK không hỗ trợ xóa theo filter' };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.warn('[pinecone] delete:', err.message);
+    return { ok: false, error: err.message };
+  }
+}
+
+module.exports = { buildPineconeRecords, upsertChunksToPinecone, deleteVectorsByFileName };

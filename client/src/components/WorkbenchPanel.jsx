@@ -26,6 +26,7 @@ export default function WorkbenchPanel({
   onRestore,
   sessionId,
   streaming,
+  quickKeywords,
 }) {
   const [tab, setTab] = useState('quick')
   const [tree, setTree] = useState([])
@@ -161,21 +162,31 @@ export default function WorkbenchPanel({
 
             <div>
               <p className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--hcc-muted)]">
-                Câu hỏi mẫu
+                Từ khóa tìm nhanh
               </p>
               <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-                {(MODES[mode]?.examples || []).map((ex) => (
-                  <li key={ex}>
-                    <button
-                      type="button"
-                      disabled={streaming}
-                      onClick={() => onAsk?.(ex)}
-                      className="w-full cursor-pointer rounded-xl border border-[var(--hcc-line)] bg-white px-3 py-2.5 text-left text-xs leading-snug text-[var(--hcc-ink)] transition hover:border-[var(--hcc-red)] hover:bg-[var(--hcc-red-soft)]/40 disabled:opacity-50"
-                    >
-                      {ex}
-                    </button>
-                  </li>
-                ))}
+                {(quickKeywords?.length
+                  ? quickKeywords
+                  : (MODES[mode]?.examples || []).map((q) => ({ id: q, label: q, query: q }))
+                ).map((ex) => {
+                  const label = ex.label || ex.query
+                  const query = ex.query || ex.label
+                  return (
+                    <li key={ex.id || query}>
+                      <button
+                        type="button"
+                        disabled={streaming}
+                        onClick={() => onAsk?.(query)}
+                        className="w-full cursor-pointer rounded-xl border border-[var(--hcc-line)] bg-white px-3 py-2.5 text-left text-xs leading-snug text-[var(--hcc-ink)] transition hover:border-[var(--hcc-red)] hover:bg-[var(--hcc-red-soft)]/40 disabled:opacity-50"
+                      >
+                        <span className="font-medium">{label}</span>
+                        {label !== query ? (
+                          <span className="mt-0.5 block text-[11px] text-[var(--hcc-muted)]">{query}</span>
+                        ) : null}
+                      </button>
+                    </li>
+                  )
+                })}
               </ul>
             </div>
 
