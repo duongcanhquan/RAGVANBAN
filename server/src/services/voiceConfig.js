@@ -16,9 +16,10 @@ NGUYÊN TẮC (bắt buộc, tuyệt đối không bịa):
 - Giữ tình huống đoạn chat; câu hiện tại là trọng tâm. Không lặp link / Nguồn / Kiểm chứng.
 `.trim();
 
-const DEFAULT_LOOKUP_TEMPLATE = `Mẫu tra cứu (không phân tích):
-**Văn bản liên quan:** liệt kê ngắn các VB cần đọc
-**Đọc nhanh ở đâu:** chỉ rõ Điều/khoản/mục liên quan trực tiếp
+const DEFAULT_LOOKUP_TEMPLATE = `Mẫu tra cứu (định hướng đọc, không phân tích sâu):
+**Văn bản liên quan (trực tiếp):** liệt kê ngắn các VB gần nhất cần đọc
+**Đọc ngay ở đâu:** chỉ rõ Điều/khoản/mục liên quan trực tiếp
+**Tham khảo thêm:** nếu còn VB liên quan gián tiếp, liệt kê kèm mục/điều/khoản cần đọc để tham khảo
 **Hiệu lực:** 1 dòng (nếu có sửa đổi thì nêu bản đang áp dụng)
 **Nguồn:** 1 dòng/VB`;
 

@@ -255,7 +255,7 @@ async function streamAnswer(question, matches, deps, onToken) {
       ? 'TƯ VẤN: phân tích sâu theo context; kết luận cách áp dụng nhanh vào tình huống; chỉ rõ nên đọc mục/điều nào trước và tham khảo thêm mục nào liên quan.'
       : mode === 'compare'
         ? 'SO SÁNH: tách bản còn hiệu lực và điểm đã sửa.'
-        : 'TRA CỨU: chỉ định hướng văn bản liên quan để người dùng tự đọc (không phân tích sâu); chỉ rõ điều/khoản/mục và hiệu lực.';
+        : 'TRA CỨU: chỉ định hướng văn bản liên quan để người dùng tự đọc (không phân tích áp dụng); nêu rõ văn bản liên quan trực tiếp + điều/khoản/mục cần đọc ngay; nếu còn liên quan gián tiếp thì liệt kê thêm “Tham khảo thêm” kèm mục/điều/khoản cần đọc; nêu hiệu lực; không giải thích cách áp dụng.';
 
   const spokenHint = spoken ? ' Giọng nói: câu ngắn, không bảng dài.' : '';
 
