@@ -204,7 +204,7 @@ export default function QuantriIntegrations() {
 
   const catLabel = (id) => {
     const c = categories.find((x) => x.id === id)
-    return c?.name || 'Chưa gắn chuyên mục'
+    return c?.name || 'Không phân loại'
   }
 
   if (!data) {

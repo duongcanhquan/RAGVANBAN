@@ -331,7 +331,7 @@ export default function CategoryTreeEditor() {
   async function deleteCategory(node) {
     if (
       !window.confirm(
-        `Xóa «${node.name}» và mọi mục con? Tài liệu trong các mục này sẽ về «Chưa gắn chuyên mục».`
+        `Xóa «${node.name}» và mọi mục con? Tài liệu trong các mục này sẽ về «Không phân loại».`
       )
     ) {
       return

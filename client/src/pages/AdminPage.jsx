@@ -79,7 +79,7 @@ function buildGroups(docs, categoryOptions) {
   const groups = [
     {
       id: '',
-      label: 'Chưa gắn chuyên mục',
+      label: 'Không phân loại',
       r2: 'van-ban/chua-gan',
       items: uncat.sort(docSort),
     },
