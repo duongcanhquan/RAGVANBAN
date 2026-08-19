@@ -17,6 +17,8 @@ const uploadRouter = require('./routes/upload');
 const adminRouter = require('./routes/admin');
 const driveRouter = require('./routes/drive');
 const webhooksRouter = require('./routes/webhooks');
+const quantriRouter = require('./routes/quantri');
+const { requireAdmin } = require('./middleware/requireAdmin');
 const { hasLiveKeys, listAvailableProviders } = require('./services/clients');
 const { isConfigured: isSupabaseConfigured } = require('./services/supabase');
 const { isDriveConfigured } = require('./services/googleDrive');
@@ -92,6 +94,7 @@ app.get('/api', (_req, res) => {
       'POST /api/chat (SSE)',
       'POST /api/upload (SSE · PDF/DOC/PPT/ảnh/text)',
       'POST /api/upload/text|url (SSE)',
+      'GET/POST /api/quantri/*',
       'GET /api/admin/stats',
       'GET /api/drive/status|list',
       'POST /api/drive/ingest|sync (SSE)',
@@ -105,9 +108,10 @@ app.get('/api', (_req, res) => {
 });
 
 app.use('/api/chat', chatRouter);
-app.use('/api/upload', uploadRouter);
-app.use('/api/admin', adminRouter);
-app.use('/api/drive', driveRouter);
+app.use('/api/quantri', quantriRouter);
+app.use('/api/upload', requireAdmin, uploadRouter);
+app.use('/api/admin', requireAdmin, adminRouter);
+app.use('/api/drive', requireAdmin, driveRouter);
 app.use('/api/webhooks', webhooksRouter);
 app.use('/api/history', require('./routes/history'));
 app.use('/api/library', require('./routes/library'));

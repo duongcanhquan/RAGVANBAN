@@ -28,6 +28,8 @@ const {
   setLocalDocCategory,
   getAllLocalDocMap,
 } = require('../services/taxonomyStore');
+const { requireAdmin, requireSuperAdmin } = require('../middleware/requireAdmin');
+const { assertCanUseCategory } = require('../services/adminAccess');
 
 const router = express.Router();
 
@@ -162,7 +164,7 @@ router.get('/categories', async (_req, res, next) => {
   }
 });
 
-router.post('/categories', async (req, res, next) => {
+router.post('/categories', requireSuperAdmin, async (req, res, next) => {
   try {
     const result = await createCategory({
       name: req.body?.name,
@@ -181,7 +183,7 @@ router.post('/categories', async (req, res, next) => {
   }
 });
 
-router.patch('/categories/:id', async (req, res, next) => {
+router.patch('/categories/:id', requireSuperAdmin, async (req, res, next) => {
   try {
     const result = await updateCategory(req.params.id, {
       name: req.body?.name,
@@ -200,7 +202,7 @@ router.patch('/categories/:id', async (req, res, next) => {
   }
 });
 
-router.delete('/categories/:id', async (req, res, next) => {
+router.delete('/categories/:id', requireSuperAdmin, async (req, res, next) => {
   try {
     const result = await deleteCategory(req.params.id);
     res.json(result);
@@ -209,9 +211,10 @@ router.delete('/categories/:id', async (req, res, next) => {
   }
 });
 
-router.patch('/documents/:id', async (req, res, next) => {
+router.patch('/documents/:id', requireAdmin, async (req, res, next) => {
   try {
     const categoryId = req.body?.categoryId || null;
+    assertCanUseCategory(req.admin, categoryId);
     const cats = await listCategories();
     const folderPath = categoryId ? pathForCategory(cats.items || [], categoryId) : '';
     const cat = (cats.items || []).find((c) => c.id === categoryId);

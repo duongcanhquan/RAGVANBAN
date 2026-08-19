@@ -298,7 +298,7 @@ npm run dev
 ```
 
 → `http://localhost:5173`  
-→ Admin: `http://localhost:5173/admin`
+→ Quản trị (ẩn menu): `http://localhost:5173/quantri`
 
 ### Hoặc từ root (nếu đã cài deps)
 
@@ -311,7 +311,7 @@ npm run dev:client
 
 ## 📤 Luồng Admin Upload (tóm tắt)
 
-1. Kéo thả PDF trên `/admin`
+1. Đăng nhập `/quantri` → kéo thả PDF
 2. `POST /api/upload` (multipart + SSE progress)
 3. PDF → **Supabase Storage** (`documents/`)
 4. LLM extract metadata → chunk → **Pinecone**
@@ -387,4 +387,4 @@ PDF từ Drive có thể mirror lên Supabase Storage; citation ưu tiên URL St
 
 ## 📜 License & ghi chú
 
-Dự án phục vụ mục đích **demo / nội bộ**. Khi triển khai production: hạn chế CORS, bảo vệ `/admin`, xoay vòng API keys, và cân nhắc không public bucket nếu tài liệu mật — dùng signed URL thay thế.
+Dự án phục vụ mục đích **demo / nội bộ**. Khi triển khai production: hạn chế CORS, bảo vệ `/quantri` (đã có đăng nhập), xoay vòng API keys, và cân nhắc không public bucket nếu tài liệu mật — dùng signed URL thay thế.

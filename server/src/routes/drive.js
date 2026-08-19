@@ -9,6 +9,7 @@
 const express = require('express');
 const { isDriveConfigured, listPdfInFolder } = require('../services/googleDrive');
 const { ingestDriveFile, syncDriveFolder } = require('../services/driveIngest');
+const { requireSuperAdmin } = require('../middleware/requireAdmin');
 
 const router = express.Router();
 
@@ -31,7 +32,7 @@ router.get('/status', (_req, res) => {
   });
 });
 
-router.get('/list', async (_req, res) => {
+router.get('/list', requireSuperAdmin, async (_req, res) => {
   try {
     if (!isDriveConfigured()) {
       res.status(400).json({ error: 'Google Drive chưa cấu hình' });
@@ -44,7 +45,7 @@ router.get('/list', async (_req, res) => {
   }
 });
 
-router.post('/ingest', async (req, res) => {
+router.post('/ingest', requireSuperAdmin, async (req, res) => {
   const fileId = String(req.body?.fileId || '').trim();
   if (!fileId) {
     res.status(400).json({ error: 'Thiếu fileId' });
@@ -75,7 +76,7 @@ router.post('/ingest', async (req, res) => {
   }
 });
 
-router.post('/sync', async (req, res) => {
+router.post('/sync', requireSuperAdmin, async (req, res) => {
   initSse(res);
   let closed = false;
   req.on('close', () => {

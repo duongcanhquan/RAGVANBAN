@@ -64,6 +64,8 @@ Chọn **Production**, **Preview**, **Development** cho mọi biến (trừ khi 
 | `PINECONE_INDEX_NAME` | `van-ban-hanh-chinh` |
 | `PINECONE_ENVIRONMENT` | Region index, ví dụ `us-east-1` |
 | `CLIENT_ORIGIN` | URL production, ví dụ `https://your-app.vercel.app` (điền sau lần deploy đầu nếu chưa biết URL) |
+| `SUPER_ADMIN_EMAIL` | `quan.duong@caodangvietmy.edu.vn` |
+| `SUPER_ADMIN_PASSWORD` | Mật khẩu tạm super-admin (chỉ lúc bootstrap; đổi ngay trong `/quantri`) |
 
 ### LLM — ít nhất 1 chat + 1 embedding
 
@@ -117,10 +119,11 @@ Dashboard Supabase → **SQL Editor** → chạy lần lượt (hoặc dán từ
 2. `supabase/migrations/002_drive_columns.sql`
 3. `supabase/migrations/003_knowledge.sql`
 4. `supabase/migrations/004_doc_categories.sql`
+5. `supabase/migrations/005_admin_rbac.sql` — bảng `/quantri`
 
 Kiểm tra:
 
-- Table Editor: `chat_logs`, `documents`, `scenarios`, `doc_categories`
+- Table Editor: `chat_logs`, `documents`, `scenarios`, `doc_categories`, `admin_profiles`, `admin_category_grants`
 - Storage: bucket `documents` **Public = ON** (citation cần URL công khai)
 
 ---
@@ -156,10 +159,12 @@ Kỳ vọng:
 
 - `ragReady: false` → thiếu LLM hoặc Pinecone
 - `supabase: false` → sai `SUPABASE_URL` / `SERVICE_ROLE`
-- Trang trắng / 404 `/admin` → chưa có rewrite SPA (cần `vercel.json` trên `main`)
+- Trang trắng / 404 `/quantri` → chưa có rewrite SPA (cần `vercel.json` trên `main`)
 
-3. Vào `/admin` → upload PDF **nhỏ hơn 4.5 MB** → đợi SSE xong
+3. Mở `https://<app>.vercel.app/quantri` (không có trên menu công khai). Đăng nhập super-admin → đổi mật khẩu → upload PDF **< 4.5 MB**
 4. Về `/` → hỏi một câu thuộc văn bản vừa nạp
+
+`/admin` cũ redirect sang `/quantri`.
 
 Cập nhật `CLIENT_ORIGIN` = URL production rồi Redeploy (không bắt buộc nếu cùng domain `.vercel.app`).
 

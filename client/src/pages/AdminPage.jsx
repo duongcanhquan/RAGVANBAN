@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useOutletContext } from 'react-router-dom'
 import {
   Cloud,
   FileText,
@@ -11,6 +12,7 @@ import {
   Webhook,
 } from 'lucide-react'
 import logo from '../assets/hcc-logo.jpg'
+import { adminFetch } from '../lib/adminApi'
 
 const ALLOWED_RE =
   /\.(pdf|doc|docx|ppt|pptx|png|jpe?g|webp|gif|bmp|tiff?|txt|md|csv)$/i
@@ -30,6 +32,8 @@ function errorFromResponseBody(text, status) {
  * Admin Dashboard — luxury glass · đỏ–vàng HCC.
  */
 export default function AdminPage() {
+  const { me } = useOutletContext() || {}
+  const isSuper = me?.role === 'super_admin'
   const [stats, setStats] = useState({
     totalQuestions: 0,
     totalDocuments: 0,
@@ -58,7 +62,7 @@ export default function AdminPage() {
 
   const loadStats = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/stats')
+      const res = await adminFetch('/api/admin/stats')
       if (!res.ok) throw new Error('Không tải được thống kê')
       const data = await res.json()
       setStats(data)
@@ -69,7 +73,7 @@ export default function AdminPage() {
 
   const loadCategories = useCallback(async () => {
     try {
-      const res = await fetch('/api/library/categories')
+      const res = await adminFetch('/api/library/categories')
       const data = await res.json()
       if (!res.ok) return
       const flat = data.items || []
@@ -81,20 +85,23 @@ export default function AdminPage() {
         const parent = c.parent_id ? pathOf(c.parent_id, guard) : ''
         return parent ? `${parent} / ${c.name}` : c.name
       }
+      const allowed =
+        me?.role === 'super_admin' ? null : new Set(me?.allowedCategoryIds || [])
       setCategoryOptions(
         flat
+          .filter((c) => !allowed || allowed.has(c.id))
           .map((c) => ({ id: c.id, label: pathOf(c.id), kind: c.kind }))
           .sort((a, b) => a.label.localeCompare(b.label, 'vi'))
       )
     } catch (e) {
       console.warn(e)
     }
-  }, [])
+  }, [me])
 
   const loadDriveStatus = useCallback(async () => {
     try {
       const [dRes, hRes] = await Promise.all([
-        fetch('/api/drive/status'),
+        adminFetch('/api/drive/status'),
         fetch('/api/health'),
       ])
       const d = dRes.ok ? await dRes.json() : { configured: false }
@@ -168,6 +175,10 @@ export default function AdminPage() {
 
   async function handleUpload() {
     if (!file || uploading) return
+    if (!isSuper && !categoryId) {
+      setError('Chọn ngành / hạng mục / chủ đề trước khi upload')
+      return
+    }
     setUploading(true)
     setError('')
     setResult(null)
@@ -178,7 +189,7 @@ export default function AdminPage() {
       form.append('file', file)
       if (categoryId) form.append('categoryId', categoryId)
 
-      const res = await fetch('/api/upload', {
+      const res = await adminFetch('/api/upload', {
         method: 'POST',
         body: form,
         headers: { Accept: 'text/event-stream' },
@@ -212,12 +223,16 @@ export default function AdminPage() {
 
   async function handlePasteText() {
     if (!pasteText.trim() || uploading) return
+    if (!isSuper && !categoryId) {
+      setError('Chọn ngành / hạng mục / chủ đề trước khi nạp')
+      return
+    }
     setUploading(true)
     setError('')
     setResult(null)
     setProgress({ percent: 1, message: 'Đang số hóa văn bản dán…' })
     try {
-      const res = await fetch('/api/upload/text', {
+      const res = await adminFetch('/api/upload/text', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -253,12 +268,16 @@ export default function AdminPage() {
 
   async function handleWebUrl() {
     if (!webUrl.trim() || uploading) return
+    if (!isSuper && !categoryId) {
+      setError('Chọn ngành / hạng mục / chủ đề trước khi nạp')
+      return
+    }
     setUploading(true)
     setError('')
     setResult(null)
     setProgress({ percent: 1, message: 'Đang tải website…' })
     try {
-      const res = await fetch('/api/upload/url', {
+      const res = await adminFetch('/api/upload/url', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -294,7 +313,7 @@ export default function AdminPage() {
   async function handleListDrive() {
     setError('')
     try {
-      const res = await fetch('/api/drive/list')
+      const res = await adminFetch('/api/drive/list')
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Không liệt kê được Drive')
       setDriveFiles(data.files || [])
@@ -311,7 +330,7 @@ export default function AdminPage() {
     setProgress({ percent: 1, message: 'Đồng bộ Google Drive…' })
 
     try {
-      const res = await fetch('/api/drive/sync', {
+      const res = await adminFetch('/api/drive/sync', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -356,7 +375,7 @@ export default function AdminPage() {
     setError('')
     setProgress({ percent: 1, message: `Số hóa ${name}…` })
     try {
-      const res = await fetch('/api/drive/ingest', {
+      const res = await adminFetch('/api/drive/ingest', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -471,7 +490,7 @@ export default function AdminPage() {
 
           <label className="mb-4 block">
             <span className="mb-1.5 block text-xs font-medium text-white/70">
-              Chuyên mục / chuyên môn (tuỳ chọn)
+              Ngành / hạng mục / chủ đề {isSuper ? '(tuỳ chọn)' : '(bắt buộc)'}
             </span>
             <select
               value={categoryId}
@@ -479,7 +498,7 @@ export default function AdminPage() {
               className="w-full rounded-2xl border border-white/20 bg-white/10 px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--hcc-gold)]"
             >
               <option value="" className="text-[var(--hcc-ink)]">
-                Tự gợi ý theo nội dung văn bản
+                {isSuper ? 'Tự gợi ý theo nội dung văn bản' : '— Chọn phần bạn được giao —'}
               </option>
               {categoryOptions.map((o) => (
                 <option key={o.id} value={o.id} className="text-[var(--hcc-ink)]">
@@ -488,7 +507,9 @@ export default function AdminPage() {
               ))}
             </select>
             <span className="mt-1 block text-[11px] text-white/45">
-              Quản lý cây mục chi tiết ở trang Thư viện (thêm sub-folder, chuyển tài liệu).
+              {isSuper
+                ? 'Cây chuyên mục đầy đủ. Cán bộ khác chỉ thấy mục được gán.'
+                : 'Chỉ hiện chuyên mục bạn được quản lý (kèm thư mục con).'}
             </span>
           </label>
 
@@ -613,6 +634,7 @@ export default function AdminPage() {
           )}
         </section>
 
+        {isSuper ? (
         <section className="glass-panel mb-6 rounded-3xl p-5 sm:p-8">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -710,6 +732,7 @@ export default function AdminPage() {
             </div>
           </div>
         </section>
+        ) : null}
 
         {(uploading || syncing || progress.percent > 0) && (
           <div className="glass-progress mb-4 overflow-hidden rounded-2xl p-4">

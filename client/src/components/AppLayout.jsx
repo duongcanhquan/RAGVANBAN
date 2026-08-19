@@ -1,7 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import {
   FolderTree,
-  LayoutDashboard,
   Lightbulb,
   MessageSquareText,
 } from 'lucide-react'
@@ -11,7 +10,6 @@ const NAV = [
   { to: '/', end: true, label: 'Hỏi đáp', short: 'Hỏi', Icon: MessageSquareText },
   { to: '/thu-vien', label: 'Thư viện', short: 'Cây', Icon: FolderTree },
   { to: '/tinh-huong', label: 'Tình huống', short: 'Mẫu', Icon: Lightbulb },
-  { to: '/admin', label: 'Quản trị', short: 'Admin', Icon: LayoutDashboard, gold: true },
 ]
 
 /**
@@ -104,7 +102,7 @@ export default function AppLayout() {
         className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-[var(--hcc-line)] bg-white/95 backdrop-blur-xl lg:hidden"
         aria-label="Tab điện thoại"
       >
-        <div className="mx-auto grid max-w-lg grid-cols-4 px-1 pt-1">
+        <div className="mx-auto grid max-w-lg grid-cols-3 px-1 pt-1">
           {NAV.map(({ to, end, short, Icon }) => (
             <NavLink
               key={to}

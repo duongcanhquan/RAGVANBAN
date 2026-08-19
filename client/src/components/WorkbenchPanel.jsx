@@ -189,16 +189,10 @@ export default function WorkbenchPanel({
               </Link>
               <Link
                 to="/tinh-huong"
-                className="rounded-2xl border border-[var(--hcc-line)] bg-white px-3 py-3 text-center text-xs font-medium text-[var(--hcc-ink)] hover:border-[var(--hcc-red)]"
+                className="col-span-2 rounded-2xl border border-[var(--hcc-line)] bg-white px-3 py-3 text-center text-xs font-medium text-[var(--hcc-ink)] hover:border-[var(--hcc-red)]"
               >
                 <Lightbulb className="mx-auto mb-1 h-4 w-4 text-[var(--hcc-gold)]" />
                 Kho tình huống
-              </Link>
-              <Link
-                to="/admin"
-                className="col-span-2 rounded-2xl border border-[var(--hcc-gold)]/40 bg-[linear-gradient(135deg,#fff9e6,#fff)] px-3 py-3 text-center text-xs font-semibold text-[var(--hcc-ink)]"
-              >
-                Nạp VB / PDF / Website → Quản trị
               </Link>
             </div>
           </div>

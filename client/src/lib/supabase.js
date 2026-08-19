@@ -7,7 +7,7 @@ export const supabaseConfigured = Boolean(
   url && anon && !String(url).includes('your-project') && !String(anon).includes('your-')
 )
 
-/** Anon client — chỉ đọc stats/logs (RLS select). */
+/** Anon client — đọc công khai + đăng nhập /quantri (email/password). */
 export const supabase = supabaseConfigured
   ? createClient(url, anon)
   : null

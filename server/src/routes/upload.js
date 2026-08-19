@@ -15,6 +15,7 @@ const {
 } = require('../ingestion/extractAnyText');
 const { extractWebPage } = require('../ingestion/extractWebPage');
 const { hasLiveKeys } = require('../services/clients');
+const { assertCanUseCategory } = require('../services/adminAccess');
 
 const router = express.Router();
 
@@ -124,6 +125,7 @@ router.post('/', (req, res) => {
       }
 
       const categoryId = String(req.body?.categoryId || '').trim() || null;
+      assertCanUseCategory(req.admin, categoryId);
 
       const result = await ingestSingleFile(req.file.buffer, {
         fileName,
@@ -155,6 +157,12 @@ router.post('/text', async (req, res) => {
     return;
   }
   if (!requireLiveKeys(res)) return;
+  try {
+    assertCanUseCategory(req.admin, categoryId);
+  } catch (e) {
+    res.status(e.status || 403).json({ error: e.message });
+    return;
+  }
 
   await runWithSse(req, res, async ({ closed, progress, done }) => {
     progress({ stage: 'receive', percent: 5, message: 'Đã nhận văn bản dán tay' });
@@ -180,6 +188,12 @@ router.post('/url', async (req, res) => {
     return;
   }
   if (!requireLiveKeys(res)) return;
+  try {
+    assertCanUseCategory(req.admin, categoryId);
+  } catch (e) {
+    res.status(e.status || 403).json({ error: e.message });
+    return;
+  }
 
   await runWithSse(req, res, async ({ closed, progress, done }) => {
     progress({ stage: 'fetch', percent: 8, message: 'Đang tải trang web…' });

@@ -13,6 +13,7 @@ const {
   deleteScenario,
   bumpUse,
 } = require('../services/knowledgeStore');
+const { requireAdmin } = require('../middleware/requireAdmin');
 
 const router = express.Router();
 
@@ -23,7 +24,7 @@ router.get('/', async (req, res) => {
   res.json(result);
 });
 
-router.post('/', async (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
   const result = await createScenario(req.body || {});
   if (!result.ok) {
     res.status(400).json(result);
@@ -32,7 +33,7 @@ router.post('/', async (req, res) => {
   res.status(201).json(result);
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   const result = await deleteScenario(req.params.id);
   res.json(result);
 });

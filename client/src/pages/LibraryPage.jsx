@@ -8,6 +8,7 @@ import {
   FolderTree,
   Search,
 } from 'lucide-react'
+import { adminFetch } from '../lib/adminApi'
 
 const KIND_LABEL = {
   chuyen_muc: 'Chuyên mục',
@@ -276,7 +277,7 @@ export default function LibraryPage() {
 
   async function moveDoc(docId, categoryId) {
     try {
-      const res = await fetch(`/api/library/documents/${encodeURIComponent(docId)}`, {
+      const res = await adminFetch(`/api/library/documents/${encodeURIComponent(docId)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ categoryId }),
@@ -291,7 +292,7 @@ export default function LibraryPage() {
 
   async function createChild(parentId, name, kind) {
     try {
-      const res = await fetch('/api/library/categories', {
+      const res = await adminFetch('/api/library/categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, parentId: parentId || null, kind }),
