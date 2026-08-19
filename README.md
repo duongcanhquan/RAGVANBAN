@@ -110,12 +110,15 @@ File đã có trên Drive: **không** đưa vào R2 — dán link ở `/quantri`
 5. `GOOGLE_DRIVE_FOLDER_ID` chỉ cần nếu dùng nút đồng bộ cả thư mục
 6. `DRIVE_MIRROR_TO_SUPABASE=false` (không copy Drive sang kho khác)
 
-### 7) n8n webhook *(tùy chọn — tự động hóa an toàn)*
+### 7) n8n webhook *(production Vercel — không localhost)*
 
-1. Đặt `N8N_WEBHOOK_SECRET` = chuỗi dài ngẫu nhiên (cùng giá trị trên n8n)
-2. n8n gọi `POST https://<host>/api/webhooks/n8n` với header `X-N8N-Secret`
-3. Body ví dụ: `{ "fileId": "<google-drive-file-id>" }` hoặc `{ "action": "sync_folder", "limit": 10 }`
-4. Import workflow mẫu: `docs/n8n/drive-to-rag.workflow.json` — hướng dẫn đầy đủ: [`docs/n8n/README.md`](docs/n8n/README.md)
+Hướng dẫn đủ bước: [`docs/n8n/README.md`](docs/n8n/README.md). Tóm tắt:
+
+1. Trên **Vercel** `/quantri` → Cài đặt → bật n8n → Tạo secret → copy URL `https://<app>.vercel.app/api/webhooks/n8n`
+2. Import `docs/n8n/ragvanban-sync.workflow.json` vào n8n Cloud/VPS
+3. Dán URL + `X-N8N-Secret`. **Không** dùng `127.0.0.1`
+4. Node Drive Trigger: Google OAuth + Folder ID → Active = tải lên Drive là số hóa (~1 phút)
+5. Lịch 4 giờ quét sót (`sync_folder`)
 
 ---
 

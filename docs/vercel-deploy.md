@@ -198,7 +198,7 @@ Cập nhật `CLIENT_ORIGIN` = URL production rồi Redeploy (không bắt buộ
 | Hiện tượng | Nguyên nhân | Cách xử lý |
 |---|---|---|
 | Upload PDF lớn fail | Body max ~4.5 MB | File nhỏ hơn, hoặc Drive / ingest máy local |
-| Chat/upload cắt giữa chừng | Timeout (Hobby thường 10–60s) | Gói Pro; PDF ngắn; tắt OCR nặng |
+| Chat/upload/n8n cắt giữa chừng | Timeout (Hobby 10–60s) | Gói Pro (`maxDuration` 300s); Drive trigger 1 file; tắt OCR nặng |
 | Thư viện/tình huống mất sau deploy | Serverless không ghi đĩa bền | Bắt buộc Supabase (mục 3) |
 | Drive không list | JSON path Windows trên Vercel | Dán raw JSON vào env |
 | `VITE_` không có trên client | Thêm env sau lần build | Redeploy |
@@ -211,4 +211,4 @@ OCR (`tesseract.js`) trên serverless dễ chậm/OOM — ưu tiên PDF có text
 
 Vercel → **Settings → Domains** → thêm domain → cập nhật `CLIENT_ORIGIN` → Redeploy.
 
-Webhook n8n: `https://<domain>/api/webhooks/n8n` + header `X-N8N-Secret`.
+Webhook n8n (production): copy URL + secret từ `/quantri` trên domain Vercel, import `docs/n8n/ragvanban-sync.workflow.json`. Không dùng localhost. Chi tiết: [`docs/n8n/README.md`](./n8n/README.md).

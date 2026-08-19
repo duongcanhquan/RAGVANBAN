@@ -7,13 +7,28 @@
  */
 
 const express = require('express');
+const crypto = require('crypto');
 const { ingestDriveFile, syncDriveFolder } = require('../services/driveIngest');
 const { ingestSingleFile } = require('../services/ingestFile');
 const { storeUploadedOriginal } = require('../services/originalStore');
 const { parseDriveResource, getFileParentIds } = require('../services/googleDrive');
 const { getFlags, getN8nSecret, findSourceForFolder } = require('../services/integrations');
+const { publicErrorMessage } = require('../services/publicError');
 
 const router = express.Router();
+
+function secretsMatch(got, expected) {
+  const a = Buffer.from(String(got || ''), 'utf8');
+  const b = Buffer.from(String(expected || ''), 'utf8');
+  if (!a.length || a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
+function syncFolderLimit(raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 8;
+  return Math.min(20, Math.max(1, Math.floor(n)));
+}
 
 async function assertSecret(req, res) {
   const flags = await getFlags();
@@ -29,7 +44,7 @@ async function assertSecret(req, res) {
     return false;
   }
   const got = req.headers['x-n8n-secret'] || req.headers['x-webhook-secret'] || req.body?.secret;
-  if (got !== stored.secret) {
+  if (!secretsMatch(got, stored.secret)) {
     res.status(401).json({ error: 'Unauthorized — sai secret' });
     return false;
   }
@@ -55,6 +70,7 @@ async function categoryForFile(fileId, folderIdHint) {
 
 router.post('/n8n', async (req, res) => {
   if (!(await assertSecret(req, res))) return;
+  const started = Date.now();
 
   try {
     const action = String(req.body?.action || 'ingest_file').trim();
@@ -66,11 +82,11 @@ router.post('/n8n', async (req, res) => {
         return;
       }
       const result = await syncDriveFolder({
-        limit: Number(req.body?.limit) || 10,
+        limit: syncFolderLimit(req.body?.limit),
         folderId: req.body?.folderId || null,
         categoryId: req.body?.categoryId || null,
       });
-      res.json({ ok: true, action, ...result });
+      res.json({ ok: true, action, durationMs: Date.now() - started, ...result });
       return;
     }
 
@@ -83,7 +99,7 @@ router.post('/n8n', async (req, res) => {
       const categoryId =
         req.body?.categoryId || (await categoryForFile(fileId, req.body?.folderId));
       const result = await ingestDriveFile(fileId, { categoryId });
-      res.json({ ok: true, action: 'ingest_file', ...result });
+      res.json({ ok: true, action: 'ingest_file', durationMs: Date.now() - started, ...result });
       return;
     }
 
@@ -98,17 +114,17 @@ router.post('/n8n', async (req, res) => {
         const src = await findSourceForFolder(driveParsed.id);
         const result = await syncDriveFolder({
           folderId: driveParsed.id,
-          limit: Number(req.body?.limit) || 10,
+          limit: syncFolderLimit(req.body?.limit),
           categoryId: req.body?.categoryId || src?.categoryId || null,
         });
-        res.json({ ok: true, action: 'ingest_drive_folder', ...result });
+        res.json({ ok: true, action: 'ingest_drive_folder', durationMs: Date.now() - started, ...result });
         return;
       }
       if (driveParsed?.id) {
         const categoryId =
           req.body?.categoryId || (await categoryForFile(driveParsed.id, req.body?.folderId));
         const result = await ingestDriveFile(driveParsed.id, { categoryId });
-        res.json({ ok: true, action: 'ingest_drive', ...result });
+        res.json({ ok: true, action: 'ingest_drive', durationMs: Date.now() - started, ...result });
         return;
       }
 
@@ -134,7 +150,7 @@ router.post('/n8n', async (req, res) => {
         source: stored.source || 'upload',
         categoryId: req.body?.categoryId || null,
       });
-      res.json({ ok: true, action: 'ingest_url', ...result });
+      res.json({ ok: true, action: 'ingest_url', durationMs: Date.now() - started, ...result });
       return;
     }
 
@@ -142,13 +158,17 @@ router.post('/n8n', async (req, res) => {
       error: 'Body cần fileId, fileUrl, hoặc action=sync_folder',
       examples: [
         { fileId: '1abc...' },
-        { action: 'sync_folder', limit: 10 },
+        { action: 'sync_folder', limit: 8 },
         { fileUrl: 'https://...', fileName: 'vb.pdf' },
       ],
     });
   } catch (err) {
     console.error('[n8n webhook]', err);
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({
+      ok: false,
+      error: publicErrorMessage(err, 'Số hóa thất bại'),
+      durationMs: Date.now() - started,
+    });
   }
 });
 
@@ -157,8 +177,11 @@ router.get('/n8n/health', async (_req, res) => {
   res.json({
     ok: true,
     webhook: '/api/webhooks/n8n',
+    method: 'POST',
+    header: 'X-N8N-Secret',
     enabled: flags.n8nEnabled,
     secretConfigured: Boolean(secret.secret),
+    hint: 'n8n phải gọi URL Vercel https://…/api/webhooks/n8n — không dùng localhost',
   });
 });
 

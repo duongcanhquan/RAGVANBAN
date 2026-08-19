@@ -23,6 +23,26 @@ test('getIntegrationHealth Drive/n8n OFF khi thiếu key nhưng cờ mặc đị
   if (!h.n8n.hasSecret) assert.equal(h.n8n.reason, 'missing_secret');
 });
 
+test('workflow n8n production không trỏ localhost', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const wf = JSON.parse(
+    fs.readFileSync(path.resolve(__dirname, '../../docs/n8n/ragvanban-sync.workflow.json'), 'utf8')
+  );
+  const http = (wf.nodes || []).find((n) => n.type === 'n8n-nodes-base.httpRequest');
+  assert.ok(http, 'thiếu HTTP node');
+  assert.match(String(http.parameters.url || ''), /https:\/\/YOUR-APP\.vercel\.app\/api\/webhooks\/n8n/);
+  assert.doesNotMatch(String(http.parameters.url || ''), /127\.0\.0\.1|localhost/);
+  const schedule = (wf.nodes || []).find((n) => n.type === 'n8n-nodes-base.scheduleTrigger');
+  assert.equal(schedule?.parameters?.rule?.interval?.[0]?.hoursInterval, 4);
+  assert.ok(
+    Number(http.parameters?.options?.timeout) >= 240000,
+    'n8n HTTP timeout phải gần maxDuration 300s của Vercel, không cắt sớm 120s'
+  );
+  const drive = (wf.nodes || []).find((n) => n.type === 'n8n-nodes-base.googleDriveTrigger');
+  assert.equal(drive?.parameters?.event, 'fileCreated');
+});
+
 test('policy app_settings không đọc secret cho anon', () => {
   const sql = require('fs').readFileSync(
     require('path').resolve(__dirname, '../../supabase/migrations/006_app_settings.sql'),

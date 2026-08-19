@@ -87,6 +87,8 @@ export default function QuantriIntegrations() {
   }, [])
 
   const webhookUrl = publicApiUrl('/api/webhooks/n8n')
+  const healthUrl = publicApiUrl('/api/webhooks/n8n/health')
+  const isLocalWebhook = /localhost|127\.0\.0\.1/i.test(webhookUrl)
 
   async function patchFlags(patch) {
     setBusy(true)
@@ -350,8 +352,16 @@ export default function QuantriIntegrations() {
           <StatusPill on={data.n8n.on} reason={data.n8n.reason} missingLabel="CHƯA SECRET" />
         </div>
         <p className="m-0 mb-4 text-sm text-white/65">
-          Khi có file mới trên Drive, n8n chỉ việc gọi webhook này. Không cần điền Folder ID trên server.
+          n8n gọi webhook <strong>Vercel</strong> (https://…). Tải file lên thư mục Drive → n8n bắt
+          file mới → Vercel số hóa. Lịch 4 giờ chỉ quét sót.
         </p>
+
+        {isLocalWebhook ? (
+          <p className="mb-4 rounded-xl bg-amber-500/20 px-3 py-2 text-xs text-amber-100">
+            URL đang là máy local. Mở trang này trên domain Vercel (hoặc custom domain) rồi copy URL,
+            không dùng 127.0.0.1 trên n8n Cloud.
+          </p>
+        ) : null}
 
         {isSuper ? (
           <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
@@ -390,8 +400,24 @@ export default function QuantriIntegrations() {
               </button>
             ) : null}
           </div>
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
+            <span className="text-white/55">Health</span>
+            <code className="min-w-0 flex-1 break-all text-xs">{healthUrl}</code>
+            <CopyBtn text={healthUrl} />
+          </div>
+          <ol className="m-0 list-decimal space-y-1 pl-5 text-xs text-white/70">
+            <li>Bật webhook + Tạo secret. Kiểm tra Health: enabled và secretConfigured = true.</li>
+            <li>
+              n8n → Import file <code className="text-white/90">docs/n8n/ragvanban-sync.workflow.json</code>
+            </li>
+            <li>Node HTTP: dán URL + secret ở trên (không localhost).</li>
+            <li>
+              Node Drive: Google OAuth + Folder ID. Cùng folder phải share cho service account.
+              Active workflow. Tải PDF lên Drive → đợi ~1 phút.
+            </li>
+          </ol>
           <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
-            <p className="m-0 mb-1 text-xs text-white/55">Body mẫu (HTTP Request node)</p>
+            <p className="m-0 mb-1 text-xs text-white/55">Body khi có file mới</p>
             <pre className="m-0 overflow-x-auto text-[11px] text-white/80">{`{ "fileId": "{{ $json.id }}" }`}</pre>
           </div>
         </div>
