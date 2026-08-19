@@ -236,7 +236,7 @@ export default function QuantriShell() {
         ]
       : []),
     ...(me.role === 'super_admin'
-      ? [{ to: '/quantri/nhan-su', end: false, label: 'Nhân sự', Icon: Users }]
+      ? []
       : []),
     { to: '/quantri/tai-khoan', end: false, label: 'Đổi mật khẩu', Icon: KeyRound },
   ]

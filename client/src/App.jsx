@@ -5,7 +5,6 @@ import AdminPage from './pages/AdminPage'
 import LibraryPage from './pages/LibraryPage'
 import ScenariosPage from './pages/ScenariosPage'
 import QuantriShell from './pages/quantri/QuantriShell'
-import QuantriUsers from './pages/quantri/QuantriUsers'
 import QuantriAccount from './pages/quantri/QuantriAccount'
 import QuantriBrain from './pages/quantri/QuantriBrain'
 import QuantriVoice from './pages/quantri/QuantriVoice'
@@ -30,7 +29,6 @@ export default function App() {
           <Route path="giong-ai" element={<QuantriVoice />} />
           <Route path="rag" element={<QuantriRag />} />
           <Route path="chuyen-muc" element={<Navigate to="/quantri" replace />} />
-          <Route path="nhan-su" element={<QuantriUsers />} />
           <Route path="tai-khoan" element={<QuantriAccount />} />
         </Route>
         <Route path="/admin" element={<Navigate to="/quantri" replace />} />
