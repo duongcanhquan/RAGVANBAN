@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { randomUUID } = require('crypto');
 const { getSupabase, isConfigured } = require('./supabase');
+const { invalidateAdminAuth } = require('./adminAuthCache');
 
 const LOCAL_PATH = path.resolve(__dirname, '../../data/taxonomy.json');
 
@@ -16,6 +17,7 @@ const LIST_TTL_MS = 15_000;
 function invalidateCategoryListCache() {
   listCache = null;
   listCacheAt = 0;
+  invalidateAdminAuth();
 }
 
 function rememberList(value) {
@@ -453,6 +455,7 @@ module.exports = {
   updateCategory,
   deleteCategory,
   reorderCategories,
+  invalidateCategoryListCache,
   wouldCycle,
   buildCategoryTree,
   pathForCategory,

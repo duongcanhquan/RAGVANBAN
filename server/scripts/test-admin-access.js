@@ -55,6 +55,23 @@ test('editor attachCategoryAccess mở cả cây con từ grant', () => {
   assert.equal(canUseCategory(admin, 'nganh'), false);
 });
 
+test('đổi cây chuyên mục xóa cache quyền admin', () => {
+  const {
+    setCachedAdmin,
+    getCachedAdmin,
+    resetAdminAuthCache,
+  } = require('../src/services/adminAuthCache');
+  const { invalidateCategoryListCache } = require('../src/services/taxonomyStore');
+  resetAdminAuthCache();
+  setCachedAdmin('tok', {
+    admin: { id: 'ed', allowedCategoryIds: ['old'] },
+    user: { id: 'ed' },
+  });
+  assert.ok(getCachedAdmin('tok'));
+  invalidateCategoryListCache();
+  assert.equal(getCachedAdmin('tok'), undefined);
+});
+
 test('ttlMap hết hạn thì miss', () => {
   const { createTtlMap } = require('../src/services/ttlMap');
   const map = createTtlMap({ ttlMs: 20, max: 4 });

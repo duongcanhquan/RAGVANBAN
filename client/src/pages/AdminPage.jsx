@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { useLocation, useOutletContext } from 'react-router-dom'
 import { Globe, GripVertical, Pencil, RefreshCw, Sparkles, Trash2, Type, UploadCloud } from 'lucide-react'
 import { adminFetch } from '../lib/adminApi'
 import { apiUrl } from '../lib/apiBase'
@@ -110,7 +110,9 @@ function itemsPayload(docs, categoryId) {
 }
 
 export default function AdminPage() {
-  const { me } = useOutletContext() || {}
+  const { me, refreshMe } = useOutletContext() || {}
+  const location = useLocation()
+  const onDocumentsTab = location.pathname === '/quantri' || location.pathname === '/quantri/'
   const isSuper = me?.role === 'super_admin'
   const [stats, setStats] = useState({ totalQuestions: 0, totalDocuments: 0 })
   const [ingestTab, setIngestTab] = useState('file')
@@ -187,23 +189,31 @@ export default function AdminPage() {
     }
   }, [])
 
+  const loadUploadLimits = useCallback(async () => {
+    try {
+      const res = await fetch(apiUrl('/api/settings/rag'))
+      const data = await res.json().catch(() => ({}))
+      const n = Number(data.uploadMaxBytes)
+      if (Number.isFinite(n) && n > 0) setUploadMaxBytes(n)
+      const http = Number(data.httpUploadMaxBytes)
+      if (Number.isFinite(http) && http > 0) setHttpUploadMaxBytes(http)
+    } catch {
+      /* giữ mức đang có */
+    }
+  }, [])
+
   useEffect(() => {
+    if (!onDocumentsTab) return
+    loadUploadLimits()
+    refreshMe?.().catch(() => {})
+  }, [onDocumentsTab, loadUploadLimits, refreshMe])
+
+  useEffect(() => {
+    if (!onDocumentsTab) return
     loadStats()
     loadCategories()
     loadDocs()
-  }, [loadStats, loadCategories, loadDocs])
-
-  useEffect(() => {
-    fetch(apiUrl('/api/settings/rag'))
-      .then(async (res) => {
-        const data = await res.json().catch(() => ({}))
-        const n = Number(data.uploadMaxBytes)
-        if (Number.isFinite(n) && n > 0) setUploadMaxBytes(n)
-        const http = Number(data.httpUploadMaxBytes)
-        if (Number.isFinite(http) && http > 0) setHttpUploadMaxBytes(http)
-      })
-      .catch(() => {})
-  }, [])
+  }, [onDocumentsTab, loadStats, loadCategories, loadDocs])
 
   const groups = useMemo(() => buildGroups(docs, categoryOptions), [docs, categoryOptions])
   const detailDoc = docs.find((d) => d.id === detailId) || null
