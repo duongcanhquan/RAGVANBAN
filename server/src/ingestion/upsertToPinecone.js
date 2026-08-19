@@ -132,6 +132,9 @@ function buildPineconeRecords(documents, vectors, idPrefix = 'doc') {
       category_id: String(meta.category_id || ''),
       document_id: String(documentId || ''),
       folder_path: String(meta.folder_path || '').slice(0, 240),
+      replacement_url: String(meta.replacement_url || ''),
+      replacement_doc_id: String(meta.replacement_doc_id || ''),
+      replacement_label: String(meta.replacement_label || '').slice(0, 240),
       chunk_index: Number(meta.chunk_index ?? i),
       text: String(doc.pageContent || '').slice(0, 35000),
     };
@@ -277,6 +280,12 @@ async function updateVectorsMetadataByFileName(fileName, patch, deps = {}) {
   if (patch.category_id !== undefined) metaPatch.category_id = String(patch.category_id || '');
   if (patch.document_id !== undefined) metaPatch.document_id = String(patch.document_id || '');
   if (patch.folder_path !== undefined) metaPatch.folder_path = String(patch.folder_path || '').slice(0, 240);
+  if (patch.van_ban_thay_the !== undefined) metaPatch.van_ban_thay_the = asList(patch.van_ban_thay_the);
+  if (patch.replacement_url !== undefined) metaPatch.replacement_url = String(patch.replacement_url || '');
+  if (patch.replacement_doc_id !== undefined) metaPatch.replacement_doc_id = String(patch.replacement_doc_id || '');
+  if (patch.replacement_label !== undefined) {
+    metaPatch.replacement_label = String(patch.replacement_label || '').slice(0, 240);
+  }
   if (!Object.keys(metaPatch).length) return { ok: true, updated: 0 };
 
   const target = pineconeHandle(pinecone, indexName, namespace, peekPineconeIndexHost(indexName));

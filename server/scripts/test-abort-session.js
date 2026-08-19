@@ -11,6 +11,8 @@ const {
   recall,
   beginSessionRequest,
   invalidateSessionCache,
+  rememberEmbed,
+  recallEmbed,
 } = require('../src/services/sessionSearchCache');
 const { hybridSearch } = require('../src/services/hybridSearch');
 const { streamAnswer } = require('../src/services/qaChain');
@@ -390,6 +392,16 @@ async function run() {
       'routeIntent treo khi LLM không trả'
     );
     assert.ok(Date.now() - start < 200);
+  });
+
+  test('rememberEmbed / recallEmbed cache vector theo scope+query', () => {
+    invalidateSessionCache();
+    const vec = [0.1, 0.2, 0.3];
+    assert.equal(recallEmbed('scope-a', 'câu hỏi'), null);
+    rememberEmbed('scope-a', 'câu hỏi', vec);
+    assert.deepStrictEqual(recallEmbed('scope-a', 'câu hỏi'), vec);
+    assert.equal(recallEmbed('scope-b', 'câu hỏi'), null);
+    assert.equal(recallEmbed('scope-a', 'khác'), null);
   });
 
   invalidateSessionCache();

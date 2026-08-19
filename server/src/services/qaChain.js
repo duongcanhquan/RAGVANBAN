@@ -72,6 +72,16 @@ function trimChunkText(text, max = 1100) {
   return `${kept.trim()}…`;
 }
 
+function replacementLine(m) {
+  const bits = [];
+  if (m.replacement_label || m.replacement_url) {
+    bits.push(
+      `VB thay thế trong hệ thống: ${[m.replacement_label, m.replacement_url].filter(Boolean).join(' · ')}`
+    );
+  }
+  return bits.join('; ');
+}
+
 function formatContext(matches) {
   if (!matches?.length) return '(Không có đoạn văn bản nào được truy xuất.)';
 
@@ -91,6 +101,7 @@ function formatContext(matches) {
       const link = m.link_goc || m.url_file_goc || '';
       const rel =
         [...new Set(group.map(relationLine).filter(Boolean))].join('; ') || '';
+      const rep = replacementLine(m) || '';
       const related = group.some((x) => x.related);
       const chunks = group
         .map((part) => {
@@ -99,7 +110,7 @@ function formatContext(matches) {
         })
         .join('\n\n');
       return `[#${i + 1}] ${title}${meta ? ` · ${meta}` : ''}
-${link ? `${link}\n` : ''}${rel ? `Quan hệ: ${rel}\n` : ''}${related ? 'Ghi chú: quan hệ sửa đổi/bổ sung.\n' : ''}${chunks}`;
+${link ? `${link}\n` : ''}${rel ? `Quan hệ: ${rel}\n` : ''}${rep ? `${rep}\n` : ''}${related ? 'Ghi chú: quan hệ sửa đổi/bổ sung.\n' : ''}${chunks}`;
     })
     .join('\n\n====\n\n');
 
@@ -121,6 +132,8 @@ function buildSourceList(matches) {
         so_hieu: m.so_hieu || '',
         trang_thai: m.trang_thai || '',
         co_quan_ban_hanh: m.co_quan_ban_hanh || '',
+        replacement_url: m.replacement_url || '',
+        replacement_label: m.replacement_label || '',
         dieu: '',
         khoan: m.khoan || '',
       });

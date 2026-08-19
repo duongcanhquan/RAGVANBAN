@@ -6,7 +6,8 @@
 import { apiUrl } from './apiBase'
 
 export async function streamChat(message, handlers = {}) {
-  const { onMeta, onToken, onDone, onError, signal, sessionId, mode, voiceTalk, history, categoryIds } = handlers
+  const { onMeta, onToken, onDone, onError, signal, sessionId, mode, voiceTalk, history, categoryIds, documentIds } =
+    handlers
   const url = apiUrl('/api/chat')
 
   const response = await fetch(url, {
@@ -23,6 +24,7 @@ export async function streamChat(message, handlers = {}) {
       voiceTalk: Boolean(voiceTalk),
       history: Array.isArray(history) ? history.slice(-6) : [],
       categoryIds: Array.isArray(categoryIds) ? categoryIds.filter(Boolean).slice(0, 40) : [],
+      documentIds: Array.isArray(documentIds) ? documentIds.filter(Boolean).slice(0, 20) : [],
     }),
     signal,
   })

@@ -1,11 +1,13 @@
-import { CheckCircle2, Copy, ShieldAlert, ShieldCheck } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { lazy, Suspense } from 'react'
+import { CheckCircle2, Copy, ShieldAlert, ShieldCheck, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { User } from 'lucide-react'
 import CitationChip from './CitationChip'
 import { ChatWait } from './WaitMotion'
 import logoVietmy from '../assets/logo-vietmy.png'
 import { extraSourceChips } from '../lib/sources'
+import { isExpired } from '../lib/docStatus'
+
+const MarkdownBody = lazy(() => import('./MarkdownBody'))
 
 /**
  * MessageBubble — hiển thị độ tin cậy + copy nhanh.
@@ -18,6 +20,9 @@ export default function MessageBubble({
   confidence,
   qaMode,
   statusText = '',
+  logId,
+  feedback,
+  onFeedback,
 }) {
   const isUser = role === 'user'
   const markdownBody = content?.length ? content : streaming ? ' ' : ''
@@ -110,55 +115,13 @@ export default function MessageBubble({
             ) : null}
 
             {streaming && !String(content || '').trim() ? null : (
-            <div className="prose-chat [&_table]:w-full [&_table]:text-sm [&_th]:border [&_th]:border-[var(--hcc-line)] [&_th]:bg-[var(--hcc-red-soft)] [&_th]:px-2 [&_th]:py-1 [&_td]:border [&_td]:border-[var(--hcc-line)] [&_td]:px-2 [&_td]:py-1">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  a: ({ href, children }) => (
-                    <CitationChip href={href}>{children}</CitationChip>
-                  ),
-                  p: ({ children }) => (
-                    <p className="mb-2 last:mb-0 leading-relaxed [&_.citation-chip]:my-1">
-                      {children}
-                    </p>
-                  ),
-                  ul: ({ children }) => (
-                    <ul className="mb-2 list-disc space-y-1 pl-5">{children}</ul>
-                  ),
-                  ol: ({ children }) => (
-                    <ol className="mb-2 list-decimal space-y-1 pl-5">{children}</ol>
-                  ),
-                  strong: ({ children }) => (
-                    <strong className="font-semibold text-[var(--hcc-gold-bright)]">
-                      {children}
-                    </strong>
-                  ),
-                  code: ({ children, className }) => {
-                    const isBlock = Boolean(className)
-                    if (isBlock) {
-                      return (
-                        <code className="mb-2 block overflow-x-auto rounded-lg bg-[var(--hcc-canvas)] p-3 text-[0.85em]">
-                          {children}
-                        </code>
-                      )
-                    }
-                    return (
-                      <code className="rounded bg-[var(--hcc-red-soft)] px-1 py-0.5 text-[0.9em] text-rose-200">
-                        {children}
-                      </code>
-                    )
-                  },
-                }}
-              >
-                {markdownBody}
-              </ReactMarkdown>
-              {streaming && String(content || '').trim() ? (
-                <span
-                  className="ml-0.5 inline-block h-4 w-1.5 animate-pulse align-middle bg-[var(--hcc-gold)]"
-                  aria-label="Đang trả lời"
-                />
-              ) : null}
-            </div>
+            <Suspense
+              fallback={
+                <div className="prose-chat whitespace-pre-wrap text-slate-100">{markdownBody}</div>
+              }
+            >
+              <MarkdownBody streaming={streaming}>{markdownBody}</MarkdownBody>
+            </Suspense>
             )}
 
             {!streaming && extraChips.length > 0 && (
@@ -169,14 +132,14 @@ export default function MessageBubble({
                     href={c.url}
                     status={c.trang_thai}
                   >
-                    {[c.title, c.dieu ? `Đ.${c.dieu}` : '', c.trang_thai].filter(Boolean).join(' · ')}
+                    {[c.title, c.dieu ? `Đ.${c.dieu}` : '', isExpired(c.trang_thai) ? c.trang_thai : ''].filter(Boolean).join(' · ')}
                   </CitationChip>
                 ))}
               </div>
             )}
 
             {!streaming && content && (
-              <div className="mt-2 flex gap-2 border-t border-[var(--hcc-line)]/70 pt-2">
+              <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-[var(--hcc-line)]/70 pt-2">
                 <button
                   type="button"
                   onClick={copyAnswer}
@@ -185,6 +148,36 @@ export default function MessageBubble({
                   <Copy className="h-3 w-3" />
                   Sao chép
                 </button>
+                {logId && onFeedback ? (
+                  <>
+                    <button
+                      type="button"
+                      aria-label="Hữu ích"
+                      aria-pressed={feedback === 'up'}
+                      onClick={() => onFeedback(logId, 'up')}
+                      className={`inline-flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-[11px] transition ${
+                        feedback === 'up'
+                          ? 'bg-emerald-500/20 text-emerald-200'
+                          : 'text-[var(--hcc-muted)] hover:bg-white/10 hover:text-emerald-200'
+                      }`}
+                    >
+                      <ThumbsUp className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Chưa đúng"
+                      aria-pressed={feedback === 'down'}
+                      onClick={() => onFeedback(logId, 'down')}
+                      className={`inline-flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-[11px] transition ${
+                        feedback === 'down'
+                          ? 'bg-rose-500/20 text-rose-200'
+                          : 'text-[var(--hcc-muted)] hover:bg-white/10 hover:text-rose-200'
+                      }`}
+                    >
+                      <ThumbsDown className="h-3 w-3" />
+                    </button>
+                  </>
+                ) : null}
                 {conf.level !== 'low' && (
                   <span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] text-emerald-300">
                     <CheckCircle2 className="h-3 w-3" />

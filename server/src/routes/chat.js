@@ -19,8 +19,13 @@ const {
   getLLM,
   ensureBrain,
 } = require('../services/clients');
-const { insertChatLog } = require('../services/supabase');
+const { insertChatLog, updateChatLogFeedback } = require('../services/supabase');
 const { matchSkillsForQuestion, formatSkillsForPrompt } = require('../services/skillStore');
+const {
+  findRelevantScenarios,
+  formatScenariosForPrompt,
+  bumpUse,
+} = require('../services/knowledgeStore');
 const { getVoice, answerMaxTokens } = require('../services/voiceConfig');
 const { getTalk } = require('../services/voiceTalk');
 const { shouldCompare } = require('../services/conflictBrief');
@@ -42,7 +47,7 @@ const {
 const { bindSseAbort } = require('../services/sseAbort');
 const { throwIfAborted, isAbortError, defaultChatTimeoutMs, combineSignals } = require('../services/abortControl');
 const { publicErrorMessage } = require('../services/publicError');
-const { resolveCategoryScope, applyScopeToIntent, scopeKey } = require('../services/categoryScope');
+const { resolveCategoryScope, applyScopeToIntent, applyDocumentScope, scopeKey } = require('../services/categoryScope');
 const { checkChatRate, acquireChatSlot } = require('../services/chatGate');
 
 const router = express.Router();
@@ -60,16 +65,18 @@ function sendEvent(res, event, data) {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
-async function persistLog({ userSession, question, sources, answer }) {
+async function persistLog({ userSession, question, sources, answer, verify }) {
   try {
-    await insertChatLog({
+    return await insertChatLog({
       userSession,
       question,
       citationsUsed: sources || [],
       answer,
+      verifyReport: verify || null,
     });
   } catch (err) {
     console.warn('[chat] log skip:', err.message);
+    return { ok: false };
   }
 }
 
@@ -94,7 +101,7 @@ async function mockStream(res, message, userSession, uiMode) {
   for (let i = 0; i < full.length; i += 48) {
     sendEvent(res, 'token', { token: full.slice(i, i + 48) });
   }
-  await persistLog({ userSession, question: message, sources, answer: full });
+  const logRow = await persistLog({ userSession, question: message, sources, answer: full });
   sendEvent(res, 'done', {
     answer: full,
     sources,
@@ -102,6 +109,7 @@ async function mockStream(res, message, userSession, uiMode) {
     confidence,
     qaMode,
     mode: 'demo',
+    logId: logRow?.id || null,
   });
   res.end();
 }
@@ -193,6 +201,7 @@ router.post('/', async (req, res) => {
         throwIfAborted(signal);
         sendEvent(res, 'token', { token: answer.slice(i, i + 48) });
       }
+      const logRow = await persistLog({ userSession, question: message, sources: [], answer });
       sendEvent(res, 'done', {
         answer,
         sources: [],
@@ -200,6 +209,7 @@ router.post('/', async (req, res) => {
         confidence: confidenceFromSources([]),
         qaMode: uiMode,
         mode: 'live',
+        logId: logRow?.id || null,
       });
       res.end();
       return;
@@ -278,6 +288,7 @@ router.post('/', async (req, res) => {
       return null;
     });
     if (scope) applyScopeToIntent(intent, scope);
+    applyDocumentScope(intent, req.body?.documentIds);
     intent.needs_retrieval = true;
 
     let qaMode = resolveQaMode(uiMode, intent);
@@ -307,6 +318,10 @@ router.post('/', async (req, res) => {
         topK: rag.topK,
         maxPerDoc: rag.maxPerDoc,
         maxTotal: rag.maxTotal,
+        crossEncoderRerank: rag.crossEncoderRerank,
+        crossEncoderTopN: rag.crossEncoderTopN,
+        crossEncoderWeight: rag.crossEncoderWeight,
+        useCohereRerank: rag.useCohereRerank,
         signal: workSignal,
       };
       matches = await hybridSearch(searchQuery, intent, searchOpts);
@@ -356,7 +371,7 @@ router.post('/', async (req, res) => {
         throwIfAborted(workSignal);
         sendEvent(res, 'token', { token: answer.slice(i, i + 48) });
       }
-      await persistLog({ userSession, question: message, sources, answer });
+      const logRow = await persistLog({ userSession, question: message, sources, answer });
       sendEvent(res, 'done', {
         answer,
         sources,
@@ -364,9 +379,16 @@ router.post('/', async (req, res) => {
         confidence,
         qaMode,
         mode: 'live',
+        logId: logRow?.id || null,
       });
       res.end();
       return;
+    }
+
+    const matchedScenarios = await findRelevantScenarios(message);
+    const scenarioContext = formatScenariosForPrompt(matchedScenarios);
+    for (const s of matchedScenarios) {
+      bumpUse(s.id).catch(() => {});
     }
 
     const { result } = await streamWithFallback(
@@ -375,7 +397,7 @@ router.post('/', async (req, res) => {
       (token) => {
         if (!closed()) sendEvent(res, 'token', { token });
       },
-      '',
+      scenarioContext,
       qaMode,
       voice,
       {
@@ -387,11 +409,12 @@ router.post('/', async (req, res) => {
       }
     );
 
-    await persistLog({
+    const logRow = await persistLog({
       userSession,
       question: message,
       sources: result.sources,
       answer: result.answer,
+      verify: result.verify,
     });
 
     if (!closed()) {
@@ -404,6 +427,7 @@ router.post('/', async (req, res) => {
         mode: 'live',
         chatProvider: result.provider,
         voiceTalk: voiceRequested,
+        logId: logRow?.id || null,
       });
       res.end();
     }
@@ -424,6 +448,27 @@ router.post('/', async (req, res) => {
     endSessionWork(userSession, sessionAc);
     if (slot) slot.release();
     dispose();
+  }
+});
+
+router.post('/feedback', async (req, res) => {
+  try {
+    const logId = String(req.body?.logId || '').trim();
+    const rating = String(req.body?.rating || '').trim();
+    const sessionId =
+      String(req.headers['x-session-id'] || req.body?.sessionId || '').trim() || 'anonymous';
+    if (!logId || !['up', 'down'].includes(rating)) {
+      return res.status(400).json({ error: 'Thiếu logId hoặc rating (up/down)' });
+    }
+    const result = await updateChatLogFeedback(logId, { rating, sessionId });
+    if (!result.ok) {
+      const code = /không tìm|không khớp/i.test(result.error || '') ? 404 : 400;
+      return res.status(code).json({ error: result.error || 'Không lưu được phản hồi' });
+    }
+    return res.json({ ok: true, rating: result.rating });
+  } catch (err) {
+    console.error('[chat/feedback]', err);
+    return res.status(500).json({ error: publicErrorMessage(err, 'Lỗi phản hồi') });
   }
 });
 

@@ -9,6 +9,7 @@ const { abortError } = require('./abortControl');
 const TTL_MS = 12 * 60 * 1000;
 const STORE_MAX = 400;
 const store = new Map();
+const embedStore = new Map();
 const seqBySession = new Map();
 const abortBySession = new Map();
 
@@ -199,8 +200,47 @@ function recall(sessionId) {
   return row;
 }
 
+function embedCacheKey(scopeKey, query) {
+  const sk = String(scopeKey || 'all').trim() || 'all';
+  const q = String(query || '')
+    .trim()
+    .slice(0, 480);
+  return `${sk}::${q}`;
+}
+
+function rememberEmbed(scopeKey, query, vector) {
+  const key = embedCacheKey(scopeKey, query);
+  if (!vector?.length) return false;
+  embedStore.set(key, { vector, at: Date.now() });
+  if (embedStore.size > STORE_MAX) {
+    let oldestKey = null;
+    let oldestAt = Infinity;
+    for (const [k, row] of embedStore) {
+      const at = Number(row?.at) || 0;
+      if (at < oldestAt) {
+        oldestAt = at;
+        oldestKey = k;
+      }
+    }
+    if (oldestKey) embedStore.delete(oldestKey);
+  }
+  return true;
+}
+
+function recallEmbed(scopeKey, query) {
+  const key = embedCacheKey(scopeKey, query);
+  const row = embedStore.get(key);
+  if (!row) return null;
+  if (Date.now() - row.at > TTL_MS) {
+    embedStore.delete(key);
+    return null;
+  }
+  return row.vector;
+}
+
 function invalidateSessionCache() {
   store.clear();
+  embedStore.clear();
   seqBySession.clear();
   for (const ac of abortBySession.values()) {
     if (!ac.signal.aborted) {
@@ -242,5 +282,8 @@ module.exports = {
   expandAdviseQuery,
   formatConversationForPrompt,
   isGreeting,
+  rememberEmbed,
+  recallEmbed,
+  embedCacheKey,
   TTL_MS,
 };

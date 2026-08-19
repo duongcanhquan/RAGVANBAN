@@ -12,6 +12,7 @@ const { ingestDriveFile, syncDriveFolder, driveFileIdFromWebhookBody } = require
 const { ingestSingleFile } = require('../services/ingestFile');
 const { storeUploadedOriginal } = require('../services/originalStore');
 const { parseDriveResource, getFileParentIds } = require('../services/googleDrive');
+const { assertSafeUrl } = require('../ingestion/extractWebPage');
 const { getFlags, getN8nSecret, findSourceForFolder } = require('../services/integrations');
 const { publicErrorMessage } = require('../services/publicError');
 
@@ -141,6 +142,7 @@ router.post('/n8n', async (req, res) => {
         return;
       }
 
+      assertSafeUrl(url);
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`Không tải được fileUrl: HTTP ${resp.status}`);
       const buffer = Buffer.from(await resp.arrayBuffer());

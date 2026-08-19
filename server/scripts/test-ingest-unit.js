@@ -185,6 +185,32 @@ async function run() {
     assert.strictEqual(asUpsertPayload(records).records[0].id, records[0].id);
   });
 
+  test('htmlToText trích nội dung chính từ HTML', () => {
+    const { htmlToText, webCatalogFileName, looksBlockedHtml } = require('../src/ingestion/extractWebPage');
+    const { text } = htmlToText(
+      '<html><body><article><h1>Thông tư 01</h1><p>Điều 1. Quy định thời gian làm việc.</p></article></body></html>'
+    );
+    assert.match(text, /Thông tư 01/);
+    assert.match(text, /Điều 1/);
+    const name = webCatalogFileName({
+      url: 'https://example.gov.vn/vb-01',
+      title: 'Thông tư 01',
+      host: 'example.gov.vn',
+    });
+    assert.match(name, /\.web\.txt$/);
+    assert.equal(looksBlockedHtml('<div>cf-browser-verification</div>'), true);
+    assert.equal(looksBlockedHtml('<html><body>Nghị định 01</body></html>'), false);
+  });
+
+  test('textFingerprint hash URL + nội dung cho dedup website', () => {
+    const { textFingerprint } = require('../src/services/documentDedup');
+    const a = textFingerprint('nội dung', 'https://a.gov.vn/x');
+    const b = textFingerprint('nội dung', 'https://a.gov.vn/x');
+    const c = textFingerprint('khác', 'https://a.gov.vn/x');
+    assert.strictEqual(a.sha256, b.sha256);
+    assert.notStrictEqual(a.sha256, c.sha256);
+  });
+
   console.log(`\nKết quả: ${passed} passed, ${failed} failed`);
   if (failed > 0) process.exitCode = 1;
 }

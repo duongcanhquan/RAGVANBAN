@@ -4,6 +4,7 @@ const {
   buildScenarioRow,
   filterScenarioItems,
   presentScenario,
+  formatScenariosForPrompt,
 } = require('../src/services/knowledgeStore');
 const { expandCategoryIds } = require('../src/services/categoryScope');
 
@@ -65,4 +66,18 @@ test('chọn mục cha gồm hạng mục con', () => {
   );
   assert.ok(ids.includes('hang'));
   assert.ok(ids.includes('chu-de'));
+});
+
+test('formatScenariosForPrompt đưa bài mẫu vào prompt', () => {
+  const block = formatScenariosForPrompt([
+    {
+      id: 's1',
+      title: 'Cấp lại CCCD',
+      suggested_question: 'Hồ sơ cấp lại CCCD gồm gì?',
+      sample_answer: 'Đơn + CMND cũ',
+    },
+  ]);
+  assert.match(block, /Bài mẫu/);
+  assert.match(block, /CCCD/);
+  assert.match(block, /Bố cục mẫu/);
 });

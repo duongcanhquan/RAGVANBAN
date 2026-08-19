@@ -15,8 +15,10 @@
     "test:ingest": "npm --prefix server run test:ingest",
     "test:chat": "npm --prefix server run test:chat",
     "test:rag": "npm --prefix server run test:rag",
+    "test:rag-smoke": "npm --prefix server run test:rag-smoke",
     "test:sources": "npm --prefix client run test:sources",
+    "test:api-cache": "npm --prefix client run test:api-cache",
     "test:wait-voice": "npm --prefix client run test:wait-voice",
-    "test": "npm --prefix server test && npm run test:sources && npm run test:wait-voice && npm run build:client"
+    "test": "npm --prefix server test && npm run test:sources && npm run test:api-cache && npm run test:wait-voice && npm run build:client"
   }
 }

@@ -95,6 +95,18 @@ function applyScopeToIntent(intent, scope) {
   return intent;
 }
 
+function applyDocumentScope(intent, rawDocIds) {
+  if (!intent) return intent;
+  const ids = capList(normalizeSelectedIds(rawDocIds));
+  if (!ids.length) return intent;
+  intent.document_id_in = capList([...(intent.document_id_in || []), ...ids]);
+  intent.skipLinhVucFilter = true;
+  if (!intent.scopeLabels?.length) {
+    intent.scopeLabels = [`${ids.length} văn bản đã chọn`];
+  }
+  return intent;
+}
+
 module.exports = {
   IN_CAP,
   normalizeSelectedIds,
@@ -103,5 +115,6 @@ module.exports = {
   scopeKey,
   resolveCategoryScope,
   applyScopeToIntent,
+  applyDocumentScope,
   capList,
 };

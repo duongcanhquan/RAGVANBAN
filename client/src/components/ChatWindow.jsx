@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import MessageBubble from './MessageBubble'
 
 /**
- * ChatWindow — empty state theo chế độ Tra cứu / Tư vấn.
+ * ChatWindow — empty state gọn; tra cứu = thuần chat, không chip VB.
  */
 export default function ChatWindow({
   messages,
@@ -11,9 +11,12 @@ export default function ChatWindow({
   modeConfig,
   statusText,
   wide = false,
+  onFeedback,
 }) {
   const bottomRef = useRef(null)
   const empty = messages.length === 0
+  const isLookup = modeConfig?.id === 'lookup'
+  const examples = isLookup ? [] : modeConfig?.examples || []
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
@@ -26,70 +29,33 @@ export default function ChatWindow({
       }`}
     >
       {empty && (
-        <section className="glass-panel rounded-2xl px-3 py-3 sm:px-5 sm:py-4">
-          <h1 className="m-0 text-base font-semibold tracking-tight text-[var(--hcc-ink)] sm:text-xl">
-            {modeConfig?.id === 'advise' ? 'Tư vấn tình huống theo văn bản' : 'Tra cứu văn bản nhanh'}
+        <section className="rounded-2xl border border-white/10 bg-black/15 px-4 py-5 sm:px-6 sm:py-6">
+          <h1 className="m-0 text-lg font-semibold tracking-tight text-[var(--hcc-ink)] sm:text-xl">
+            {isLookup ? 'Tra cứu văn bản' : 'Tư vấn tình huống'}
           </h1>
-
-          <p className="m-0 mt-1 max-w-3xl text-sm text-[var(--hcc-muted)]">
-            {modeConfig?.id === 'lookup' ? (
-              <>
-                {/* Chỉ hiện hướng dẫn tra cứu nhanh dài trên desktop rất rộng */}
-                <span className="hidden 2xl:inline">
-                  {modeConfig?.hint || 'Hỏi bên trái · dùng bàn làm việc bên phải để chọn VB, mẫu, lịch sử.'}
-                </span>
-                {/* Các màn hình còn lại: giữ gọn để chat rộng rãi + dễ thao tác */}
-                <span className="2xl:hidden">Nhập câu hỏi để tra cứu văn bản.</span>
-              </>
-            ) : (
-              modeConfig?.hint || 'Hỏi bên trái · dùng bàn làm việc bên phải để chọn VB, mẫu, lịch sử.'
-            )}
+          <p className="m-0 mt-2 text-sm text-[var(--hcc-muted)]">
+            Nhập câu hỏi bên dưới — hệ thống trả lời kèm nguồn trích dẫn.
           </p>
 
-          <p className="m-0 mt-1.5 text-[11px] text-white/40 xl:hidden">
-            Lịch sử chỉ trên phiên đang mở. Đóng tab hoặc bấm Hết phiên để xóa.
-          </p>
-
-          {(modeConfig?.examples || []).length ? (
-            <>
-              {/* Ẩn toàn bộ nút bấm nhanh (chip/gợi ý) trên mobile & đa số màn hình để tránh che chat */}
-              <div className="mt-3 hidden flex-wrap gap-2 2xl:flex">
-                {(modeConfig?.examples || []).map((ex) => {
-                  const label = typeof ex === 'string' ? ex : ex.label || ex.query
-                  const query = typeof ex === 'string' ? ex : ex.query || ex.label
-                  return (
-                    <button
-                      key={ex.id || query}
-                      type="button"
-                      disabled={streaming}
-                      onClick={() => !streaming && onExampleClick(query)}
-                      className="min-h-11 cursor-pointer rounded-2xl border border-white/15 bg-white/10 px-3 py-2 text-left text-xs text-slate-100 transition hover:border-[var(--hcc-gold)] hover:text-[var(--hcc-gold-bright)] disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-0 sm:rounded-full sm:text-sm"
-                    >
-                      {label}
-                    </button>
-                  )
-                })}
-              </div>
-
-              {modeConfig?.id === 'lookup' ? (
-                <p className="m-0 mt-3 text-xs text-[var(--hcc-muted)] 2xl:hidden">Nhập câu hỏi của bạn.</p>
-              ) : null}
-            </>
-          ) : (
-            <p className="m-0 mt-3 text-xs text-[var(--hcc-muted)]">
-              {modeConfig?.id === 'lookup' ? (
-                <>
-                  <span className="hidden 2xl:inline">
-                    Gợi ý nhanh lấy từ văn bản đã số hóa. Chưa có tài liệu thì ô gợi ý để trống — hỏi theo tên
-                    hoặc số hiệu văn bản bạn đã tải lên.
-                  </span>
-                  <span className="2xl:hidden">Nhập câu hỏi của bạn.</span>
-                </>
-              ) : (
-                'Gợi ý nhanh lấy từ văn bản đã số hóa. Chưa có tài liệu thì ô gợi ý để trống — hỏi theo tên hoặc số hiệu văn bản bạn đã tải lên.'
-              )}
-            </p>
-          )}
+          {!isLookup && examples.length > 0 ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {examples.map((ex) => {
+                const label = typeof ex === 'string' ? ex : ex.label || ex.query
+                const query = typeof ex === 'string' ? ex : ex.query || ex.label
+                return (
+                  <button
+                    key={ex.id || query}
+                    type="button"
+                    disabled={streaming}
+                    onClick={() => !streaming && onExampleClick?.(query)}
+                    className="min-h-11 cursor-pointer rounded-2xl border border-white/15 bg-white/10 px-3 py-2 text-left text-xs text-slate-100 transition hover:border-[var(--hcc-gold)] hover:text-[var(--hcc-gold-bright)] disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-0 sm:rounded-full sm:text-sm"
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          ) : null}
         </section>
       )}
 
@@ -103,6 +69,9 @@ export default function ChatWindow({
           confidence={m.confidence}
           qaMode={m.qaMode}
           statusText={m.streaming ? statusText : ''}
+          logId={m.logId}
+          feedback={m.feedback}
+          onFeedback={onFeedback}
         />
       ))}
       <div ref={bottomRef} aria-hidden="true" />

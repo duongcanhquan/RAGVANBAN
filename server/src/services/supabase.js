@@ -83,12 +83,31 @@ async function uploadPdfToStorage(buffer, originalName, contentType = 'applicati
 
 const uploadFileToStorage = uploadPdfToStorage;
 
-async function insertChatLog({ userSession, question, citationsUsed = [], answer = '', markedKnowledge = false }) {
+function compactVerifyReport(report) {
+  if (!report || typeof report !== 'object') return null;
+  return {
+    ok: Boolean(report.ok),
+    unverifiedQuotes: (report.unverifiedQuotes || []).length,
+    unknownSoHieu: (report.unknownSoHieu || []).length,
+    unverifiedDieu: (report.unverifiedDieu || []).length,
+    unverifiedDurations: (report.unverifiedDurations || []).length,
+  };
+}
+
+async function insertChatLog({
+  userSession,
+  question,
+  citationsUsed = [],
+  answer = '',
+  markedKnowledge = false,
+  verifyReport = null,
+}) {
   const sb = getSupabase();
   if (!sb) {
     return { ok: false, skipped: true, reason: 'Supabase chưa cấu hình' };
   }
 
+  const verify = compactVerifyReport(verifyReport);
   const payload = {
     user_session: userSession || 'anonymous',
     question: String(question || '').slice(0, 8000),
@@ -96,14 +115,28 @@ async function insertChatLog({ userSession, question, citationsUsed = [], answer
     answer: String(answer || '').slice(0, 20000),
   };
 
-  let { data, error } = await sb
-    .from('chat_logs')
-    .insert({ ...payload, marked_knowledge: Boolean(markedKnowledge) })
-    .select('id')
-    .single();
+  let row = { ...payload, marked_knowledge: Boolean(markedKnowledge) };
+  if (verify) row.verify_report = verify;
 
-  if (error && /marked_knowledge/i.test(error.message || '')) {
-    ({ data, error } = await sb.from('chat_logs').insert(payload).select('id').single());
+  let { data, error } = await sb.from('chat_logs').insert(row).select('id').single();
+
+  if (error && /marked_knowledge|verify_report/i.test(error.message || '')) {
+    row = { ...payload, marked_knowledge: Boolean(markedKnowledge) };
+    if (verify && /verify_report/i.test(error.message || '')) {
+      row.tags = { verify };
+      delete row.verify_report;
+    } else if (/marked_knowledge/i.test(error.message || '')) {
+      delete row.marked_knowledge;
+    }
+    ({ data, error } = await sb.from('chat_logs').insert(row).select('id').single());
+  }
+
+  if (error && verify && !row.tags) {
+    ({ data, error } = await sb
+      .from('chat_logs')
+      .insert({ ...payload, tags: { verify } })
+      .select('id')
+      .single());
   }
 
   if (error) {
@@ -113,40 +146,88 @@ async function insertChatLog({ userSession, question, citationsUsed = [], answer
   return { ok: true, id: data?.id };
 }
 
+async function updateChatLogFeedback(id, { rating, sessionId } = {}) {
+  const sb = getSupabase();
+  if (!sb) return { ok: false, skipped: true, reason: 'Supabase chưa cấu hình' };
+  const logId = String(id || '').trim();
+  const norm = rating === 'up' || rating === 'down' ? rating : null;
+  if (!logId || !norm) return { ok: false, error: 'Thiếu logId hoặc rating' };
+
+  const { data: cur, error: readErr } = await sb
+    .from('chat_logs')
+    .select('id,user_session,tags')
+    .eq('id', logId)
+    .maybeSingle();
+  if (readErr) {
+    console.warn('[supabase] updateChatLogFeedback read:', readErr.message);
+    return { ok: false, error: readErr.message };
+  }
+  if (!cur) return { ok: false, error: 'Không tìm thấy lượt chat' };
+
+  const sid = String(sessionId || '').trim();
+  if (
+    sid &&
+    cur.user_session &&
+    cur.user_session !== 'anonymous' &&
+    cur.user_session !== sid
+  ) {
+    return { ok: false, error: 'Không khớp phiên' };
+  }
+
+  const prevTags =
+    cur.tags && typeof cur.tags === 'object' && !Array.isArray(cur.tags) ? cur.tags : {};
+  const tags = {
+    ...prevTags,
+    feedback: norm,
+    feedback_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await sb
+    .from('chat_logs')
+    .update({ tags })
+    .eq('id', logId)
+    .select('id')
+    .maybeSingle();
+  if (error) {
+    console.warn('[supabase] updateChatLogFeedback:', error.message);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true, id: data?.id, rating: norm };
+}
+
 async function listChatLogs({ sessionId, limit = 40, knowledgeOnly = false } = {}) {
   const sb = getSupabase();
   if (!sb) return { ok: true, source: 'none', items: [] };
 
-  let query = sb
-    .from('chat_logs')
-    .select('id,user_session,question,answer,citations_used,created_at,marked_knowledge')
-    .order('created_at', { ascending: false })
-    .limit(limit);
+  const selectVariants = [
+    'id,user_session,question,answer,citations_used,created_at,marked_knowledge,verify_report,tags',
+    'id,user_session,question,answer,citations_used,created_at,marked_knowledge,tags',
+    'id,user_session,question,answer,citations_used,created_at,marked_knowledge',
+    'id,user_session,question,answer,citations_used,created_at',
+  ];
 
-  if (sessionId) query = query.eq('user_session', sessionId);
-  if (knowledgeOnly) query = query.eq('marked_knowledge', true);
+  let lastError = null;
+  for (const cols of selectVariants) {
+    if (knowledgeOnly && !cols.includes('marked_knowledge')) continue;
 
-  const { data, error } = await query;
-  if (error) {
-    // cột marked_knowledge chưa có
-    if (/marked_knowledge/i.test(error.message || '')) {
-      let q2 = sb
-        .from('chat_logs')
-        .select('id,user_session,question,answer,citations_used,created_at')
-        .order('created_at', { ascending: false })
-        .limit(limit);
-      if (sessionId) q2 = q2.eq('user_session', sessionId);
-      const retry = await q2;
-      if (retry.error) {
-        console.warn('[supabase] listChatLogs:', retry.error.message);
-        return { ok: false, items: [], error: retry.error.message };
-      }
-      return { ok: true, source: 'supabase', items: retry.data || [] };
-    }
-    console.warn('[supabase] listChatLogs:', error.message);
-    return { ok: false, items: [], error: error.message };
+    let query = sb
+      .from('chat_logs')
+      .select(cols)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (sessionId) query = query.eq('user_session', sessionId);
+    if (knowledgeOnly) query = query.eq('marked_knowledge', true);
+
+    const { data, error } = await query;
+    if (!error) return { ok: true, source: 'supabase', items: data || [] };
+
+    lastError = error;
+    if (!/verify_report|marked_knowledge|tags/i.test(error.message || '')) break;
   }
-  return { ok: true, source: 'supabase', items: data || [] };
+
+  console.warn('[supabase] listChatLogs:', lastError?.message || 'unknown');
+  return { ok: false, items: [], error: lastError?.message || 'listChatLogs failed' };
 }
 
 async function getChatLog(id) {
@@ -549,6 +630,7 @@ module.exports = {
   uploadPdfToStorage,
   uploadFileToStorage,
   insertChatLog,
+  updateChatLogFeedback,
   listChatLogs,
   getChatLog,
   markChatKnowledge,

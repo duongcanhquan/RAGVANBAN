@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronDown, FolderTree, X } from 'lucide-react'
 import { apiUrl } from '../lib/apiBase'
+import { cachedJson } from '../lib/apiCache'
 
 function walkCheck(nodes, depth, selected, toggle, disabled) {
   return (nodes || []).map((n) => {
@@ -41,8 +42,7 @@ export default function CategoryScopePicker({ selectedIds, onChange, disabled = 
   const selected = useMemo(() => new Set(selectedIds || []), [selectedIds])
 
   useEffect(() => {
-    fetch(apiUrl('/api/library/categories'))
-      .then((r) => r.json())
+    cachedJson(apiUrl('/api/library/categories'))
       .then((d) => {
         setTree(d.tree || [])
         setItems(d.items || [])

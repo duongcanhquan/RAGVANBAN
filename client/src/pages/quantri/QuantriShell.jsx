@@ -12,7 +12,7 @@ export default function QuantriShell() {
   const [session, setSession] = useState(null)
   const [me, setMe] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [email, setEmail] = useState('quan.duong@caodangvietmy.edu.vn')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)

@@ -1,7 +1,9 @@
 /**
  * POST /api/upload          — multipart file (PDF/DOC/PPT/ảnh/text)
  * POST /api/upload/text     — JSON { text, title? }
- * POST /api/upload/url      — JSON { url } website tham khảo
+ * POST /api/upload/drive    — JSON { url } Google Drive (file/folder)
+ * POST /api/upload/web      — JSON { url } trang web tham khảo (1+ URL)
+ * POST /api/upload/url      — JSON { url } tự nhận Drive hoặc web (legacy)
  * SSE progress trên mọi endpoint.
  */
 
@@ -16,7 +18,7 @@ const {
   isAllowedUpload,
   guessContentType,
 } = require('../ingestion/extractAnyText');
-const { extractWebPage } = require('../ingestion/extractWebPage');
+const { extractWebPage, webCatalogFileName } = require('../ingestion/extractWebPage');
 const { ensureBrain, liveKeysReport, brainNotReadyMessage } = require('../services/clients');
 const { assertCanUseCategory } = require('../services/adminAccess');
 const { parseDriveResource, inspectDriveResource } = require('../services/googleDrive');
@@ -30,6 +32,7 @@ const {
   fileFingerprint,
   decideDuplicate,
   duplicateMessage,
+  textFingerprint,
 } = require('../services/documentDedup');
 
 const router = express.Router();
@@ -310,122 +313,323 @@ router.post('/text', async (req, res) => {
   });
 });
 
-router.post('/url', async (req, res) => {
+function splitUrlParts(raw) {
+  return String(raw || '')
+    .trim()
+    .split(/[\s,;]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+async function ingestDriveUrls(parts, ctx) {
+  const { categoryId, displayName, description, req, closed, progress } = ctx;
+  const flags = await getFlags();
+  if (!flags.driveEnabled) {
+    throw Object.assign(new Error('Google Drive đang tắt trong Cài đặt'), { status: 403 });
+  }
+  const driveParts = parts.map((p) => ({ raw: p, parsed: parseDriveResource(p) }));
+  const bad = driveParts.filter((p) => !p.parsed);
+  if (bad.length) {
+    throw Object.assign(
+      new Error(
+        `Không phải link Google Drive: ${bad[0].raw}. Trang web dùng tab Link Website.`
+      ),
+      { status: 400 }
+    );
+  }
+
+  const items = [];
+  for (let i = 0; i < driveParts.length; i += 1) {
+    const { raw: link, parsed: parsedRaw } = driveParts[i];
+    const parsed = await inspectDriveResource(parsedRaw);
+    progress({
+      stage: 'drive',
+      percent: Math.round((i / driveParts.length) * 90),
+      message: `Drive ${i + 1}/${driveParts.length}: ${parsed?.name || link}`,
+    });
+    if (parsed.type === 'folder') {
+      const folderResult = await syncDriveFolder({
+        folderId: parsed.id,
+        limit: Number(req.body?.limit) || 40,
+        categoryId,
+        onProgress: (p) => {
+          if (!closed()) progress(p);
+        },
+      });
+      items.push({
+        type: 'folder',
+        link,
+        folderId: parsed.id,
+        webViewLink: parsed.webViewLink || `https://drive.google.com/drive/folders/${parsed.id}`,
+        ...folderResult,
+      });
+    } else {
+      const one = await ingestDriveFile(parsed.id, {
+        categoryId,
+        displayName: displayName || parsed.name || undefined,
+        description: description || undefined,
+        onProgress: (p) => {
+          if (!closed()) progress(p);
+        },
+      });
+      items.push({
+        type: 'file',
+        link,
+        ...one,
+        driveWebViewLink: one.driveWebViewLink || parsed.webViewLink || link,
+      });
+    }
+  }
+  const summary = summarizeDriveUrlJob(items);
+  return {
+    source: 'google_drive',
+    count: items.length,
+    items,
+    ...summary,
+    skipped:
+      items.reduce((n, it) => n + (typeof it.skipped === 'number' ? it.skipped : 0), 0) +
+      Number(summary.skippedDuplicates || 0),
+    pending: items.reduce((n, it) => n + Number(it.pending || 0), 0),
+  };
+}
+
+async function ingestWebUrls(parts, ctx) {
+  const { categoryId, displayName, description, closed, progress } = ctx;
+  const items = [];
+  for (let i = 0; i < parts.length; i += 1) {
+    const url = parts[i];
+    if (parseDriveResource(url)) {
+      throw Object.assign(
+        new Error('Link Google Drive không dùng ở đây — chuyển sang tab Google Drive.'),
+        { status: 400 }
+      );
+    }
+    progress({
+      stage: 'fetch',
+      percent: Math.round(5 + (i / parts.length) * 15),
+      message: `Đang tải trang ${i + 1}/${parts.length}…`,
+    });
+    try {
+      const page = await extractWebPage(url);
+      progress({
+        stage: 'fetch',
+        percent: Math.round(20 + (i / parts.length) * 60),
+        message: page.official
+          ? `Trang chính thống (${page.host}) — ${page.title}`
+          : `Trang tham khảo (${page.host}) — ${page.title}`,
+        official: page.official,
+      });
+
+      const fp = textFingerprint(page.text, page.url);
+      const [byHash, byName] = await Promise.all([
+        getDocumentByContentHash(fp.sha256),
+        getDocumentByFileName(webCatalogFileName(page)),
+      ]);
+      const decision = decideDuplicate(fp, {
+        byHash: byHash.item || null,
+        byName: byName.item || null,
+      });
+      if (decision.action === 'reuse' && decision.document) {
+        const doc = decision.document;
+        items.push({
+          ok: true,
+          type: 'web',
+          link: url,
+          duplicate: true,
+          skipped: true,
+          id: doc.id,
+          fileName: doc.file_name,
+          displayName: doc.display_name || doc.file_name,
+          sourceUrl: page.url,
+          pageTitle: page.title,
+          message: duplicateMessage(doc),
+        });
+        continue;
+      }
+
+      const fileName = webCatalogFileName(page);
+      const replaceDocumentId =
+        decision.action === 'replace' && decision.document ? decision.document.id : null;
+      const useDisplayName =
+        parts.length === 1 ? displayName || page.title || undefined : page.title || undefined;
+      const result = await ingestTextContent(page.text, {
+        fileName,
+        publicUrl: page.url,
+        source: page.official ? 'web_official' : 'web',
+        sourceKind: 'web',
+        mimeType: 'text/html',
+        categoryId,
+        displayName: useDisplayName,
+        description: description || undefined,
+        contentSha256: fp.sha256,
+        byteSize: fp.byteSize,
+        replaceDocumentId,
+        webHost: page.host,
+        webOfficial: page.official,
+        sourceUrl: page.url,
+        onProgress: (p) => {
+          if (!closed()) progress(p);
+        },
+      });
+      items.push({
+        ok: true,
+        type: 'web',
+        link: url,
+        ...result,
+        official: page.official,
+        sourceUrl: page.url,
+        pageTitle: page.title,
+      });
+    } catch (e) {
+      items.push({ ok: false, type: 'web', link: url, error: e.message || String(e) });
+    }
+  }
+  const failed = items.filter((it) => it.ok === false).length;
+  return {
+    source: 'web',
+    count: items.length,
+    items,
+    files: items.filter((it) => it.id),
+    failed,
+  };
+}
+
+async function ingestWebPageSingle(url, ctx) {
+  const [payload] = (await ingestWebUrls([url], ctx)).items;
+  if (!payload?.ok && payload?.error) {
+    throw Object.assign(new Error(payload.error), { status: 400 });
+  }
+  return payload;
+}
+
+function parseUploadUrlBody(req) {
   const raw = String(req.body?.url || '').trim();
   const categoryId = String(req.body?.categoryId || '').trim() || null;
   const displayName = String(req.body?.displayName || req.body?.title || '').trim();
   const description = String(req.body?.description || req.body?.moTa || '').trim();
   if (!raw) {
-    res.status(400).json({ error: 'Thiếu url' });
+    throw Object.assign(new Error('Thiếu url'), { status: 400 });
+  }
+  return { raw, categoryId, displayName, description, parts: splitUrlParts(raw) };
+}
+
+router.post('/drive', async (req, res) => {
+  let parsed;
+  try {
+    parsed = parseUploadUrlBody(req);
+  } catch (e) {
+    res.status(e.status || 400).json({ error: e.message });
     return;
   }
   if (!(await requireLiveKeys(res))) return;
   try {
-    assertCanUseCategory(req.admin, categoryId);
+    assertCanUseCategory(req.admin, parsed.categoryId);
   } catch (e) {
     res.status(e.status || 403).json({ error: e.message });
     return;
   }
 
-  const parts = raw.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
-  const driveParts = parts.map((p) => ({ raw: p, parsed: parseDriveResource(p) }));
+  await runWithSse(req, res, async ({ closed, progress, done }) => {
+    const payload = await ingestDriveUrls(parsed.parts, {
+      categoryId: parsed.categoryId,
+      displayName: parsed.displayName,
+      description: parsed.description,
+      req,
+      closed,
+      progress,
+    });
+    done(payload);
+  });
+});
+
+router.post('/web', async (req, res) => {
+  let parsed;
+  try {
+    parsed = parseUploadUrlBody(req);
+  } catch (e) {
+    res.status(e.status || 400).json({ error: e.message });
+    return;
+  }
+  if (!(await requireLiveKeys(res))) return;
+  try {
+    assertCanUseCategory(req.admin, parsed.categoryId);
+  } catch (e) {
+    res.status(e.status || 403).json({ error: e.message });
+    return;
+  }
+
+  await runWithSse(req, res, async ({ closed, progress, done }) => {
+    const payload = await ingestWebUrls(parsed.parts, {
+      categoryId: parsed.categoryId,
+      displayName: parsed.displayName,
+      description: parsed.description,
+      closed,
+      progress,
+    });
+    if (payload.failed === payload.count) {
+      throw Object.assign(new Error(payload.items[0]?.error || 'Không số hóa được trang web nào'), {
+        status: 400,
+      });
+    }
+    done(payload);
+  });
+});
+
+router.post('/url', async (req, res) => {
+  let parsed;
+  try {
+    parsed = parseUploadUrlBody(req);
+  } catch (e) {
+    res.status(e.status || 400).json({ error: e.message });
+    return;
+  }
+  if (!(await requireLiveKeys(res))) return;
+  try {
+    assertCanUseCategory(req.admin, parsed.categoryId);
+  } catch (e) {
+    res.status(e.status || 403).json({ error: e.message });
+    return;
+  }
+
+  const driveParts = parsed.parts.map((p) => ({ raw: p, parsed: parseDriveResource(p) }));
   const allDrive = driveParts.every((p) => p.parsed);
 
   await runWithSse(req, res, async ({ closed, progress, done }) => {
     if (allDrive) {
-      const flags = await getFlags();
-      if (!flags.driveEnabled) {
-        throw Object.assign(new Error('Google Drive đang tắt trong Cài đặt'), { status: 403 });
-      }
-      const items = [];
-      for (let i = 0; i < driveParts.length; i += 1) {
-        const { raw: link, parsed: parsedRaw } = driveParts[i];
-        const parsed = await inspectDriveResource(parsedRaw);
-        progress({
-          stage: 'drive',
-          percent: Math.round((i / driveParts.length) * 90),
-          message: `Drive ${i + 1}/${driveParts.length}: ${parsed?.name || link}`,
-        });
-        if (parsed.type === 'folder') {
-          const folderResult = await syncDriveFolder({
-            folderId: parsed.id,
-            limit: Number(req.body?.limit) || 40,
-            categoryId,
-            onProgress: (p) => {
-              if (!closed()) progress(p);
-            },
-          });
-          items.push({
-            type: 'folder',
-            link,
-            folderId: parsed.id,
-            webViewLink: parsed.webViewLink || `https://drive.google.com/drive/folders/${parsed.id}`,
-            ...folderResult,
-          });
-        } else {
-          const one = await ingestDriveFile(parsed.id, {
-            categoryId,
-            displayName: displayName || parsed.name || undefined,
-            description: description || undefined,
-            onProgress: (p) => {
-              if (!closed()) progress(p);
-            },
-          });
-          items.push({
-            type: 'file',
-            link,
-            ...one,
-            driveWebViewLink: one.driveWebViewLink || parsed.webViewLink || link,
-          });
-        }
-      }
-      const summary = summarizeDriveUrlJob(items);
-      done({
-        source: 'google_drive',
-        count: items.length,
-        items,
-        ...summary,
-        skipped:
-          items.reduce((n, it) => n + (typeof it.skipped === 'number' ? it.skipped : 0), 0) +
-          Number(summary.skippedDuplicates || 0),
-        pending: items.reduce((n, it) => n + Number(it.pending || 0), 0),
-      });
+      done(
+        await ingestDriveUrls(parsed.parts, {
+          categoryId: parsed.categoryId,
+          displayName: parsed.displayName,
+          description: parsed.description,
+          req,
+          closed,
+          progress,
+        })
+      );
       return;
     }
 
-    const url = parts[0];
-    progress({ stage: 'fetch', percent: 8, message: 'Đang tải trang web…' });
-    const page = await extractWebPage(url);
-    progress({
-      stage: 'fetch',
-      percent: 20,
-      message: page.official
-        ? `Trang chính thống (${page.host}) — ${page.title}`
-        : `Trang tham khảo (${page.host}) — chưa xác nhận .gov.vn`,
-      official: page.official,
-    });
+    if (parsed.parts.length > 1) {
+      done(
+        await ingestWebUrls(parsed.parts, {
+          categoryId: parsed.categoryId,
+          displayName: parsed.displayName,
+          description: parsed.description,
+          closed,
+          progress,
+        })
+      );
+      return;
+    }
 
-    const fileName = `${(page.title || 'web').slice(0, 80).replace(/[\\/:*?"<>|]/g, '_')}.web.txt`;
-    const result = await ingestTextContent(page.text, {
-      fileName,
-      publicUrl: page.url,
-      source: page.official ? 'web_official' : 'web',
-      sourceKind: 'web',
-      mimeType: 'text/html',
-      categoryId,
-      displayName: displayName || page.title || undefined,
-      description: description || undefined,
-      onProgress: (p) => {
-        if (!closed()) progress(p);
-      },
+    const result = await ingestWebPageSingle(parsed.parts[0], {
+      categoryId: parsed.categoryId,
+      displayName: parsed.displayName,
+      description: parsed.description,
+      closed,
+      progress,
     });
-
-    done({
-      ...result,
-      official: page.official,
-      sourceUrl: page.url,
-      pageTitle: page.title,
-    });
+    done(result);
   });
 });
 

@@ -10,7 +10,7 @@ const {
   DEFAULT_SKILLS,
   slugify,
 } = require('../src/services/skillStore');
-const { isWeakAnswer, clusterKey, proposeLessons } = require('../src/services/learnLoop');
+const { isWeakAnswer, clusterKey, proposeLessons, pickBestAnswer } = require('../src/services/learnLoop');
 
 let passed = 0;
 let failed = 0;
@@ -81,6 +81,27 @@ test('isWeakAnswer bắt câu không tìm thấy', () => {
   );
 });
 
+test('isWeakAnswer bắt verify_report.ok === false', () => {
+  assert.equal(
+    isWeakAnswer({
+      question: 'x',
+      answer: 'Thời hạn là 99 năm.',
+      citations_used: [{ url: 'https://a' }],
+      verify_report: { ok: false, unverifiedDurations: 1 },
+    }),
+    true
+  );
+  assert.equal(
+    isWeakAnswer({
+      question: 'x',
+      answer: 'Theo Điều 5.',
+      citations_used: [{ url: 'https://a' }],
+      tags: { verify: { ok: true } },
+    }),
+    false
+  );
+});
+
 test('proposeLessons gom câu hỏi yếu thành bài mẫu', () => {
   const logs = [
     { question: 'Hồ sơ cấp lại CCCD gồm gì?', answer: 'Không tìm thấy trong kho', citations_used: [] },
@@ -91,6 +112,44 @@ test('proposeLessons gom câu hỏi yếu thành bài mẫu', () => {
   assert.ok(suggestions.some((s) => s.kind === 'scenario'));
   const key = clusterKey('Hồ sơ cấp lại CCCD gồm gì?');
   assert.ok(key.includes('cccd') || key.includes('hoso') || key.length > 3);
+});
+
+test('isWeakAnswer bắt feedback down từ người dùng', () => {
+  assert.equal(
+    isWeakAnswer({
+      question: 'x',
+      answer: 'Câu trả lời dài có nguồn.',
+      citations_used: [{ url: 'https://a' }],
+      tags: { feedback: 'down' },
+    }),
+    true
+  );
+});
+
+test('pickBestAnswer ưu tiên feedback up', () => {
+  const best = pickBestAnswer([
+    { answer: 'Không tìm thấy', citations_used: [] },
+    {
+      answer: 'Theo quy định cần đơn và CMND.',
+      citations_used: [{ url: 'https://a' }],
+      verify_report: { ok: true },
+    },
+  ]);
+  assert.match(best, /đơn và CMND/);
+});
+
+test('proposeLessons gắn sampleAnswer cho bài mẫu', () => {
+  const logs = [
+    { question: 'Hồ sơ cấp lại CCCD gồm gì?', answer: 'Không tìm thấy', citations_used: [] },
+    {
+      question: 'Cấp lại CCCD cần gì?',
+      answer: 'Chưa có căn cứ chi tiết trong kho về hồ sơ cấp lại.',
+      citations_used: [],
+    },
+  ];
+  const { suggestions } = proposeLessons(logs, { skills: DEFAULT_SKILLS, scenarios: [] });
+  const scenario = suggestions.find((s) => s.kind === 'scenario');
+  assert.ok(scenario?.sampleAnswer?.includes('Chưa có căn cứ'));
 });
 
 console.log(`\nKết quả: ${passed} passed, ${failed} failed`);

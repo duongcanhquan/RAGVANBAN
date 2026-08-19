@@ -106,6 +106,9 @@ async function ingestTextContent(text, options = {}) {
   }
   metadata.nguon_loai = sourceKind;
   metadata.mime_type = mimeType;
+  if (options.webHost) metadata.web_host = String(options.webHost);
+  if (options.webOfficial != null) metadata.web_official = Boolean(options.webOfficial);
+  if (options.sourceUrl) metadata.source_url = String(options.sourceUrl);
   if (options.pageCountHint) metadata.page_count = Number(options.pageCountHint) || 0;
 
   progress(onProgress, 'chunk', 50, 'Đang chunk văn bản…');

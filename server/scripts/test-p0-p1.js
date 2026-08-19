@@ -211,6 +211,17 @@ Bãi bỏ Nghị định số 99/2015/NĐ-CP.
     assert.strictEqual(ok.trang_thai, 'Hết hiệu lực');
   });
 
+  test('normalizeCatalogPatch nhận replacement và van_ban_thay_the', () => {
+    const p = normalizeCatalogPatch({
+      replacementDocId: 'uuid-rep',
+      replacementUrl: 'https://example.com/rep.pdf',
+      vanBanThayThe: '01/2024/NĐ-CP, 02/2024/NĐ-CP',
+    });
+    assert.strictEqual(p.replacement_doc_id, 'uuid-rep');
+    assert.strictEqual(p.replacement_url, 'https://example.com/rep.pdf');
+    assert.deepStrictEqual(p.van_ban_thay_the, ['01/2024/NĐ-CP', '02/2024/NĐ-CP']);
+  });
+
   test('normalizeRag onlyActiveDefault=false được giữ', () => {
     const r = normalizeRag({ onlyActiveDefault: false, topK: 8, maxPerDoc: 3, maxTotal: 10 });
     assert.strictEqual(r.onlyActiveDefault, false);

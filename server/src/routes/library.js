@@ -63,7 +63,6 @@ function localPdfNodes() {
           storage_url: null,
           source: 'local',
           category_id: catMap[id] || null,
-          path: abs,
         });
       }
     } catch {
@@ -90,6 +89,10 @@ function normalizeDoc(d, catMap, flatCategories) {
     so_hieu: hydrated.so_hieu,
     loai_van_ban: hydrated.loai_van_ban || hydrated.metadata?.loai_van_ban || null,
     trang_thai: hydrated.trang_thai || hydrated.metadata?.trang_thai || null,
+    van_ban_thay_the: hydrated.van_ban_thay_the || [],
+    replacement_doc_id: hydrated.replacement_doc_id || null,
+    replacement_label: hydrated.replacement_label || null,
+    replacement_url: hydrated.replacement_url || null,
     storage_url: hydrated.storage_url,
     drive_web_view_link: hydrated.drive_web_view_link || null,
     chunk_count: hydrated.chunk_count,

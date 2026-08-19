@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronDown, Lightbulb, Search } from 'lucide-react'
 import { apiUrl } from '../lib/apiBase'
+import { cachedJson } from '../lib/apiCache'
 
 /**
  * Trang ngoài: xem Q&A có sẵn theo hạng mục + tìm kiếm. Không hỏi AI.
@@ -40,13 +41,10 @@ export default function ScenariosPage() {
       const qs = new URLSearchParams({ limit: '200' })
       if (q.trim()) qs.set('q', q.trim())
       if (categoryId) qs.set('categoryId', categoryId)
-      const [scRes, catRes] = await Promise.all([
-        fetch(apiUrl(`/api/scenarios?${qs}`)),
-        fetch(apiUrl('/api/library/categories')),
+      const [sc, cat] = await Promise.all([
+        cachedJson(apiUrl(`/api/scenarios?${qs}`)),
+        cachedJson(apiUrl('/api/library/categories')),
       ])
-      const sc = await scRes.json().catch(() => ({}))
-      const cat = await catRes.json().catch(() => ({}))
-      if (!scRes.ok) throw new Error(sc.error || 'Không tải được tình huống')
       setItems(sc.items || [])
       setCats(cat.items || [])
     } catch (e) {
@@ -71,9 +69,6 @@ export default function ScenariosPage() {
         <h1 className="m-0 text-xl font-semibold text-[var(--hcc-ink)] sm:text-2xl">
           Hỏi đáp có sẵn theo hạng mục
         </h1>
-        <p className="m-0 mt-1 text-sm text-[var(--hcc-muted)]">
-          Chọn danh mục hoặc gõ tìm. Đây là mẫu Q&A do nhà trường soạn — không sinh bằng AI.
-        </p>
       </header>
 
       <div className="relative mb-3">
@@ -145,7 +140,15 @@ export default function ScenariosPage() {
             <li key={s.id} className="glass-panel overflow-hidden rounded-2xl">
               <button
                 type="button"
-                onClick={() => setOpenId(expanded ? '' : s.id)}
+                onClick={() => {
+                  const next = expanded ? '' : s.id
+                  setOpenId(next)
+                  if (!expanded && s.id) {
+                    fetch(apiUrl(`/api/scenarios/${encodeURIComponent(s.id)}/use`), {
+                      method: 'POST',
+                    }).catch(() => {})
+                  }
+                }}
                 className="flex min-h-11 w-full cursor-pointer items-start gap-2 px-4 py-3 text-left"
               >
                 <div className="min-w-0 flex-1">

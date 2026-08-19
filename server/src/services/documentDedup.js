@@ -13,6 +13,12 @@ function fileFingerprint(buffer) {
   return { sha256: sha256Buffer(buf), byteSize: buf.length };
 }
 
+/** Hash nội dung text + URL (website / dán tay) để dedup giống file upload. */
+function textFingerprint(text, url = '') {
+  const payload = `${String(url || '').trim()}\n${String(text || '')}`;
+  return fileFingerprint(Buffer.from(payload, 'utf8'));
+}
+
 function existingContentHash(doc) {
   if (!doc) return '';
   return String(doc.content_sha256 || doc.metadata?.content_sha256 || '')
@@ -48,6 +54,7 @@ function duplicateMessage(doc) {
 module.exports = {
   sha256Buffer,
   fileFingerprint,
+  textFingerprint,
   existingContentHash,
   decideDuplicate,
   duplicateMessage,

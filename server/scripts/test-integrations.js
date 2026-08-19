@@ -67,3 +67,41 @@ test('policy app_settings không đọc secret cho anon', () => {
   );
   assert.match(setup, /key = 'quick_keywords'/);
 });
+
+test('index.js import isR2Configured cho /api/health', () => {
+  const src = require('fs').readFileSync(
+    require('path').resolve(__dirname, '../src/index.js'),
+    'utf8'
+  );
+  assert.match(src, /require\('\.\/services\/r2'\)/);
+  assert.match(src, /isR2Configured/);
+  assert.match(src, /\/api\/health/);
+});
+
+test('chat feedback route và logId trong SSE done', () => {
+  const src = require('fs').readFileSync(
+    require('path').resolve(__dirname, '../src/routes/chat.js'),
+    'utf8'
+  );
+  assert.match(src, /router\.post\('\/feedback'/);
+  assert.match(src, /logId:\s*logRow\?\.id/);
+});
+
+test('cron local không chấp nhận chỉ x-vercel-cron khi thiếu CRON_SECRET', () => {
+  const { cronAuthorizedForTest } = require('../src/routes/cron');
+  const prevSecret = process.env.CRON_SECRET;
+  const prevVercel = process.env.VERCEL;
+  delete process.env.CRON_SECRET;
+  delete process.env.VERCEL;
+  try {
+    assert.equal(
+      cronAuthorizedForTest({ headers: { 'x-vercel-cron': '1' } }),
+      false
+    );
+  } finally {
+    if (prevSecret !== undefined) process.env.CRON_SECRET = prevSecret;
+    else delete process.env.CRON_SECRET;
+    if (prevVercel !== undefined) process.env.VERCEL = prevVercel;
+    else delete process.env.VERCEL;
+  }
+});

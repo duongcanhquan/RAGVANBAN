@@ -17,6 +17,20 @@ const { invalidateSessionCache } = require('./sessionSearchCache');
 const { compactSoHieu } = require('../ingestion/legalChunker');
 const { VALID_TRANG_THAI } = require('../ingestion/extractMetadata');
 
+function parseVanBanThayThe(input) {
+  if (input === undefined) return undefined;
+  if (Array.isArray(input)) {
+    return input.map((x) => compactSoHieu(String(x))).filter(Boolean);
+  }
+  if (typeof input === 'string') {
+    return input
+      .split(',')
+      .map((s) => compactSoHieu(s.trim()))
+      .filter(Boolean);
+  }
+  return [];
+}
+
 function normalizeCatalogPatch(body = {}) {
   const patch = {};
   const soRaw = body.so_hieu ?? body.soHieu;
@@ -31,6 +45,18 @@ function normalizeCatalogPatch(body = {}) {
     const s = String(status || '').trim();
     if (VALID_TRANG_THAI.has(s)) patch.trang_thai = s;
   }
+  const replacementDocId = body.replacement_doc_id ?? body.replacementDocId;
+  if (replacementDocId !== undefined) {
+    patch.replacement_doc_id = String(replacementDocId || '').trim() || null;
+  }
+  const replacementUrl = body.replacement_url ?? body.replacementUrl;
+  if (replacementUrl !== undefined) {
+    patch.replacement_url = String(replacementUrl || '').trim() || null;
+  }
+  const vanBanThayThe = body.van_ban_thay_the ?? body.vanBanThayThe;
+  if (vanBanThayThe !== undefined) {
+    patch.van_ban_thay_the = parseVanBanThayThe(vanBanThayThe);
+  }
   const fileName = body.file_name ?? body.fileName;
   if (fileName !== undefined) patch.file_name = String(fileName || '').trim() || undefined;
   const displayName = body.display_name ?? body.displayName;
@@ -41,6 +67,45 @@ function normalizeCatalogPatch(body = {}) {
     patch.sort_order = body.sort_order ?? body.sortOrder;
   }
   return patch;
+}
+
+async function mergeValidityMetadata(found, catalog) {
+  const touched =
+    catalog.trang_thai !== undefined ||
+    catalog.replacement_doc_id !== undefined ||
+    catalog.replacement_url !== undefined ||
+    catalog.van_ban_thay_the !== undefined;
+  if (!touched) return null;
+
+  const meta = {};
+  if (catalog.trang_thai !== undefined) meta.trang_thai = catalog.trang_thai;
+
+  if (catalog.replacement_doc_id !== undefined) {
+    if (catalog.replacement_doc_id) {
+      const rep = await getDocument(catalog.replacement_doc_id);
+      if (rep.ok && rep.item) {
+        const r = rep.item;
+        meta.replacement_doc_id = catalog.replacement_doc_id;
+        meta.replacement_label = r.display_name || r.file_name || '';
+        meta.replacement_url =
+          catalog.replacement_url ||
+          r.storage_url ||
+          r.drive_web_view_link ||
+          r.metadata?.link_goc ||
+          '';
+        if (r.so_hieu) meta.van_ban_thay_the = [compactSoHieu(r.so_hieu)];
+      }
+    } else {
+      meta.replacement_doc_id = null;
+      meta.replacement_label = null;
+      if (catalog.replacement_url === undefined) meta.replacement_url = null;
+    }
+  }
+
+  if (catalog.replacement_url !== undefined) meta.replacement_url = catalog.replacement_url;
+  if (catalog.van_ban_thay_the !== undefined) meta.van_ban_thay_the = catalog.van_ban_thay_the;
+
+  return meta;
 }
 
 function assertCanTouchDoc(admin, doc) {
@@ -147,9 +212,11 @@ async function patchDocument(admin, id, body) {
 
   const catalog = normalizeCatalogPatch(body);
   if (Object.keys(catalog).length) {
-    if (catalog.display_name !== undefined || catalog.mo_ta !== undefined) {
+    const validityMeta = await mergeValidityMetadata(found, catalog);
+    if (catalog.display_name !== undefined || catalog.mo_ta !== undefined || validityMeta) {
       catalog.metadata = {
         ...(found.item.metadata || {}),
+        ...(validityMeta || {}),
         ...(catalog.display_name !== undefined ? { display_name: catalog.display_name } : {}),
         ...(catalog.mo_ta !== undefined ? { mo_ta: catalog.mo_ta } : {}),
       };
@@ -164,11 +231,15 @@ async function patchDocument(admin, id, body) {
   }
 
   const next = found.item;
+  const nextMeta = next.metadata || {};
   const metaChanged =
     catalog.so_hieu !== undefined ||
     catalog.trang_thai !== undefined ||
     catalog.file_name !== undefined ||
     catalog.loai_van_ban !== undefined ||
+    catalog.replacement_doc_id !== undefined ||
+    catalog.replacement_url !== undefined ||
+    catalog.van_ban_thay_the !== undefined ||
     categoryChanged;
   let pinecone = { skipped: true };
   if (metaChanged) {
@@ -185,6 +256,10 @@ async function patchDocument(admin, id, body) {
           category_id: next.category_id || categoryId || '',
           document_id: next.id,
           folder_path: next.folder_path || folderPath || '',
+          van_ban_thay_the: nextMeta.van_ban_thay_the || [],
+          replacement_url: nextMeta.replacement_url || '',
+          replacement_doc_id: nextMeta.replacement_doc_id || '',
+          replacement_label: nextMeta.replacement_label || '',
         },
         {
           pinecone: getPinecone(),

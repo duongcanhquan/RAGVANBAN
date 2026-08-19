@@ -22,6 +22,7 @@ const cronRouter = require('./routes/cron');
 const { requireAdmin } = require('./middleware/requireAdmin');
 const { hasLiveKeys, listAvailableProviders, ensureBrain } = require('./services/clients');
 const { isConfigured: isSupabaseConfigured } = require('./services/supabase');
+const { isR2Configured } = require('./services/r2');
 const { publicErrorMessage } = require('./services/publicError');
 
 const app = express();

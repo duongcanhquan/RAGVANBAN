@@ -31,6 +31,13 @@ function defaultRag() {
     chunkOverlap: clampInt(process.env.CHUNK_OVERLAP, 0, 800, 150),
     onlyActiveDefault: true,
     skipIntentLlmWhenAnchored: true,
+    crossEncoderRerank: process.env.CROSS_ENCODER_RERANK !== '0',
+    crossEncoderTopN: clampInt(process.env.CROSS_ENCODER_TOP_N, 8, 40, 24),
+    crossEncoderWeight: (() => {
+      const w = Number(process.env.CROSS_ENCODER_WEIGHT)
+      return Number.isFinite(w) ? Math.min(0.35, Math.max(0.05, w)) : 0.18
+    })(),
+    useCohereRerank: process.env.COHERE_RERANK === '1',
     ocrLangs: String(process.env.OCR_LANGS || 'vie+eng').slice(0, 40),
     uploadMaxBytes: clampInt(
       process.env.UPLOAD_MAX_BYTES,
@@ -58,6 +65,27 @@ function normalizeRag(input = {}) {
     onlyActiveDefault: input.onlyActiveDefault !== false && input.only_active_default !== false,
     skipIntentLlmWhenAnchored:
       input.skipIntentLlmWhenAnchored !== false && input.skip_intent_llm_when_anchored !== false,
+    crossEncoderRerank:
+      input.crossEncoderRerank !== false &&
+      input.cross_encoder_rerank !== false &&
+      process.env.CROSS_ENCODER_RERANK !== '0',
+    crossEncoderTopN: clampInt(
+      input.crossEncoderTopN ?? input.cross_encoder_top_n,
+      8,
+      40,
+      base.crossEncoderTopN
+    ),
+    crossEncoderWeight: Math.min(
+      0.35,
+      Math.max(
+        0.05,
+        Number(input.crossEncoderWeight ?? input.cross_encoder_weight ?? base.crossEncoderWeight) || base.crossEncoderWeight
+      )
+    ),
+    useCohereRerank:
+      input.useCohereRerank === true ||
+      input.use_cohere_rerank === true ||
+      process.env.COHERE_RERANK === '1',
     ocrLangs: String(input.ocrLangs || input.ocr_langs || base.ocrLangs).slice(0, 40) || base.ocrLangs,
     uploadMaxBytes: clampInt(
       input.uploadMaxBytes ?? input.upload_max_bytes,

@@ -41,6 +41,13 @@ function hydrateDocument(d = {}) {
   const folder_path = d.folder_path || meta.folder_path || '';
   const drive_web_view_link =
     d.drive_web_view_link || meta.drive_web_view_link || meta.link_goc || null;
+  const trang_thai = d.trang_thai || meta.trang_thai || null;
+  const van_ban_thay_the = Array.isArray(meta.van_ban_thay_the)
+    ? meta.van_ban_thay_the.filter(Boolean)
+    : [];
+  const replacement_doc_id = meta.replacement_doc_id || null;
+  const replacement_label = meta.replacement_label || null;
+  const replacement_url = meta.replacement_url || null;
   return {
     ...d,
     display_name,
@@ -53,6 +60,11 @@ function hydrateDocument(d = {}) {
     drive_file_id: d.drive_file_id || meta.drive_file_id || null,
     source: d.source || meta.source || null,
     sort_order: d.sort_order ?? meta.sort_order ?? null,
+    trang_thai,
+    van_ban_thay_the,
+    replacement_doc_id,
+    replacement_label,
+    replacement_url,
     label: [so_hieu, display_name].filter(Boolean).join(' · ') || display_name,
   };
 }

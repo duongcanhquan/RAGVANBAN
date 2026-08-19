@@ -1,4 +1,3 @@
-import { adminFetch } from './adminApi'
 import { purgeLegacyDeviceHistory } from './session'
 
 const KEY = 'hcc_chat_history_v1'
@@ -82,6 +81,7 @@ export function markLocalKnowledge(id, marked = true) {
 /** Chỉ quản trị — UI hỏi đáp công khai không gọi. */
 export async function fetchServerHistory(sessionId) {
   try {
+    const { adminFetch } = await import('./adminApi')
     const qs = new URLSearchParams({ limit: '40' })
     if (sessionId) qs.set('sessionId', sessionId)
     const res = await adminFetch(`/api/history?${qs}`)
@@ -94,6 +94,7 @@ export async function fetchServerHistory(sessionId) {
 }
 
 export async function promoteToScenario(log) {
+  const { adminFetch } = await import('./adminApi')
   const res = await adminFetch('/api/scenarios', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

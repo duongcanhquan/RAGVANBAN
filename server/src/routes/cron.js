@@ -15,7 +15,8 @@ function cronAuthorized(req) {
   const secret = String(process.env.CRON_SECRET || '').trim();
   const auth = String(req.headers.authorization || '');
   if (secret) return auth === `Bearer ${secret}`;
-  return Boolean(req.headers['x-vercel-cron']);
+  if (process.env.VERCEL) return Boolean(req.headers['x-vercel-cron']);
+  return false;
 }
 
 router.get('/drive-sync', async (req, res) => {
@@ -51,3 +52,4 @@ router.get('/ai-learn', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.cronAuthorizedForTest = cronAuthorized;

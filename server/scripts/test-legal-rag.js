@@ -29,6 +29,7 @@ const {
 } = require('../src/services/voiceConfig');
 const { formatContext, getSystemPrompt } = require('../src/services/qaChain');
 const { rerankLegal } = require('../src/services/rerank');
+const { applyCrossEncoderRerank } = require('../src/services/crossEncoderRerank');
 const { buildConflictBrief, shouldCompare } = require('../src/services/conflictBrief');
 const { shouldSkipIntentLlm } = require('../src/services/intentRouter');
 const { normalizeRag } = require('../src/services/ragConfig');
@@ -339,6 +340,19 @@ async function run() {
     ]);
     ranked.sort((a, b) => b.score - a.score);
     assert.strictEqual(ranked[0].id, 'hit');
+  });
+
+  test('applyCrossEncoderRerank ưu tiên đoạn có cụm từ trùng câu hỏi', () => {
+    const ranked = applyCrossEncoderRerank(
+      'thời gian nghỉ phép năm người lao động',
+      [
+        { id: 'a', score: 0.58, text: 'Quy định chung về thuế thu nhập' },
+        { id: 'b', score: 0.55, text: 'Người lao động được nghỉ phép năm theo hợp đồng lao động' },
+      ],
+      { weight: 0.3 }
+    );
+    ranked.sort((a, b) => b.score - a.score);
+    assert.strictEqual(ranked[0].id, 'b');
   });
 
   test('buildConflictBrief + shouldCompare khi có sửa đổi', () => {

@@ -5,6 +5,7 @@ const {
   expandCategoryIds,
   hasCategoryScope,
   applyScopeToIntent,
+  applyDocumentScope,
 } = require('../src/services/categoryScope');
 const { buildMetadataFilter } = require('../src/services/hybridSearch');
 const { buildNoContextAnswer } = require('../src/services/qaChain');
@@ -47,4 +48,17 @@ test('không có đoạn trong phạm vi thì gợi ý bỏ chọn mục', () =>
   const { answer } = buildNoContextAnswer('lookup', { scopeLabels: ['BHXH', 'CCCD'] });
   assert.match(answer, /phạm vi đã chọn/);
   assert.match(answer, /BHXH/);
+});
+
+test('applyDocumentScope gắn document_id_in từ chat workbench', () => {
+  const intent = applyDocumentScope({ linh_vuc: 'Thuế' }, ['doc-a', 'doc-b']);
+  assert.deepEqual(intent.document_id_in, ['doc-a', 'doc-b']);
+  assert.equal(intent.skipLinhVucFilter, true);
+  assert.match(intent.scopeLabels[0], /2 văn bản/);
+  const merged = applyDocumentScope(
+    applyScopeToIntent({}, { categoryIds: ['c1'], documentIds: ['doc-x'], fileNames: [], labels: [] }),
+    ['doc-y']
+  );
+  assert.ok(merged.document_id_in.includes('doc-x'));
+  assert.ok(merged.document_id_in.includes('doc-y'));
 });

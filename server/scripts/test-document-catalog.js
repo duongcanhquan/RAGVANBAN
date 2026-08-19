@@ -31,6 +31,25 @@ test('tên hiển thị ưu tiên display_name, mô tả và link lấy từ met
   assert.match(d.label, /Quyết định 12/);
 });
 
+test('hydrateDocument lấy trạng thái và VB thay thế từ metadata', () => {
+  const d = hydrateDocument({
+    id: '2',
+    file_name: 'cu.pdf',
+    trang_thai: 'Hết hiệu lực',
+    metadata: {
+      van_ban_thay_the: ['01/2024/NĐ-CP'],
+      replacement_doc_id: 'rep-1',
+      replacement_label: 'Nghị định mới',
+      replacement_url: 'https://example.com/moi.pdf',
+    },
+  });
+  assert.equal(d.trang_thai, 'Hết hiệu lực');
+  assert.deepEqual(d.van_ban_thay_the, ['01/2024/NĐ-CP']);
+  assert.equal(d.replacement_doc_id, 'rep-1');
+  assert.equal(d.replacement_label, 'Nghị định mới');
+  assert.equal(d.replacement_url, 'https://example.com/moi.pdf');
+});
+
 test('không có display_name thì dùng file_name', () => {
   const d = hydrateDocument({ file_name: 'van-ban.pdf', metadata: {} });
   assert.equal(d.display_name, 'van-ban.pdf');

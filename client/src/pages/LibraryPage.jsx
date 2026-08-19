@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, ExternalLink, FileText, FolderTree, GripVertical, Search } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { ChevronDown, ChevronRight, ExternalLink, FileText, FolderTree, Search } from 'lucide-react'
+import DocStatusBadge from '../components/DocStatusBadge'
 import { apiUrl } from '../lib/apiBase'
+import { cachedJson } from '../lib/apiCache'
+import { isExpired, libraryDocHref } from '../lib/docStatus'
 
 const KIND_LABEL = {
   chuyen_muc: 'Chuyên mục',
@@ -27,22 +31,63 @@ function filterTree(nodes, needle) {
     .filter(Boolean)
 }
 
-function DocRow({ doc }) {
+function findDocPath(nodes, docId, path = []) {
+  for (const n of nodes || []) {
+    const here = [...path, n.id]
+    if ((n.documents || []).some((d) => d.id === docId)) return here
+    const child = findDocPath(n.children, docId, here)
+    if (child) return child
+  }
+  return null
+}
+
+function DocRow({ doc, highlight }) {
+  const repHref = doc.replacement_doc_id
+    ? libraryDocHref(doc.replacement_doc_id)
+    : doc.replacement_url || null
+  const repExternal = !doc.replacement_doc_id && doc.replacement_url
+
   return (
-    <li className="flex flex-col gap-2 border-t border-[var(--hcc-line)]/70 px-3 py-2.5 sm:flex-row sm:items-start sm:justify-between">
+    <li
+      id={`library-doc-${doc.id}`}
+      className={`flex flex-col gap-2 border-t border-[var(--hcc-line)]/70 px-3 py-2.5 sm:flex-row sm:items-start sm:justify-between ${
+        highlight ? 'bg-[var(--hcc-gold)]/10 ring-1 ring-[var(--hcc-gold)]/35' : ''
+      }`}
+    >
       <div className="min-w-0">
         <p className="m-0 flex items-start gap-1.5 text-sm text-[var(--hcc-ink)]">
           <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[var(--hcc-red)]" />
           <span className="break-words">{doc.label}</span>
+          <DocStatusBadge status={doc.trang_thai} className="mt-0.5" />
         </p>
         <p className="m-0 mt-0.5 pl-5 text-[11px] text-[var(--hcc-muted)]">
           {doc.mo_ta ? `${doc.mo_ta} · ` : ''}
           {doc.folder_path || 'Chưa gắn mục'}
-          {doc.trang_thai ? ` · ${doc.trang_thai}` : ''}
           {doc.chunk_count != null ? ` · ${doc.chunk_count} chunks` : ''}
+          {doc.replacement_label ? ` · Thay bằng: ${doc.replacement_label}` : ''}
         </p>
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-2 pl-5 sm:pl-0">
+        {isExpired(doc.trang_thai) && repHref ? (
+          repExternal ? (
+            <a
+              href={repHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex cursor-pointer items-center gap-1 rounded-xl border border-[var(--hcc-gold)]/40 px-2.5 py-1.5 text-xs font-medium text-[var(--hcc-gold-bright)]"
+            >
+              VB thay thế
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          ) : (
+            <Link
+              to={repHref}
+              className="inline-flex cursor-pointer items-center gap-1 rounded-xl border border-[var(--hcc-gold)]/40 px-2.5 py-1.5 text-xs font-medium text-[var(--hcc-gold-bright)]"
+            >
+              VB thay thế
+            </Link>
+          )
+        ) : null}
         {doc.storage_url ? (
           <a
             href={doc.storage_url}
@@ -61,70 +106,21 @@ function DocRow({ doc }) {
   )
 }
 
-function CategoryNode({ node, depth, open, toggle, siblingsIds, parentId, onReorder, allowReorder }) {
+function CategoryNode({ node, depth, open, toggle, highlightDocId }) {
   const isOpen = open[node.id]
   const hasKids = (node.children || []).length > 0 || (node.documents || []).length > 0
   const pad = Math.min(depth, 5) * 12
-  const [over, setOver] = useState('')
 
   return (
     <li className={depth === 0 ? 'glass-panel overflow-hidden rounded-2xl' : ''}>
       <div
-        onDragOver={(e) => {
-          if (!allowReorder) return
-          e.preventDefault()
-          const rect = e.currentTarget.getBoundingClientRect()
-          setOver(e.clientX > rect.right - 96 ? 'after' : 'before')
-        }}
-        onDragLeave={() => setOver('')}
-        onDrop={async (e) => {
-          if (!allowReorder) return
-          e.preventDefault()
-          e.stopPropagation()
-          const fromId = e.dataTransfer.getData('text/plain')
-          if (!fromId || fromId === node.id) return
-          if (!Array.isArray(siblingsIds) || siblingsIds.length < 2) return
-
-          const rect = e.currentTarget.getBoundingClientRect()
-          const asAfter = e.clientX > rect.right - 96
-
-          const nextWithout = siblingsIds.filter((id) => id !== fromId)
-          const targetIdx = nextWithout.indexOf(node.id)
-          if (targetIdx < 0) return
-          const insertAt = asAfter ? Math.min(nextWithout.length, targetIdx + 1) : targetIdx
-          nextWithout.splice(insertAt, 0, fromId)
-
-          try {
-            await onReorder?.({ parentId, ids: nextWithout })
-          } finally {
-            setOver('')
-          }
-        }}
         className={`flex w-full items-center gap-1.5 py-2.5 pr-2 text-left ${
           depth === 0
             ? 'px-3 font-semibold text-[var(--hcc-ink)] hover:bg-[var(--hcc-red-soft)]/40'
             : 'border-t border-[var(--hcc-line)]/60 text-sm text-[var(--hcc-ink)] hover:bg-[var(--hcc-canvas)]'
         }`}
-        style={{
-          paddingLeft: depth === 0 ? undefined : `${12 + pad}px`,
-          background:
-            over === 'before' ? 'rgba(255,255,255,0.06)' : over === 'after' ? 'rgba(245,158,11,0.12)' : undefined,
-        }}
+        style={{ paddingLeft: depth === 0 ? undefined : `${12 + pad}px` }}
       >
-        {allowReorder ? (
-          <GripVertical
-            className="h-4 w-4 shrink-0 cursor-grab text-[var(--hcc-muted)]"
-            title="Kéo thả đổi thứ tự"
-            draggable
-            onDragStart={(e) => {
-              e.dataTransfer.setData('text/plain', node.id)
-              e.dataTransfer.effectAllowed = 'move'
-            }}
-          />
-        ) : (
-          <span className="w-4 shrink-0" />
-        )}
-
         <button
           type="button"
           onClick={() => toggle(node.id)}
@@ -160,14 +156,11 @@ function CategoryNode({ node, depth, open, toggle, siblingsIds, parentId, onReor
               depth={depth + 1}
               open={open}
               toggle={toggle}
-              parentId={node.id}
-              siblingsIds={(node.children || []).map((c) => c.id)}
-              allowReorder={allowReorder}
-              onReorder={onReorder}
+              highlightDocId={highlightDocId}
             />
           ))}
           {(node.documents || []).map((doc) => (
-            <DocRow key={doc.id} doc={doc} />
+            <DocRow key={doc.id} doc={doc} highlight={doc.id === highlightDocId} />
           ))}
         </ul>
       )}
@@ -176,9 +169,11 @@ function CategoryNode({ node, depth, open, toggle, siblingsIds, parentId, onReor
 }
 
 /**
- * Thư viện công khai — chỉ xem. Thêm / sửa / xóa chuyên mục ở /quantri/chuyen-muc.
+ * Thư viện công khai — chỉ xem. Thêm / sửa / xóa chuyên mục ở /quantri.
  */
 export default function LibraryPage() {
+  const [searchParams] = useSearchParams()
+  const focusDocId = searchParams.get('doc') || ''
   const [tree, setTree] = useState([])
   const [total, setTotal] = useState(0)
   const [source, setSource] = useState('')
@@ -187,17 +182,14 @@ export default function LibraryPage() {
   const [open, setOpen] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [reorderBusy, setReorderBusy] = useState(false)
-
-  const allowReorder = !q.trim()
+  const [serverHits, setServerHits] = useState([])
+  const [searching, setSearching] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(apiUrl('/api/library/tree'))
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Không tải được thư viện')
+      const data = await cachedJson(apiUrl('/api/library/tree'))
       setTree(data.tree || [])
       setTotal(data.total || 0)
       setSource(data.source || '')
@@ -212,29 +204,56 @@ export default function LibraryPage() {
     }
   }, [])
 
-  async function reorderCategories(parentId, ids) {
-    if (!ids?.length) return
-    setReorderBusy(true)
-    try {
-      const items = ids.map((id, sortOrder) => ({ id, parentId, sortOrder }))
-      const res = await fetch(apiUrl('/api/library/categories/reorder'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || data.ok === false) throw new Error(data.error || 'Không đổi được thứ tự')
-      await load()
-    } finally {
-      setReorderBusy(false)
-    }
-  }
-
   useEffect(() => {
     load()
   }, [load])
 
-  const filtered = useMemo(() => filterTree(tree, q.trim().toLowerCase()), [tree, q])
+  useEffect(() => {
+    if (!focusDocId || !tree.length) return
+    const path = findDocPath(tree, focusDocId)
+    if (!path?.length) return
+    setOpen((prev) => {
+      const next = { ...prev }
+      for (const id of path) next[id] = true
+      return next
+    })
+    const t = window.setTimeout(() => {
+      document.getElementById(`library-doc-${focusDocId}`)?.scrollIntoView({
+        block: 'center',
+        behavior: 'smooth',
+      })
+    }, 120)
+    return () => window.clearTimeout(t)
+  }, [tree, focusDocId])
+
+  useEffect(() => {
+    const needle = q.trim()
+    if (needle.length < 2) {
+      setServerHits([])
+      setSearching(false)
+      return undefined
+    }
+    setSearching(true)
+    const t = window.setTimeout(async () => {
+      try {
+        const res = await fetch(apiUrl(`/api/library/search?q=${encodeURIComponent(needle)}`))
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Không tìm được')
+        setServerHits(data.items || [])
+      } catch {
+        setServerHits([])
+      } finally {
+        setSearching(false)
+      }
+    }, 320)
+    return () => window.clearTimeout(t)
+  }, [q])
+
+  const useServerSearch = q.trim().length >= 2
+  const filtered = useMemo(
+    () => (useServerSearch ? [] : filterTree(tree, q.trim().toLowerCase())),
+    [tree, q, useServerSearch]
+  )
 
   function toggle(id) {
     setOpen((prev) => ({ ...prev, [id]: !prev[id] }))
@@ -266,17 +285,34 @@ export default function LibraryPage() {
       </div>
 
       {loading && <p className="text-sm text-[var(--hcc-muted)]">Đang tải cây…</p>}
+      {searching && useServerSearch && (
+        <p className="text-sm text-[var(--hcc-muted)]">Đang tìm trên server…</p>
+      )}
       {error && (
         <p role="alert" className="text-sm text-[var(--color-destructive)]">
           {error}
         </p>
       )}
-      {!loading && !filtered.length && (
+      {!loading && useServerSearch && !searching && !serverHits.length && (
+        <p className="glass-panel rounded-2xl p-4 text-sm text-[var(--hcc-muted)]">
+          Không tìm thấy tài liệu phù hợp.
+        </p>
+      )}
+      {!loading && !useServerSearch && !filtered.length && (
         <p className="glass-panel rounded-2xl p-4 text-sm text-[var(--hcc-muted)]">
           Chưa có chuyên mục. Quản trị thêm mục tại /quantri.
         </p>
       )}
 
+      {useServerSearch && serverHits.length > 0 ? (
+        <ul className="m-0 flex list-none flex-col gap-2 p-0">
+          {serverHits.map((doc) => (
+            <li key={doc.id} className="glass-panel overflow-hidden rounded-2xl">
+              <DocRow doc={doc} highlight={doc.id === focusDocId} />
+            </li>
+          ))}
+        </ul>
+      ) : (
       <ul className="m-0 flex list-none flex-col gap-2 p-0">
         {filtered.map((node) => (
           <CategoryNode
@@ -285,13 +321,11 @@ export default function LibraryPage() {
             depth={0}
             open={open}
             toggle={toggle}
-            parentId={null}
-            siblingsIds={filtered.map((n) => n.id)}
-            allowReorder={allowReorder && !reorderBusy}
-            onReorder={(payload) => reorderCategories(payload.parentId, payload.ids)}
+            highlightDocId={focusDocId}
           />
         ))}
       </ul>
+      )}
     </div>
   )
 }

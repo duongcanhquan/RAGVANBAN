@@ -75,6 +75,7 @@ create index if not exists documents_source_idx on public.documents (source);
 -- ---------- 003: knowledge ----------
 alter table public.chat_logs add column if not exists marked_knowledge boolean default false;
 alter table public.chat_logs add column if not exists tags jsonb default '[]'::jsonb;
+alter table public.chat_logs add column if not exists verify_report jsonb;
 
 create index if not exists chat_logs_session_idx on public.chat_logs (user_session, created_at desc);
 create index if not exists chat_logs_knowledge_idx on public.chat_logs (marked_knowledge) where marked_knowledge = true;

@@ -1,12 +1,14 @@
 /**
  * Tải nội dung website chính thống làm dữ liệu tham khảo.
- * Ưu tiên miền .gov.vn / cơ quan nhà nước; vẫn cho phép URL https khác (đánh dấu).
+ * Ưu tiên miền .gov.vn / cơ quan nhà nước; fallback Jina Reader khi HTML sparse/Cloudflare.
  */
 
 const cheerio = require('cheerio');
 
 const OFFICIAL_HOST_RE =
   /(\.gov\.vn$|\.chinhphu\.vn$|\.quochoi\.vn$|\.toaan\.gov\.vn$|\.moj\.gov\.vn$|\.mof\.gov\.vn$|\.mic\.gov\.vn$|\.most\.gov\.vn$|\.molisa\.gov\.vn$|\.mpi\.gov\.vn$|\.thuvienphapluat\.vn$|\.luatvietnam\.vn$)/i;
+
+const MIN_TEXT_LEN = 40;
 
 function assertSafeUrl(raw) {
   let u;
@@ -57,6 +59,57 @@ function htmlToText(html) {
   return { title, text };
 }
 
+function looksBlockedHtml(html) {
+  const h = String(html || '').toLowerCase();
+  return (
+    h.includes('cf-browser-verification') ||
+    h.includes('cloudflare') && h.includes('challenge') ||
+    h.includes('just a moment') ||
+    h.includes('enable javascript')
+  );
+}
+
+async function fetchHtml(url, signal) {
+  const res = await fetch(url, {
+    redirect: 'follow',
+    signal,
+    headers: {
+      'User-Agent': 'HCC-VanBanThongMinh/1.0 (+reference-ingest)',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`Không tải được trang: HTTP ${res.status}`);
+  }
+  const ctype = String(res.headers.get('content-type') || '');
+  if (!/text\/html|application\/xhtml|text\/plain/i.test(ctype) && ctype) {
+    throw new Error(`Content-Type không hỗ trợ: ${ctype}`);
+  }
+  return res.text();
+}
+
+async function fetchViaJina(url, signal) {
+  const jinaUrl = `https://r.jina.ai/${url}`;
+  const res = await fetch(jinaUrl, {
+    redirect: 'follow',
+    signal,
+    headers: {
+      Accept: 'text/plain',
+      'User-Agent': 'HCC-VanBanThongMinh/1.0 (+jina-reader-fallback)',
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`Jina Reader không tải được trang: HTTP ${res.status}`);
+  }
+  const text = String(await res.text() || '').trim();
+  if (text.length < MIN_TEXT_LEN) {
+    throw new Error('Jina Reader trả về quá ít nội dung text');
+  }
+  const titleLine = text.split('\n').find((l) => l.trim()) || '';
+  const title = titleLine.replace(/^title:\s*/i, '').trim() || new URL(url).hostname;
+  return { title, text };
+}
+
 /**
  * @param {string} url
  * @returns {Promise<{ text: string, title: string, url: string, official: boolean, kind: string }>}
@@ -64,38 +117,45 @@ function htmlToText(html) {
 async function extractWebPage(url) {
   const u = assertSafeUrl(url);
   const official = isOfficialHost(u.hostname);
+  const pageUrl = u.toString();
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Number(process.env.WEB_FETCH_TIMEOUT_MS) || 20000);
 
   try {
-    const res = await fetch(u.toString(), {
-      redirect: 'follow',
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'HCC-VanBanThongMinh/1.0 (+reference-ingest)',
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      },
-    });
-    if (!res.ok) {
-      throw new Error(`Không tải được trang: HTTP ${res.status}`);
+    let title = u.hostname;
+    let text = '';
+    let viaJina = false;
+
+    try {
+      const html = await fetchHtml(pageUrl, controller.signal);
+      if (!looksBlockedHtml(html)) {
+        const parsed = htmlToText(html);
+        title = parsed.title || title;
+        text = parsed.text;
+      }
+    } catch {
+      /* thử Jina bên dưới */
     }
-    const ctype = String(res.headers.get('content-type') || '');
-    if (!/text\/html|application\/xhtml|text\/plain/i.test(ctype) && ctype) {
-      throw new Error(`Content-Type không hỗ trợ: ${ctype}`);
+
+    if (text.length < MIN_TEXT_LEN) {
+      const jina = await fetchViaJina(pageUrl, controller.signal);
+      title = jina.title || title;
+      text = jina.text;
+      viaJina = true;
     }
-    const html = await res.text();
-    const { title, text } = htmlToText(html);
-    if (!text || text.length < 40) {
+
+    if (!text || text.length < MIN_TEXT_LEN) {
       throw new Error('Trang gần như không có nội dung text để số hóa');
     }
+
     const max = Number(process.env.WEB_MAX_CHARS) || 120000;
     return {
       text: text.slice(0, max),
       title: title || u.hostname,
-      url: u.toString(),
+      url: pageUrl,
       official,
-      kind: 'web',
+      kind: viaJina ? 'web_jina' : 'web',
       host: u.hostname,
     };
   } finally {
@@ -103,9 +163,23 @@ async function extractWebPage(url) {
   }
 }
 
+function webCatalogFileName(page) {
+  const crypto = require('crypto');
+  const id = crypto.createHash('sha256').update(String(page.url || '')).digest('hex').slice(0, 10);
+  const title =
+    String(page.title || page.host || 'web')
+      .slice(0, 72)
+      .replace(/[\\/:*?"<>|]/g, '_')
+      .trim() || 'web';
+  return `${title}.${id}.web.txt`;
+}
+
 module.exports = {
   extractWebPage,
   assertSafeUrl,
   isOfficialHost,
   htmlToText,
+  webCatalogFileName,
+  looksBlockedHtml,
+  fetchViaJina,
 };

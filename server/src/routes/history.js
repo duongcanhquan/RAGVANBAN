@@ -28,13 +28,17 @@ router.get('/', requireAdmin, async (req, res, next) => {
   }
 });
 
-router.get('/:id', requireAdmin, async (req, res) => {
-  const result = await getChatLog(req.params.id);
-  if (!result.ok) {
-    res.status(404).json(result);
-    return;
+router.get('/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const result = await getChatLog(req.params.id);
+    if (!result.ok) {
+      res.status(404).json(result);
+      return;
+    }
+    res.json(result);
+  } catch (err) {
+    next(err);
   }
-  res.json(result);
 });
 
 router.post('/save', requireAdmin, async (req, res) => {

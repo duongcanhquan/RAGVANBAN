@@ -10,9 +10,11 @@ const {
   soHieuFilterValues,
 } = require('../ingestion/legalChunker');
 const { rerankLegal } = require('./rerank');
+const { rerankWithCrossEncoder } = require('./crossEncoderRerank');
 const { raceAbort, throwIfAborted } = require('./abortControl');
 const { assertEmbeddingFitsIndex, getPineconeIndexDimension, peekPineconeIndexHost } = require('./embeddingDim');
-const { hasCategoryScope } = require('./categoryScope');
+const { hasCategoryScope, scopeKey, capList, normalizeSelectedIds } = require('./categoryScope');
+const { recallEmbed, rememberEmbed } = require('./sessionSearchCache');
 
 function scopeOrFilter(intent = {}) {
   const ors = [];
@@ -75,6 +77,9 @@ function normalizeMatch(match) {
     van_ban_sua_doi: list(meta.van_ban_sua_doi),
     van_ban_bai_bo: list(meta.van_ban_bai_bo),
     van_ban_goc: compactSoHieu(meta.van_ban_goc) || meta.van_ban_goc || '',
+    replacement_url: meta.replacement_url || '',
+    replacement_doc_id: meta.replacement_doc_id || '',
+    replacement_label: meta.replacement_label || '',
     dieu: meta.dieu || '',
     khoan: meta.khoan || '',
     heading: meta.heading || '',
@@ -147,6 +152,10 @@ async function hybridSearch(question, intent, deps) {
     topK = 12,
     maxPerDoc = 3,
     maxTotal = 8,
+    crossEncoderRerank = true,
+    crossEncoderTopN = 24,
+    crossEncoderWeight = 0.18,
+    useCohereRerank = false,
     signal,
   } = deps;
 
@@ -157,7 +166,12 @@ async function hybridSearch(question, intent, deps) {
   throwIfAborted(signal);
 
   const anchors = parseQuestionAnchors(question);
-  const vector = await raceAbort(embeddings.embedQuery(question), signal);
+  const cacheScope = scopeKey(intent) || 'all';
+  let vector = recallEmbed(cacheScope, question);
+  if (!vector) {
+    vector = await raceAbort(embeddings.embedQuery(question), signal);
+    rememberEmbed(cacheScope, question, vector);
+  }
   throwIfAborted(signal);
   const indexDim = await getPineconeIndexDimension(pinecone, indexName);
   assertEmbeddingFitsIndex({
@@ -263,7 +277,13 @@ async function hybridSearch(question, intent, deps) {
 
   throwIfAborted(signal);
   const reranked = rerankLegal(question, matches, intent);
-  return rankMatches(reranked, { maxPerDoc, maxTotal });
+  const crossRanked = await rerankWithCrossEncoder(question, reranked, {
+    enabled: crossEncoderRerank,
+    topN: crossEncoderTopN,
+    weight: crossEncoderWeight,
+    useCohere: useCohereRerank,
+  });
+  return rankMatches(crossRanked, { maxPerDoc, maxTotal });
 }
 
 module.exports = {

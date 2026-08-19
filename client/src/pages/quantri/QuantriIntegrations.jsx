@@ -405,6 +405,7 @@ export default function QuantriIntegrations() {
                   <button
                     type="button"
                     onClick={() => removeFolder(s.id)}
+                    aria-label={`Xóa nguồn Drive ${s.label || s.email || s.folderUrl}`}
                     className="rounded-full bg-red-500/20 p-1.5 text-red-100"
                   >
                     <Trash2 className="h-3.5 w-3.5" />

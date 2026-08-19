@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Lock, LockOpen, PenLine, RotateCcw, Save } from 'lucide-react'
-import { Link, useOutletContext } from 'react-router-dom'
+import { useOutletContext } from 'react-router-dom'
 import { adminFetch } from '../../lib/adminApi'
 import VoiceTalkCard from './VoiceTalkCard'
 

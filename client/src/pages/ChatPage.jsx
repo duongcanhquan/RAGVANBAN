@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { History, LogOut, PanelRightClose, PanelRightOpen, Plus, Scale, Sparkles, Volume2, VolumeX } from 'lucide-react'
 import ChatWindow from '../components/ChatWindow'
 import ChatInput from '../components/ChatInput'
 import CategoryScopePicker from '../components/CategoryScopePicker'
-import HistoryPanel from '../components/HistoryPanel'
+const HistoryPanel = lazy(() => import('../components/HistoryPanel'))
 import WorkbenchPanel from '../components/WorkbenchPanel'
 import { streamChat } from '../lib/streamChat'
 import { getConversationId, getSessionId, newConversationId, rememberConversationId, startFreshSession } from '../lib/session'
@@ -17,6 +17,7 @@ import { getMode, MODES } from '../lib/modes'
 import { createSpeakAhead, unlockSpeech } from '../lib/speakAhead'
 import { speechRecognitionSupported, startSpeechListen } from '../lib/speechListen'
 import { apiUrl } from '../lib/apiBase'
+import { cachedJson } from '../lib/apiCache'
 
 /**
  * Workspace chuyên viên — desktop 2 cột rộng; mobile vẫn 1 cột.
@@ -72,15 +73,13 @@ export default function ChatPage() {
   }, [quickKeywords, mode])
 
   useEffect(() => {
-    fetch(apiUrl('/api/settings/quick-keywords'))
-      .then((r) => r.json())
+    cachedJson(apiUrl('/api/settings/quick-keywords'))
       .then((d) => setQuickKeywords(d.items || []))
       .catch(() => {})
   }, [])
 
   useEffect(() => {
-    fetch(apiUrl('/api/settings/rag'))
-      .then((r) => r.json())
+    cachedJson(apiUrl('/api/settings/rag'))
       .then((d) => {
         if (d?.disclaimer) setDisclaimer(d.disclaimer)
       })
@@ -88,8 +87,7 @@ export default function ChatPage() {
   }, [])
 
   useEffect(() => {
-    fetch(apiUrl('/api/settings/voice-talk'))
-      .then((r) => r.json())
+    cachedJson(apiUrl('/api/settings/voice-talk'))
       .then((d) => {
         if (d?.enabled !== true) {
           setTalkCfg(null)
@@ -306,6 +304,32 @@ export default function ChatPage() {
     rec.stop()
   }
 
+  useEffect(() => {
+    if (mode !== 'lookup') return
+    setSideOpen((open) => (open ? false : open))
+  }, [mode])
+
+  async function submitFeedback(logId, rating) {
+    if (!logId || !rating) return
+    try {
+      const res = await fetch(apiUrl('/api/chat/feedback'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sessionId ? { 'X-Session-Id': sessionId } : {}),
+        },
+        body: JSON.stringify({ logId, rating, sessionId }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Không gửi được phản hồi')
+      setMessages((prev) =>
+        prev.map((m) => (m.logId === logId ? { ...m, feedback: rating } : m))
+      )
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
   function restoreFromHistory(item) {
     if (inFlightRef.current || streaming) stopGeneration()
     inFlightRef.current = false
@@ -355,6 +379,8 @@ export default function ChatPage() {
     setStatusText('Đang tiếp nhận câu hỏi…')
 
     const history = conversationHistoryFromMessages(messages, 6)
+    const scopedCategoryIds = opts.categoryIds ?? categoryIds
+    const scopedDocumentIds = opts.documentIds || []
     const userMsg = { id: crypto.randomUUID(), role: 'user', content: question }
     const assistantId = crypto.randomUUID()
 
@@ -388,7 +414,8 @@ export default function ChatPage() {
         sessionId,
         mode: qaMode,
         history,
-        categoryIds,
+        categoryIds: scopedCategoryIds,
+        documentIds: scopedDocumentIds,
         voiceTalk: Boolean(talkCfg?.enabled === true && speakOn),
         onMeta: (meta) => {
           if (meta.status) setStatusText(meta.status)
@@ -429,6 +456,7 @@ export default function ChatPage() {
                     sources: sources.length ? sources : m.sources || [],
                     confidence: data.confidence || m.confidence,
                     qaMode: data.qaMode || m.qaMode,
+                    logId: data.logId || m.logId,
                     streaming: false,
                   }
                 : m
@@ -511,9 +539,6 @@ export default function ChatPage() {
                 </button>
               ))}
             </div>
-            <p className="m-0 hidden text-xs text-[var(--hcc-muted)] lg:block">
-              {modeConfig.hint}
-            </p>
             {disclaimer ? (
               <p className="m-0 hidden max-w-xl truncate text-[10px] text-white/40 xl:block" title={disclaimer}>
                 {disclaimer}
@@ -573,7 +598,11 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={toggleSide}
-              className="hidden min-h-9 cursor-pointer items-center gap-1 rounded-xl px-2.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white xl:inline-flex"
+              className={`hidden min-h-9 cursor-pointer items-center gap-1 rounded-xl px-2.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white xl:inline-flex ${
+                mode === 'lookup' ? 'pointer-events-none opacity-0' : ''
+              }`}
+              aria-hidden={mode === 'lookup'}
+              tabIndex={mode === 'lookup' ? -1 : 0}
               aria-pressed={sideOpen}
               title={sideOpen ? 'Ẩn bàn làm việc' : 'Hiện bàn làm việc'}
             >
@@ -595,9 +624,10 @@ export default function ChatPage() {
             messages={messages}
             streaming={streaming}
             onExampleClick={sendMessage}
-            modeConfig={{ ...modeConfig, examples: chipExamples }}
+            modeConfig={{ ...modeConfig, examples: mode === 'lookup' ? [] : chipExamples }}
             statusText={streaming ? statusText : ''}
             wide
+            onFeedback={submitFeedback}
           />
         </main>
 
@@ -609,13 +639,11 @@ export default function ChatPage() {
             </div>
           )}
 
-          <div className="hidden xl:block">
-            <CategoryScopePicker
-              selectedIds={categoryIds}
-              onChange={setCategoryScope}
-              disabled={streaming}
-            />
-          </div>
+          <CategoryScopePicker
+            selectedIds={categoryIds}
+            onChange={setCategoryScope}
+            disabled={streaming}
+          />
 
           <ChatInput
             value={input}
@@ -644,30 +672,32 @@ export default function ChatPage() {
       </section>
 
       {/* Cột phải: bàn làm việc — desktop */}
-      {sideOpen && (
+      {sideOpen && mode !== 'lookup' && (
         <div className="hidden min-h-0 w-[360px] shrink-0 xl:flex 2xl:w-[400px]">
           <WorkbenchPanel
             mode={mode}
             onModeChange={setMode}
-            onAsk={sendMessage}
             onRestore={restoreFromHistory}
             sessionId={sessionId}
             streaming={streaming}
-            quickKeywords={chipExamples}
             refreshKey={historyTick}
           />
         </div>
       )}
 
-      <HistoryPanel
-        open={historyOpen}
-        onClose={() => setHistoryOpen(false)}
-        sessionId={sessionId}
-        onRestore={restoreFromHistory}
-        streaming={streaming}
-        refreshKey={historyTick}
-        onEndSession={endSession}
-      />
+      {historyOpen ? (
+        <Suspense fallback={null}>
+          <HistoryPanel
+            open={historyOpen}
+            onClose={() => setHistoryOpen(false)}
+            sessionId={sessionId}
+            onRestore={restoreFromHistory}
+            streaming={streaming}
+            refreshKey={historyTick}
+            onEndSession={endSession}
+          />
+        </Suspense>
+      ) : null}
     </div>
   )
 }

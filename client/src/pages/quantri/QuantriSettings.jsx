@@ -109,15 +109,11 @@ export default function QuantriSettings() {
       {seen.has('tu-khoa') ? (
         <section hidden={section !== 'tu-khoa'}>
           <h2 className="m-0 text-lg font-semibold">Từ khóa tìm nhanh</h2>
-          <p className="m-0 mt-1 mb-4 text-sm text-white/65">
-            Chip trên chat công khai lấy từ văn bản đã số hóa. Thêm tại đây chỉ những từ khóa bạn muốn
-            gợi ý thêm — không dùng bộ mẫu CCCD/BHXH.
-          </p>
-          {error ? <p className="mb-3 text-sm text-red-200">{error}</p> : null}
+          {error ? <p className="mb-3 mt-4 text-sm text-red-200">{error}</p> : null}
 
           <form
             onSubmit={addKeyword}
-            className="mb-4 grid gap-2 rounded-3xl border border-white/10 bg-white/5 p-4 sm:grid-cols-[8rem_1fr_8rem_auto]"
+            className="mb-4 mt-4 grid gap-2 rounded-3xl border border-white/10 bg-white/5 p-4 sm:grid-cols-[8rem_1fr_8rem_auto]"
           >
             <input
               value={draft.label}

@@ -5,8 +5,22 @@
 
 const { tokenizeVi } = require('./skillStore');
 
+function getVerifyReport(log = {}) {
+  if (log.verify_report && typeof log.verify_report === 'object') return log.verify_report;
+  if (log.tags?.verify && typeof log.tags.verify === 'object') return log.tags.verify;
+  return null;
+}
+
+function getFeedback(log = {}) {
+  const fb = log.tags?.feedback;
+  return fb === 'up' || fb === 'down' ? fb : null;
+}
+
 function isWeakAnswer(log = {}) {
+  if (getFeedback(log) === 'down') return true;
   const answer = String(log.answer || '');
+  const verify = getVerifyReport(log);
+  if (verify && verify.ok === false) return true;
   const cites = log.citations_used || log.sources;
   const emptyCites =
     !cites ||
@@ -16,6 +30,24 @@ function isWeakAnswer(log = {}) {
   if (/chưa có căn cứ|nguồn:\s*\(không có\)/i.test(answer)) return true;
   if (emptyCites && answer.length < 80) return true;
   return false;
+}
+
+function pickBestAnswer(logs = []) {
+  const score = (log) => {
+    let s = 0;
+    const verify = getVerifyReport(log);
+    if (verify?.ok === true) s += 100;
+    if (getFeedback(log) === 'up') s += 50;
+    if (getFeedback(log) === 'down') s -= 80;
+    const cites = log.citations_used || log.sources;
+    if (Array.isArray(cites) && cites.length) s += 30;
+    const answer = String(log.answer || '');
+    s += Math.min(answer.length, 800) / 20;
+    if (/không tìm thấy|chưa có căn cứ|nguồn:\s*\(không có\)/i.test(answer)) s -= 40;
+    return s;
+  };
+  const best = [...(logs || [])].sort((a, b) => score(b) - score(a))[0];
+  return String(best?.answer || '').trim().slice(0, 20000);
 }
 
 function clusterKey(question) {
@@ -92,6 +124,7 @@ function proposeLessons(logs = [], { skills = [], scenarios = [] } = {}) {
         title: `Bài mẫu: ${q.slice(0, 80)}`,
         reason: `${items.length} câu hỏi tương tự chưa có bài mẫu / trả lời yếu.`,
         question: q,
+        sampleAnswer: pickBestAnswer(items),
         count: items.length,
       });
     }
@@ -176,7 +209,7 @@ async function approveLearn(suggestion, { createdBy } = {}) {
       title: suggestion.title.replace(/^Bài mẫu:\s*/i, '').slice(0, 200),
       situation: suggestion.question || suggestion.title,
       suggested_question: suggestion.question || '',
-      sample_answer: '',
+      sample_answer: String(suggestion.sampleAnswer || '').slice(0, 20000),
       tags: ['hoc-moi-ngay'],
       created_by: createdBy || 'learn-loop',
     });
@@ -204,6 +237,8 @@ async function approveLearn(suggestion, { createdBy } = {}) {
 
 module.exports = {
   isWeakAnswer,
+  getVerifyReport,
+  pickBestAnswer,
   clusterKey,
   coversSkill,
   coversScenario,

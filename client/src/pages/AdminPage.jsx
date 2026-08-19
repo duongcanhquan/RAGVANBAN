@@ -1,114 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useOutletContext } from 'react-router-dom'
-import { Globe, GripVertical, Pencil, Plus, RefreshCw, Sparkles, Trash2, Type, UploadCloud } from 'lucide-react'
-import { DigitizingWait } from '../components/WaitMotion'
 import { adminFetch } from '../lib/adminApi'
 import { apiUrl } from '../lib/apiBase'
+import { isExpired, trangThaiFromExpired } from '../lib/docStatus'
 import { DIRECT_UPLOAD_MAX_BYTES, formatBytes, splitUploadFiles } from '../lib/uploadLimits'
-
-const ALLOWED_RE =
-  /\.(pdf|docx?|docm|pptx?|pptm|xlsx?|xlsm|rtf|od[tsp]|png|jpe?g|webp|gif|bmp|tiff?|txt|md|csv)$/i
-
-function errorFromResponseBody(text, status) {
-  const raw = String(text || '').trim()
-  if (!raw) return `HTTP ${status}`
-  try {
-    const j = JSON.parse(raw)
-    return j.error || j.message || raw
-  } catch {
-    return raw.length > 280 ? `${raw.slice(0, 280)}…` : raw
-  }
-}
-
-function slugSegment(name) {
-  const raw = String(name || '').trim()
-  if (!raw) return ''
-  return (
-    raw
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/đ/g, 'd')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 60) || 'muc'
-  )
-}
-
-function r2PrefixFromLabel(label) {
-  const parts = String(label || '')
-    .split('/')
-    .map((s) => slugSegment(s.trim()))
-    .filter(Boolean)
-  return ['van-ban', ...(parts.length ? parts : ['chua-gan'])].join('/')
-}
-
-function docSort(a, b) {
-  const sa = a.sort_order ?? a.metadata?.sort_order
-  const sb = b.sort_order ?? b.metadata?.sort_order
-  const hasA = sa != null && Number.isFinite(Number(sa))
-  const hasB = sb != null && Number.isFinite(Number(sb))
-  if (hasA && hasB && Number(sa) !== Number(sb)) return Number(sa) - Number(sb)
-  if (hasA !== hasB) return hasA ? -1 : 1
-  return new Date(b.created_at || 0) - new Date(a.created_at || 0)
-}
-
-function sourceLabel(doc) {
-  const s = doc.source || doc.metadata?.source || ''
-  if (s === 'google_drive' || s === 'drive') return 'Google Drive'
-  if (s === 'r2' || s === 'upload') return 'Upload / R2'
-  if (s === 'paste' || s === 'text') return 'Dán text'
-  if (s === 'web' || s === 'web_official') return 'Website'
-  return s || '—'
-}
-
-function buildGroups(docs, categoryOptions) {
-  const by = new Map()
-  for (const o of categoryOptions) by.set(o.id, [])
-  const extras = new Map()
-  const uncat = []
-  for (const d of docs) {
-    const cid = d.category_id || d.metadata?.category_id || ''
-    if (!cid) uncat.push(d)
-    else if (by.has(cid)) by.get(cid).push(d)
-    else {
-      if (!extras.has(cid)) extras.set(cid, [])
-      extras.get(cid).push(d)
-    }
-  }
-  const groups = [
-    {
-      id: '',
-      label: 'Không phân loại',
-      r2: 'van-ban/chua-gan',
-      items: uncat.sort(docSort),
-    },
-  ]
-  for (const o of categoryOptions) {
-    groups.push({
-      id: o.id,
-      label: o.label,
-      r2: r2PrefixFromLabel(o.label),
-      items: (by.get(o.id) || []).sort(docSort),
-    })
-  }
-  for (const [id, items] of extras) {
-    groups.push({
-      id,
-      label: items[0]?.folder_path || items[0]?.chuyen_mon || 'Chuyên mục khác',
-      r2: r2PrefixFromLabel(items[0]?.folder_path || ''),
-      items: items.sort(docSort),
-    })
-  }
-  return groups
-}
-
-function itemsPayload(docs, categoryId) {
-  return docs
-    .filter((d) => (d.category_id || '') === (categoryId || ''))
-    .sort(docSort)
-    .map((d, i) => ({ id: d.id, categoryId: categoryId || null, sortOrder: i }))
-}
+import AdminIngestPanel from './admin/AdminIngestPanel'
+import AdminDocCatalog from './admin/AdminDocCatalog'
+import {
+  ALLOWED_RE,
+  buildGroups,
+  catalogItemFromResult,
+  docSort,
+  errorFromResponseBody,
+  itemsPayload,
+  readSse,
+  r2PrefixFromLabel,
+} from './admin/adminDocUtils'
 
 export default function AdminPage() {
   const { me, refreshMe } = useOutletContext() || {}
@@ -124,6 +31,7 @@ export default function AdminPage() {
   const [docTitle, setDocTitle] = useState('')
   const [docDescription, setDocDescription] = useState('')
   const [driveLinks, setDriveLinks] = useState([''])
+  const [webLinks, setWebLinks] = useState([''])
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState({ percent: 0, message: '' })
   const [result, setResult] = useState(null)
@@ -131,11 +39,15 @@ export default function AdminPage() {
   const [categoryId, setCategoryId] = useState('')
   const [categoryOptions, setCategoryOptions] = useState([])
   const [docs, setDocs] = useState([])
+  const [docsLoading, setDocsLoading] = useState(true)
   const [selected, setSelected] = useState(() => new Set())
   const [editingId, setEditingId] = useState('')
   const [editName, setEditName] = useState('')
   const [editSoHieu, setEditSoHieu] = useState('')
-  const [editTrangThai, setEditTrangThai] = useState('Còn hiệu lực')
+  const [editHetHieuLuc, setEditHetHieuLuc] = useState(false)
+  const [editReplacementDocId, setEditReplacementDocId] = useState('')
+  const [editReplacementUrl, setEditReplacementUrl] = useState('')
+  const [editVanBanThayThe, setEditVanBanThayThe] = useState('')
   const [bulkCategoryId, setBulkCategoryId] = useState('')
   const [detailId, setDetailId] = useState('')
   const [dropHint, setDropHint] = useState('')
@@ -144,6 +56,7 @@ export default function AdminPage() {
   const [driveHint, setDriveHint] = useState(null)
   const inputRef = useRef(null)
   const ingestLock = useRef(false)
+  const catalogPatchTimer = useRef(null)
 
   const loadStats = useCallback(async () => {
     try {
@@ -183,6 +96,7 @@ export default function AdminPage() {
   }, [me])
 
   const loadDocs = useCallback(async () => {
+    setDocsLoading(true)
     try {
       const res = await adminFetch('/api/library/documents')
       const data = await res.json().catch(() => ({}))
@@ -197,6 +111,8 @@ export default function AdminPage() {
       console.warn(e)
       setError(e.message || 'Không tải được danh mục tài liệu')
       return []
+    } finally {
+      setDocsLoading(false)
     }
   }, [])
 
@@ -248,7 +164,7 @@ export default function AdminPage() {
         limit: formatBytes(httpUploadMaxBytes),
         keptSmall: direct.length > 0,
       })
-      setIngestTab('url')
+      setIngestTab('drive')
     }
     if (direct.length) {
       setFiles((prev) => {
@@ -267,63 +183,8 @@ export default function AdminPage() {
     setResult(null)
   }
 
-  async function readSse(res, { onProgress, onDone }) {
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder('utf-8')
-    let buffer = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const parts = buffer.split('\n\n')
-      buffer = parts.pop() || ''
-
-      for (const part of parts) {
-        const lines = part.split('\n')
-        let event = 'message'
-        const dataLines = []
-        for (const line of lines) {
-          if (line.startsWith('event:')) event = line.slice(6).trim()
-          else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim())
-        }
-        if (!dataLines.length) continue
-        let data
-        try {
-          data = JSON.parse(dataLines.join('\n'))
-        } catch {
-          continue
-        }
-        if (event === 'progress') onProgress?.(data)
-        else if (event === 'done') onDone?.(data)
-        else if (event === 'error') throw new Error(data.message || 'Lỗi SSE')
-      }
-    }
-  }
-
-  function catalogItemFromResult(result) {
-    if (!result?.id) return null
-    return {
-      id: result.id,
-      file_name: result.fileName,
-      display_name: result.displayName || result.fileName,
-      mo_ta: result.moTa || result.metadata?.mo_ta || '',
-      so_hieu: result.metadata?.so_hieu || '',
-      loai_van_ban: result.metadata?.loai_van_ban || '',
-      trang_thai: result.metadata?.trang_thai || '',
-      chunk_count: result.chunks || 0,
-      storage_url: result.storageUrl || result.publicUrl || result.driveWebViewLink || result.downloadUrl || '',
-      storage_path: result.storagePath || '',
-      drive_web_view_link: result.driveWebViewLink || result.downloadUrl || '',
-      category_id: result.categoryId || categoryId || '',
-      folder_path: result.folderPath || '',
-      source: result.source || result.kind || 'upload',
-      created_at: new Date().toISOString(),
-    }
-  }
-
   async function showIngested(result) {
-    const item = catalogItemFromResult(result)
+    const item = catalogItemFromResult(result, categoryId)
     const items = await loadDocs()
     loadStats()
     if (item?.id && !items.some((d) => d.id === item.id)) {
@@ -455,7 +316,36 @@ export default function AdminPage() {
     }
   }
 
-  async function handleWebUrl() {
+  function finishLinkIngest(data, resetLinks) {
+    const nested = (data?.items || []).flatMap((it) => it.results || [])
+    const listed = data?.files || data?.items || []
+    const persisted = listed.filter((it) => it.id)
+    const failedItems = listed.filter((it) => it.error || it.ok === false)
+    const firstFile =
+      persisted[0] ||
+      nested.find((it) => it.id) ||
+      data?.items?.find((it) => it.type !== 'folder' && it.id)
+    const skippedOnly = Number(data?.skipped || 0) > 0 && !persisted.length && !failedItems.length
+    if (!firstFile?.id && !skippedOnly) {
+      const detail =
+        failedItems[0]?.error ||
+        nested.find((it) => it.error)?.error ||
+        data?.error ||
+        'Số hóa xong nhưng chưa ghi được vào danh mục tài liệu. Kiểm tra Supabase rồi thử lại.'
+      throw new Error(detail)
+    }
+    setResult(data)
+    setProgress({ percent: 0, message: '' })
+    resetLinks()
+    setDriveHint(null)
+    if (firstFile?.id) showIngested(firstFile)
+    else {
+      loadStats()
+      loadDocs()
+    }
+  }
+
+  async function handleDriveIngest() {
     const links = driveLinks.map((s) => s.trim()).filter(Boolean)
     if (!links.length || uploading || ingestLock.current) return
     if (!isSuper && !categoryId) {
@@ -466,9 +356,9 @@ export default function AdminPage() {
     ingestLock.current = true
     setError('')
     setResult(null)
-    setProgress({ percent: 1, message: 'Đang đọc link Drive / website…' })
+    setProgress({ percent: 1, message: 'Đang đọc Google Drive…' })
     try {
-      const res = await adminFetch('/api/upload/url', {
+      const res = await adminFetch('/api/upload/drive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
         body: JSON.stringify({
@@ -482,34 +372,47 @@ export default function AdminPage() {
       await readSse(res, {
         onProgress: (data) =>
           setProgress({ percent: data.percent || 0, message: data.message || '' }),
-        onDone: (data) => {
-          const nested = (data?.items || []).flatMap((it) => it.results || [])
-          const listed = data?.files || []
-          const persisted = listed.filter((it) => it.id)
-          const failedItems = listed.filter((it) => it.error || it.ok === false)
-          const firstFile =
-            persisted[0] ||
-            nested.find((it) => it.id) ||
-            data?.items?.find((it) => it.type !== 'folder' && it.id)
-          const skippedOnly = Number(data?.skipped || 0) > 0 && !persisted.length && !failedItems.length
-          if (!firstFile?.id && !skippedOnly) {
-            const detail =
-              failedItems[0]?.error ||
-              nested.find((it) => it.error)?.error ||
-              data?.error ||
-              'Số hóa Drive xong nhưng chưa ghi được vào danh mục tài liệu. Kiểm tra Supabase rồi thử lại.'
-            throw new Error(detail)
-          }
-          setResult(data)
-          setProgress({ percent: 0, message: '' })
-          setDriveLinks([''])
-          setDriveHint(null)
-          if (firstFile?.id) showIngested(firstFile)
-          else {
-            loadStats()
-            loadDocs()
-          }
-        },
+        onDone: (data) => finishLinkIngest(data, () => setDriveLinks([''])),
+      })
+    } catch (e) {
+      setError(e.message)
+      setProgress({ percent: 0, message: '' })
+      loadDocs()
+      loadStats()
+    } finally {
+      ingestLock.current = false
+      setUploading(false)
+    }
+  }
+
+  async function handleWebIngest() {
+    const links = webLinks.map((s) => s.trim()).filter(Boolean)
+    if (!links.length || uploading || ingestLock.current) return
+    if (!isSuper && !categoryId) {
+      setError('Chọn ngành / hạng mục / chủ đề trước khi nạp')
+      return
+    }
+    setUploading(true)
+    ingestLock.current = true
+    setError('')
+    setResult(null)
+    setProgress({ percent: 1, message: 'Đang tải trang web…' })
+    try {
+      const res = await adminFetch('/api/upload/web', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+        body: JSON.stringify({
+          url: links.join('\n'),
+          categoryId: categoryId || undefined,
+          title: docTitle.trim() || undefined,
+          description: docDescription.trim() || undefined,
+        }),
+      })
+      if (!res.ok) throw new Error(errorFromResponseBody(await res.text(), res.status))
+      await readSse(res, {
+        onProgress: (data) =>
+          setProgress({ percent: data.percent || 0, message: data.message || '' }),
+        onDone: (data) => finishLinkIngest(data, () => setWebLinks([''])),
       })
     } catch (e) {
       setError(e.message)
@@ -610,10 +513,42 @@ export default function AdminPage() {
     await patchCatalog(doc.id, {
       display_name: name,
       soHieu: editSoHieu,
-      trangThai: editTrangThai,
+      trangThai: trangThaiFromExpired(editHetHieuLuc),
+      replacementDocId: editReplacementDocId || null,
+      replacementUrl: editReplacementUrl,
+      vanBanThayThe: editVanBanThayThe,
     })
     setEditingId('')
   }
+
+  function openDocDetail(doc) {
+    setDetailId(doc.id)
+    setEditSoHieu(doc.so_hieu || '')
+    setEditHetHieuLuc(isExpired(doc.trang_thai))
+    setEditReplacementDocId(doc.replacement_doc_id || '')
+    setEditReplacementUrl(doc.replacement_url || '')
+    setEditVanBanThayThe((doc.van_ban_thay_the || []).join(', '))
+  }
+
+  async function saveValidityFields() {
+    if (!detailDoc) return
+    scheduleCatalogPatch(detailDoc.id, {
+      trangThai: trangThaiFromExpired(editHetHieuLuc),
+      soHieu: editSoHieu,
+      replacementDocId: editReplacementDocId || null,
+      replacementUrl: editReplacementUrl,
+      vanBanThayThe: editVanBanThayThe,
+    })
+  }
+
+  function scheduleCatalogPatch(id, body, delay = 450) {
+    clearTimeout(catalogPatchTimer.current)
+    catalogPatchTimer.current = setTimeout(() => {
+      patchCatalog(id, body)
+    }, delay)
+  }
+
+  useEffect(() => () => clearTimeout(catalogPatchTimer.current), [])
 
   async function patchCatalog(id, body) {
     const res = await adminFetch(`/api/library/documents/${encodeURIComponent(id)}`, {
@@ -708,680 +643,86 @@ export default function AdminPage() {
         </p>
 
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(18rem,38%)_minmax(0,1fr)]">
-          <section className="glass-panel rounded-3xl p-4 sm:p-5">
-            <h2 className="m-0 mb-1 text-base font-semibold text-white">Tải tài liệu</h2>
-            <p className="m-0 mb-3 text-xs text-white/65">
-              File trên {formatBytes(httpUploadMaxBytes)}: đưa Drive rồi dán link. File trùng nội dung
-              không lưu thêm R2.
-            </p>
-
-            <div className="mb-3 grid grid-cols-3 gap-1 rounded-2xl border border-white/15 bg-white/5 p-0.5">
-              {[
-                { id: 'file', label: 'File', Icon: UploadCloud },
-                { id: 'text', label: 'Dán text', Icon: Type },
-                { id: 'url', label: 'Link / Drive', Icon: Globe },
-              ].map(({ id, label, Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setIngestTab(id)}
-                  className={`inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition ${
-                    ingestTab === id ? 'btn-gold' : 'text-white/70 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <label className="mb-3 block">
-              <span className="mb-1 block text-xs font-medium text-white/70">
-                Ngành / hạng mục / chủ đề {isSuper ? '(tuỳ chọn)' : '(bắt buộc)'}
-              </span>
-              <select
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                className="min-h-11 w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-base text-white outline-none focus:border-[var(--hcc-gold)] sm:text-sm"
-              >
-                <option value="" className="text-[var(--hcc-ink)]">
-                  {isSuper ? 'Tự gợi ý theo nội dung văn bản' : '— Chọn phần bạn được giao —'}
-                </option>
-                {categoryOptions.map((o) => (
-                  <option key={o.id} value={o.id} className="text-[var(--hcc-ink)]">
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              <span className="mt-1 block font-mono text-[11px] text-white/40">
-                R2: {uploadR2Hint}/
-              </span>
-            </label>
-
-            {ingestTab === 'file' && (
-              <>
-                <div
-                  onDragOver={(e) => {
-                    e.preventDefault()
-                    setDragOver(true)
-                  }}
-                  onDragLeave={() => setDragOver(false)}
-                  onDrop={(e) => {
-                    e.preventDefault()
-                    setDragOver(false)
-                    if (e.dataTransfer.files?.length) acceptFiles(e.dataTransfer.files)
-                  }}
-                  onClick={() => inputRef.current?.click()}
-                  className={`mb-3 flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-dashed px-3 py-2.5 text-left transition ${
-                    dragOver
-                      ? 'border-[var(--hcc-gold)]/80 bg-white/15'
-                      : 'border-white/20 bg-white/5 hover:border-white/40 hover:bg-white/10'
-                  }`}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click()
-                  }}
-                >
-                  <UploadCloud className="h-5 w-5 shrink-0 text-white/70" />
-                  <div className="min-w-0 flex-1">
-                    <p className="m-0 text-sm font-medium text-white">
-                      {files.length ? `${files.length} file đã chọn` : 'Kéo thả hoặc chọn file'}
-                    </p>
-                    <p className="m-0 text-[11px] text-white/50">
-                      PDF, Word, PPT, Excel, ảnh · tối đa {formatBytes(httpUploadMaxBytes)} / lần
-                    </p>
-                  </div>
-                  <input
-                    ref={inputRef}
-                    type="file"
-                    multiple
-                    accept=".pdf,.doc,.docx,.docm,.ppt,.pptx,.pptm,.xls,.xlsx,.xlsm,.rtf,.odt,.odp,.ods,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.txt,.md,.csv,application/pdf,application/msword,application/vnd.ms-powerpoint,application/vnd.ms-excel,image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      acceptFiles(e.target.files)
-                      e.target.value = ''
-                    }}
-                  />
-                </div>
-                {files.length ? (
-                  <ul className="mb-3 max-h-24 space-y-1 overflow-y-auto p-0 text-xs text-white/70">
-                    {files.map((f, i) => (
-                      <li key={`${f.name}-${i}`} className="flex list-none justify-between gap-2">
-                        <span className="truncate">{f.name}</span>
-                        <button
-                          type="button"
-                          className="min-h-8 shrink-0 text-white/45 hover:text-white"
-                          onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                        >
-                          Bỏ
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </>
-            )}
-
-            {ingestTab === 'text' && (
-              <textarea
-                rows={5}
-                value={pasteText}
-                onChange={(e) => setPasteText(e.target.value)}
-                placeholder="Dán nội dung văn bản…"
-                className="mb-3 w-full resize-y rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-white outline-none placeholder:text-white/40"
-              />
-            )}
-
-            {ingestTab === 'url' && (
-              <div className="mb-3 space-y-2">
-                {driveHint ? (
-                  <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-3 py-3 text-sm text-amber-50">
-                    <p className="m-0 font-medium">
-                      File lớn hơn {driveHint.limit} — dùng Google Drive
-                    </p>
-                    <ul className="mt-2 mb-2 list-disc space-y-0.5 pl-4 text-xs text-amber-50/90">
-                      {driveHint.names.map((n, i) => (
-                        <li key={`${n}-${i}`}>{n}</li>
-                      ))}
-                    </ul>
-                    <ol className="m-0 list-decimal space-y-1 pl-4 text-xs leading-relaxed text-white/80">
-                      <li>
-                        Mở{' '}
-                        <a
-                          href="https://drive.google.com"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="underline text-[var(--hcc-gold-bright)]"
-                        >
-                          Google Drive
-                        </a>
-                        , bấm Mới → Tải tệp lên.
-                      </li>
-                      <li>Chuột phải file → Chia sẻ → «Bất kỳ ai có đường liên kết».</li>
-                      <li>Copy link, dán vào ô bên dưới, bấm Số hóa.</li>
-                    </ol>
-                    {driveHint.keptSmall ? (
-                      <p className="m-0 mt-2 text-xs text-white/70">
-                        File nhỏ hơn {driveHint.limit} vẫn nằm ở tab File — tải như bình thường.
-                      </p>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="mt-2 text-[11px] text-white/50 underline"
-                      onClick={() => setDriveHint(null)}
-                    >
-                      Đóng hướng dẫn
-                    </button>
-                  </div>
-                ) : (
-                  <p className="m-0 text-sm text-white/65">
-                    File tải tay lưu bản gốc trên Cloudflare R2. Link Drive thì file ở lại Drive — bấm
-                    Thêm link để gán nhiều link rồi số hóa một lúc.
-                  </p>
-                )}
-                <div className="space-y-2">
-                  {driveLinks.map((link, i) => (
-                    <div key={i} className="flex gap-2">
-                      <input
-                        value={link}
-                        onChange={(e) =>
-                          setDriveLinks((prev) => prev.map((x, idx) => (idx === i ? e.target.value : x)))
-                        }
-                        placeholder="https://drive.google.com/file/d/… hoặc /folders/…"
-                        className="min-w-0 flex-1 rounded-2xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/40"
-                      />
-                      {driveLinks.length > 1 ? (
-                        <button
-                          type="button"
-                          onClick={() => setDriveLinks((prev) => prev.filter((_, idx) => idx !== i))}
-                          className="shrink-0 rounded-xl bg-white/10 px-3 text-xs text-white/70"
-                        >
-                          Bỏ
-                        </button>
-                      ) : null}
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setDriveLinks((prev) => [...prev, ''])}
-                    className="inline-flex min-h-9 items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 text-xs text-white/80"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Thêm link
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <label className="mb-2 block">
-              <span className="mb-1 block text-xs font-medium text-white/70">Tên tài liệu</span>
-              <input
-                value={ingestTab === 'text' ? pasteTitle : docTitle}
-                onChange={(e) =>
-                  ingestTab === 'text' ? setPasteTitle(e.target.value) : setDocTitle(e.target.value)
-                }
-                placeholder={
-                  ingestTab === 'file'
-                    ? files.length === 1
-                      ? 'Tên hiện trên danh mục (mặc định = tên file)'
-                      : 'Một file: điền tên. Nhiều file: mỗi file dùng tên file'
-                    : 'Tên hiện trên danh mục'
-                }
-                className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-white outline-none placeholder:text-white/40"
-              />
-            </label>
-            <label className="mb-3 block">
-              <span className="mb-1 block text-xs font-medium text-white/70">Mô tả (hiện trên danh mục)</span>
-              <textarea
-                rows={2}
-                value={docDescription}
-                onChange={(e) => setDocDescription(e.target.value)}
-                placeholder="Ví dụ: Quy định thời gian làm việc, áp dụng từ năm học 2025–2026"
-                className="w-full resize-y rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-white outline-none placeholder:text-white/40"
-              />
-            </label>
-
-            {ingestTab === 'file' && (
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  disabled={!files.length || uploading}
-                  onClick={handleUpload}
-                  className="btn-gold inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold disabled:opacity-40"
-                >
-                  <Sparkles className={`h-4 w-4 ${uploading ? 'wait-spark' : ''}`} />
-                  {uploading ? 'Đang số hóa…' : `Tải lên & số hóa (${files.length || 0})`}
-                </button>
-                {files.length ? (
-                  <button
-                    type="button"
-                    className="min-h-11 cursor-pointer text-sm text-white/70"
-                    onClick={() => setFiles([])}
-                  >
-                    Xóa danh sách chọn
-                  </button>
-                ) : null}
-              </div>
-            )}
-
-            {ingestTab === 'text' && (
-              <button
-                type="button"
-                disabled={!pasteText.trim() || uploading}
-                onClick={handlePasteText}
-                className="btn-gold inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold disabled:opacity-40"
-              >
-                <Type className="h-4 w-4" />
-                {uploading ? 'Đang số hóa…' : 'Số hóa text'}
-              </button>
-            )}
-
-            {ingestTab === 'url' && (
-              <button
-                type="button"
-                disabled={!driveLinks.some((s) => s.trim()) || uploading}
-                onClick={handleWebUrl}
-                className="btn-gold inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold disabled:opacity-40"
-              >
-                <Globe className="h-4 w-4" />
-                {uploading ? 'Đang lấy & số hóa…' : 'Số hóa từ link Drive'}
-              </button>
-            )}
-
-            {uploading && (
-              <DigitizingWait
-                percent={progress.percent}
-                message={progress.message}
-                active={uploading}
-              />
-            )}
-
-            {error ? (
-              <p role="alert" className="mb-0 mt-3 text-sm text-rose-300">
-                {error}
-              </p>
-            ) : null}
-
-            {result ? (
-              <div
-                className={`mt-3 rounded-2xl border p-4 text-sm ${
-                  result.duplicate || result.failed || (Number(result.skipped) > 0 && !result.processed)
-                    ? 'border-amber-400/30 bg-amber-400/10 text-amber-50'
-                    : 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100'
-                }`}
-              >
-                <p className="m-0 font-medium">
-                  {result.duplicate || (Number(result.skipped) > 0 && !result.processed)
-                    ? result.message ||
-                      (result.skipped
-                        ? `Không có file mới — ${result.skipped} file đã có trong kho`
-                        : result.message || 'File trùng — không lưu thêm vector')
-                    : result.failed && !result.processed
-                      ? `Không ghi được danh mục: ${result.displayName || result.fileName || 'Google Drive'}`
-                      : `Số hóa thành công: ${result.displayName || result.fileName || 'Google Drive'}`}
-                  {result.count > 1 ? ` · ${result.count} link` : ''}
-                </p>
-                {result.duplicate || (Number(result.skipped) > 0 && !result.processed) ? (
-                  <p className="m-0 mt-1 text-xs text-amber-50/80">
-                    Hệ thống chỉ số hóa file Drive chưa có trong kho. Dùng «Số hóa lại» nếu cần OCR/vector lại file cũ.
-                  </p>
-                ) : result.skipped || result.processed ? (
-                  <p className="m-0 mt-1 text-xs text-emerald-100/75">
-                    File mới xử lý {result.processed || 0}
-                    {result.skipped ? ` · đã có trong kho ${result.skipped}` : ''}
-                    {result.pending > result.processed
-                      ? ` · còn ${result.pending - (result.processed || 0)} file mới (lần sau dán lại link)`
-                      : ''}
-                    {result.failed ? ` · lỗi ${result.failed}` : ''}
-                  </p>
-                ) : null}
-                {result.moTa ? (
-                  <p className="m-0 mt-1 text-emerald-100/80">{result.moTa}</p>
-                ) : null}
-                <p className="m-0 mt-1 text-emerald-100/80">
-                  {[result.metadata?.loai_van_ban, result.metadata?.so_hieu]
-                    .filter(Boolean)
-                    .join(' ')}
-                  {result.chunks != null && result.chunks !== '' ? ` · ${result.chunks} chunks` : ''}
-                </p>
-                {Array.isArray(result.files) && result.files.length > 0 ? (
-                  <ul className="m-0 mt-2 list-none space-y-1 p-0 text-xs">
-                    {result.files.map((f) => (
-                      <li key={f.id || f.fileName} className="text-emerald-50/90">
-                        {f.driveWebViewLink || f.storageUrl ? (
-                          <a
-                            href={f.driveWebViewLink || f.storageUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-[var(--hcc-gold-bright)] underline"
-                          >
-                            {f.displayName || f.fileName || 'Mở file Drive'}
-                          </a>
-                        ) : (
-                          <span>{f.displayName || f.fileName}</span>
-                        )}
-                        {f.chunks ? ` · ${f.chunks} chunks` : ''}
-                        {f.error ? ` · ${f.error}` : ''}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                {result.storageUrl || result.publicUrl || result.driveWebViewLink || result.downloadUrl ? (
-                  <a
-                    href={
-                      result.storageUrl ||
-                      result.publicUrl ||
-                      result.driveWebViewLink ||
-                      result.downloadUrl
-                    }
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-1 inline-block text-[var(--hcc-gold-bright)] underline"
-                  >
-                    {result.source === 'google_drive' ? 'Mở bản gốc trên Drive' : 'Mở bản gốc'}
-                  </a>
-                ) : (
-                  <p className="m-0 mt-1 text-[11px] text-amber-100/80">
-                    {result.source === 'google_drive'
-                      ? 'Chưa có link tải về — Share file/thư mục Viewer cho service account, hoặc bật “Anyone with the link”.'
-                      : 'Chưa có link tải về — cấu hình R2 hoặc dùng Google Drive để có bản gốc.'}
-                  </p>
-                )}
-                {result.storagePath ? (
-                  <p className="m-0 mt-1 break-all font-mono text-[11px] text-emerald-100/60">
-                    {result.storagePath}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-          </section>
-
-          <section className="glass-panel flex min-h-0 flex-col rounded-3xl p-4 sm:p-5">
-            <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="m-0 text-base font-semibold">Danh mục tài liệu</h2>
-                <p className="m-0 text-[11px] text-white/45">
-                  Kéo tay cầm để đổi vị trí; thả vào nhóm khác để chuyển chuyên mục (R2 cũng chuyển thư mục).
-                </p>
-              </div>
-              <label className="inline-flex items-center gap-2 text-xs text-white/70">
-                <input type="checkbox" checked={allSelected} onChange={toggleAll} />
-                Chọn tất cả ({docs.length})
-              </label>
-            </div>
-
-            {selectedIds.length ? (
-              <div className="mb-3 flex shrink-0 flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 p-3 sm:flex-row sm:flex-wrap sm:items-center">
-                <span className="text-xs text-white/70">{selectedIds.length} đã chọn</span>
-                <select
-                  value={bulkCategoryId}
-                  onChange={(e) => setBulkCategoryId(e.target.value)}
-                  className="min-h-11 w-full rounded-xl border border-white/15 bg-black/20 px-2 py-1.5 text-base sm:w-auto sm:min-w-[12rem] sm:text-xs"
-                >
-                  <option value="">— Chuyển chuyên mục —</option>
-                  {categoryOptions.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  disabled={!bulkCategoryId}
-                  onClick={applyBulkCategory}
-                  className="min-h-11 rounded-full bg-white/10 px-3 text-xs disabled:opacity-40"
-                >
-                  Áp dụng
-                </button>
-                <button
-                  type="button"
-                  disabled={uploading}
-                  onClick={() => reindexIds(selectedIds)}
-                  className="min-h-11 rounded-full bg-white/10 px-3 text-xs disabled:opacity-40"
-                >
-                  Số hóa lại đã chọn
-                </button>
-                <button
-                  type="button"
-                  onClick={() => deleteIds(selectedIds)}
-                  className="min-h-11 rounded-full bg-red-500/20 px-3 text-xs text-red-100"
-                >
-                  Xóa đã chọn
-                </button>
-              </div>
-            ) : null}
-
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-              {groups.map((group) => {
-                if (!group.items.length && !group.id && !isSuper) return null
-                return (
-                  <div
-                    key={group.id || 'uncat'}
-                    onDragOver={(e) => {
-                      e.preventDefault()
-                      setDropHint(`group:${group.id}`)
-                    }}
-                    onDragLeave={() => setDropHint('')}
-                    onDrop={(e) => {
-                      e.preventDefault()
-                      const fromId = e.dataTransfer.getData('text/plain')
-                      setDropHint('')
-                      if (fromId) applyDrop(fromId, group.id, null)
-                    }}
-                    className={`rounded-2xl border px-2 py-2 ${
-                      dropHint === `group:${group.id}`
-                        ? 'border-[var(--hcc-gold)]/60 bg-white/10'
-                        : 'border-white/10 bg-white/[0.03]'
-                    }`}
-                  >
-                    <div className="mb-1 flex items-baseline justify-between gap-2 px-1">
-                      <p className="m-0 text-xs font-semibold text-white/85">{group.label}</p>
-                      <p className="m-0 truncate font-mono text-[10px] text-white/35">{group.r2}/</p>
-                    </div>
-                    {group.items.length ? (
-                      <ul className="m-0 list-none space-y-1.5 p-0">
-                        {group.items.map((doc) => (
-                          <li
-                            key={doc.id}
-                            draggable={editingId !== doc.id}
-                            onDragStart={(e) => {
-                              e.dataTransfer.setData('text/plain', doc.id)
-                              e.dataTransfer.effectAllowed = 'move'
-                            }}
-                            onDragOver={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              setDropHint(`doc:${doc.id}`)
-                            }}
-                            onDrop={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              const fromId = e.dataTransfer.getData('text/plain')
-                              setDropHint('')
-                              if (fromId) applyDrop(fromId, group.id, doc.id)
-                            }}
-                            onClick={() => {
-                              setDetailId(doc.id)
-                              setEditSoHieu(doc.so_hieu || '')
-                              setEditTrangThai(doc.trang_thai || 'Còn hiệu lực')
-                            }}
-                            className={`flex cursor-pointer flex-wrap items-center gap-2 rounded-xl border px-2 py-2 ${
-                              detailId === doc.id
-                                ? 'border-[var(--hcc-gold)]/40 bg-white/10'
-                                : dropHint === `doc:${doc.id}`
-                                  ? 'border-white/30 bg-white/10'
-                                  : 'border-white/10 bg-white/5'
-                            }`}
-                          >
-                            <GripVertical
-                              className="h-4 w-4 shrink-0 cursor-grab text-white/35"
-                              title="Kéo đổi vị trí"
-                            />
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 shrink-0"
-                              checked={selected.has(doc.id)}
-                              onClick={(e) => e.stopPropagation()}
-                              onChange={() => toggleOne(doc.id)}
-                            />
-                            <div className="min-w-0 flex-1">
-                              {editingId === doc.id ? (
-                                <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                                  <input
-                                    value={editName}
-                                    onChange={(e) => setEditName(e.target.value)}
-                                    className="min-w-0 flex-1 rounded-lg border border-white/15 bg-black/20 px-2 py-1 text-sm"
-                                  />
-                                  <button
-                                    type="button"
-                                    className="text-xs text-[var(--hcc-gold-bright)]"
-                                    onClick={() => saveEdit(doc)}
-                                  >
-                                    Lưu
-                                  </button>
-                                </div>
-                              ) : (
-                                <p className="m-0 truncate text-sm">
-                                  {doc.display_name || doc.file_name}
-                                </p>
-                              )}
-                              <p className="m-0 truncate text-[11px] text-white/45">
-                                {doc.mo_ta ? `${doc.mo_ta} · ` : ''}
-                                {doc.so_hieu || 'Chưa số hiệu'} · {sourceLabel(doc)} ·{' '}
-                                {doc.chunk_count || 0} chunks
-                                {doc.storage_url || doc.drive_web_view_link ? '' : ' · chưa có link'}
-                              </p>
-                            </div>
-                            <select
-                              value={doc.category_id || ''}
-                              onClick={(e) => e.stopPropagation()}
-                              onChange={(e) => changeDocCategory(doc, e.target.value)}
-                              className="max-w-full min-h-11 w-full rounded-lg border border-white/15 bg-black/20 px-2 py-1 text-base sm:max-w-[11rem] sm:min-h-8 sm:w-auto sm:text-[11px]"
-                            >
-                              {isSuper ? <option value="">Chưa gắn</option> : null}
-                              {categoryOptions.map((o) => (
-                                <option key={o.id} value={o.id}>
-                                  {o.label}
-                                </option>
-                              ))}
-                            </select>
-                            <button
-                              type="button"
-                              title="Sửa tên"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setEditingId(doc.id)
-                                setEditName(doc.display_name || doc.file_name || '')
-                                setEditSoHieu(doc.so_hieu || '')
-                                setEditTrangThai(doc.trang_thai || 'Còn hiệu lực')
-                              }}
-                              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full bg-white/10"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              title="Số hóa lại"
-                              disabled={uploading}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                reindexIds([doc.id])
-                              }}
-                              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full bg-white/10"
-                            >
-                              <RefreshCw className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              title="Xóa"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                deleteIds([doc.id])
-                              }}
-                              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full bg-red-500/20 text-red-100"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="m-0 px-1 py-2 text-[11px] text-white/35">Thả tài liệu vào đây</p>
-                    )}
-                  </div>
-                )
-              })}
-              {!docs.length ? (
-                <p className="m-0 text-sm text-white/50">Chưa có tài liệu.</p>
-              ) : null}
-            </div>
-
-            {detailDoc ? (
-              <div className="mt-3 shrink-0 rounded-2xl border border-white/10 bg-black/20 p-3 text-xs text-white/70">
-                <p className="m-0 text-sm font-medium text-white">
-                  {detailDoc.display_name || detailDoc.file_name}
-                </p>
-                {detailDoc.mo_ta ? (
-                  <p className="m-0 mt-1 text-[11px] text-white/60">{detailDoc.mo_ta}</p>
-                ) : null}
-                <dl className="m-0 mt-2 grid grid-cols-[7rem_1fr] gap-x-2 gap-y-1">
-                  <dt className="text-white/40">Số hiệu</dt>
-                  <dd className="m-0">
-                    <input
-                      value={editSoHieu}
-                      onChange={(e) => setEditSoHieu(e.target.value)}
-                      onBlur={() =>
-                        patchCatalog(detailDoc.id, {
-                          soHieu: editSoHieu,
-                          trangThai: editTrangThai,
-                        })
-                      }
-                      className="w-full rounded-lg border border-white/15 bg-black/20 px-2 py-1 text-xs"
-                    />
-                  </dd>
-                  <dt className="text-white/40">Loại</dt>
-                  <dd className="m-0">{detailDoc.loai_van_ban || '—'}</dd>
-                  <dt className="text-white/40">Trạng thái</dt>
-                  <dd className="m-0">
-                    <select
-                      value={editTrangThai || 'Còn hiệu lực'}
-                      onChange={(e) => {
-                        const v = e.target.value
-                        setEditTrangThai(v)
-                        patchCatalog(detailDoc.id, { trangThai: v, soHieu: editSoHieu })
-                      }}
-                      className="w-full rounded-lg border border-white/15 bg-black/20 px-2 py-1 text-xs"
-                    >
-                      <option>Còn hiệu lực</option>
-                      <option>Hết hiệu lực</option>
-                      <option>Bị thay thế một phần</option>
-                    </select>
-                  </dd>
-                  <dt className="text-white/40">Nguồn</dt>
-                  <dd className="m-0">{sourceLabel(detailDoc)}</dd>
-                  <dt className="text-white/40">Chuyên mục</dt>
-                  <dd className="m-0">{detailDoc.folder_path || 'Chưa gắn'}</dd>
-                  <dt className="text-white/40">R2 / kho</dt>
-                  <dd className="m-0 break-all font-mono text-[11px] text-white/55">
-                    {detailDoc.storage_path || 'Không lưu R2 (Drive / text)'}
-                  </dd>
-                </dl>
-                {detailDoc.storage_url || detailDoc.drive_web_view_link ? (
-                  <a
-                    href={detailDoc.storage_url || detailDoc.drive_web_view_link}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-2 inline-block text-[var(--hcc-gold-bright)] underline"
-                  >
-                    Mở bản gốc
-                  </a>
-                ) : (
-                  <p className="m-0 mt-2 text-[11px] text-amber-100/70">Chưa có link bản gốc</p>
-                )}
-              </div>
-            ) : null}
-          </section>
+          <AdminIngestPanel
+            isSuper={isSuper}
+            ingestTab={ingestTab}
+            setIngestTab={setIngestTab}
+            categoryId={categoryId}
+            setCategoryId={setCategoryId}
+            categoryOptions={categoryOptions}
+            uploadR2Hint={uploadR2Hint}
+            httpUploadMaxBytes={httpUploadMaxBytes}
+            dragOver={dragOver}
+            setDragOver={setDragOver}
+            acceptFiles={acceptFiles}
+            files={files}
+            setFiles={setFiles}
+            inputRef={inputRef}
+            pasteText={pasteText}
+            setPasteText={setPasteText}
+            pasteTitle={pasteTitle}
+            setPasteTitle={setPasteTitle}
+            driveLinks={driveLinks}
+            setDriveLinks={setDriveLinks}
+            driveHint={driveHint}
+            setDriveHint={setDriveHint}
+            webLinks={webLinks}
+            setWebLinks={setWebLinks}
+            docTitle={docTitle}
+            setDocTitle={setDocTitle}
+            docDescription={docDescription}
+            setDocDescription={setDocDescription}
+            uploading={uploading}
+            progress={progress}
+            error={error}
+            result={result}
+            handleUpload={handleUpload}
+            handlePasteText={handlePasteText}
+            handleDriveIngest={handleDriveIngest}
+            handleWebIngest={handleWebIngest}
+          />
+          <AdminDocCatalog
+            groups={groups}
+            docs={docs}
+            docsLoading={docsLoading}
+            isSuper={isSuper}
+            allSelected={allSelected}
+            toggleAll={toggleAll}
+            selected={selected}
+            selectedIds={selectedIds}
+            bulkCategoryId={bulkCategoryId}
+            setBulkCategoryId={setBulkCategoryId}
+            categoryOptions={categoryOptions}
+            applyBulkCategory={applyBulkCategory}
+            reindexIds={reindexIds}
+            deleteIds={deleteIds}
+            uploading={uploading}
+            dropHint={dropHint}
+            setDropHint={setDropHint}
+            applyDrop={applyDrop}
+            detailId={detailId}
+            openDocDetail={openDocDetail}
+            editingId={editingId}
+            setEditingId={setEditingId}
+            editName={editName}
+            setEditName={setEditName}
+            editSoHieu={editSoHieu}
+            setEditSoHieu={setEditSoHieu}
+            editHetHieuLuc={editHetHieuLuc}
+            setEditHetHieuLuc={setEditHetHieuLuc}
+            saveEdit={saveEdit}
+            changeDocCategory={changeDocCategory}
+            toggleOne={toggleOne}
+            detailDoc={detailDoc}
+            editReplacementDocId={editReplacementDocId}
+            setEditReplacementDocId={setEditReplacementDocId}
+            editReplacementUrl={editReplacementUrl}
+            setEditReplacementUrl={setEditReplacementUrl}
+            editVanBanThayThe={editVanBanThayThe}
+            setEditVanBanThayThe={setEditVanBanThayThe}
+            scheduleCatalogPatch={scheduleCatalogPatch}
+            saveValidityFields={saveValidityFields}
+          />
         </div>
       </div>
     </div>

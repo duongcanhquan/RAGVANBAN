@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { BookmarkPlus, History, X } from 'lucide-react'
 import { loadLocalHistory, markLocalKnowledge, promoteToScenario } from '../lib/chatHistory'
 import { groupHistoryIntoThreads } from '../lib/conversationHistory'
-import { adminFetch } from '../lib/adminApi'
 
 /**
  * Lịch sử phiên hiện tại — điện thoại: sheet dưới; desktop: drawer phải.
@@ -20,11 +19,13 @@ export default function HistoryPanel({
   const [loading, setLoading] = useState(false)
   const [busyId, setBusyId] = useState('')
   const [canEnrich, setCanEnrich] = useState(false)
+  const [enrichError, setEnrichError] = useState('')
 
   useEffect(() => {
     if (!open) return
     let cancelled = false
-    adminFetch('/api/quantri/me')
+    import('../lib/adminApi')
+      .then(({ adminFetch }) => adminFetch('/api/quantri/me'))
       .then((res) => {
         if (!cancelled) setCanEnrich(res.ok)
       })
@@ -48,6 +49,7 @@ export default function HistoryPanel({
     const last = item.turns?.[item.turns.length - 1] || item
     const targetId = last.id || item.id
     setBusyId(item.id)
+    setEnrichError('')
     try {
       await promoteToScenario(last)
       markLocalKnowledge(targetId, true)
@@ -55,7 +57,7 @@ export default function HistoryPanel({
         prev.map((x) => (x.id === item.id ? { ...x, marked_knowledge: true } : x))
       )
     } catch (e) {
-      console.warn('[history] enrich', e.message)
+      setEnrichError(e.message || 'Không lưu được tình huống')
     } finally {
       setBusyId('')
     }
@@ -95,6 +97,11 @@ export default function HistoryPanel({
         <p className="m-0 border-b border-white/10 px-4 py-2 text-xs text-[var(--hcc-muted)]">
           Chỉ trên tab đang mở. Đóng tab hoặc Kết thúc phiên sẽ xóa — người sau không xem được.
         </p>
+        {enrichError ? (
+          <p role="alert" className="m-0 border-b border-red-500/30 px-4 py-2 text-xs text-red-300">
+            {enrichError}
+          </p>
+        ) : null}
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
           {loading && <p className="text-sm text-[var(--hcc-muted)]">Đang tải…</p>}
           {!loading && items.length === 0 && (
