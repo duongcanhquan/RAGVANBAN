@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { FileUp, KeyRound, LogOut, Users } from 'lucide-react'
 import { supabase, supabaseConfigured } from '../../lib/supabase'
 import { adminFetch } from '../../lib/adminApi'
-import logo from '../../assets/hcc-logo.jpg'
+import { explainLoginError } from '../../lib/authErrors'
+import logoVietmy from '../../assets/logo-vietmy.png'
 
 export default function QuantriShell() {
   const [session, setSession] = useState(null)
@@ -15,6 +16,8 @@ export default function QuantriShell() {
   const [busy, setBusy] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
+
+  const [gateStatus, setGateStatus] = useState(null)
 
   const refreshMe = useCallback(async () => {
     const res = await adminFetch('/api/quantri/me')
@@ -38,6 +41,17 @@ export default function QuantriShell() {
     })
     unsub = () => data.subscription.unsubscribe()
     return () => unsub()
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/quantri/status')
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}))
+        setGateStatus(data)
+      })
+      .catch(() => {
+        setGateStatus({ fetchError: true })
+      })
   }, [])
 
   useEffect(() => {
@@ -78,8 +92,17 @@ export default function QuantriShell() {
         throw new Error('Thiếu VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY trên bản build Vercel')
       }
       const statusRes = await fetch('/api/quantri/status')
-      const status = await statusRes.json()
+      const status = await statusRes.json().catch(() => ({}))
+      setGateStatus(status)
+      if (status.profileError) {
+        throw new Error(status.profileError.includes('admin_profiles')
+          ? status.profileError
+          : `Không đọc được admin_profiles: ${status.profileError}`)
+      }
       if (status.needsBootstrap) {
+        if (!status.hasPasswordEnv) {
+          throw new Error('Thiếu SUPER_ADMIN_PASSWORD trên Vercel. Thêm biến (≥ 8 ký tự, không dùng 123456), Redeploy, rồi đăng nhập.')
+        }
         const boot = await fetch('/api/quantri/bootstrap', { method: 'POST' })
         const bootData = await boot.json().catch(() => ({}))
         if (!boot.ok) throw new Error(bootData.error || 'Không tạo được tài khoản super-admin')
@@ -90,7 +113,7 @@ export default function QuantriShell() {
       })
       if (signErr) throw signErr
     } catch (err) {
-      setError(err.message || 'Đăng nhập thất bại')
+      setError(explainLoginError(err.message || err.error_description || 'Đăng nhập thất bại'))
     } finally {
       setBusy(false)
     }
@@ -126,6 +149,21 @@ export default function QuantriShell() {
     return (
       <Gate>
         <form onSubmit={onLogin} className="flex w-full max-w-sm flex-col gap-3">
+          {gateStatus?.fetchError ? (
+            <p className="m-0 rounded-xl bg-amber-500/20 px-3 py-2 text-xs text-amber-100">
+              Không gọi được /api/quantri/status — API chưa lên hoặc đang deploy.
+            </p>
+          ) : null}
+          {gateStatus && gateStatus.supabase === false ? (
+            <p className="m-0 rounded-xl bg-amber-500/20 px-3 py-2 text-xs text-amber-100">
+              Server thiếu SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY trên Vercel.
+            </p>
+          ) : null}
+          {gateStatus?.needsBootstrap && !gateStatus.hasPasswordEnv ? (
+            <p className="m-0 rounded-xl bg-amber-500/20 px-3 py-2 text-xs text-amber-100">
+              Chưa có SUPER_ADMIN_PASSWORD trên Vercel — thêm rồi Redeploy.
+            </p>
+          ) : null}
           <label className="text-xs font-medium text-white/70">
             Email
             <input
@@ -148,14 +186,27 @@ export default function QuantriShell() {
               required
             />
           </label>
-          {error ? <p className="m-0 text-sm text-red-200">{error}</p> : null}
+          {error ? (
+            <p className="m-0 rounded-xl bg-red-500/25 px-3 py-2 text-sm font-medium text-red-50">
+              {error}
+            </p>
+          ) : null}
           <button
             type="submit"
             disabled={busy}
-            className="rounded-xl bg-[var(--hcc-red)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+            className="relative z-20 cursor-pointer rounded-xl bg-[var(--hcc-red)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
           >
             {busy ? 'Đang vào…' : 'Đăng nhập'}
           </button>
+          {session && !me ? (
+            <button
+              type="button"
+              onClick={onLogout}
+              className="cursor-pointer text-xs text-white/60 underline"
+            >
+              Xóa phiên cũ và thử lại
+            </button>
+          ) : null}
         </form>
       </Gate>
     )
@@ -172,9 +223,9 @@ export default function QuantriShell() {
   return (
     <div className="admin-shell flex min-h-dvh flex-col bg-[#1a1214] text-slate-100">
       <header className="flex flex-wrap items-center gap-3 border-b border-white/10 px-4 py-3">
-        <img src={logo} alt="" className="h-9 w-9 rounded-full object-cover" width={36} height={36} />
+        <img src={logoVietmy} alt="" className="h-9 w-auto max-h-9 object-contain" width={120} height={36} />
         <div className="min-w-0 flex-1">
-          <p className="m-0 text-sm font-semibold">Quản trị HCC</p>
+          <p className="m-0 text-sm font-semibold">Quản trị</p>
           <p className="m-0 truncate text-[11px] text-white/55">
             {me.display_name || me.email} · {me.role === 'super_admin' ? 'Toàn quyền' : 'Theo chuyên mục'}
           </p>
@@ -215,10 +266,10 @@ export default function QuantriShell() {
 function Gate({ children }) {
   return (
     <div className="admin-shell relative flex min-h-dvh items-center justify-center px-4 text-slate-100">
-      <div className="pointer-events-none absolute inset-0 admin-aurora" aria-hidden="true" />
+      <div className="pointer-events-none absolute inset-0 z-0 admin-aurora" aria-hidden="true" />
       <div className="relative z-10 w-full max-w-md rounded-3xl border border-white/10 bg-black/30 p-6 backdrop-blur-xl">
         <div className="mb-5 flex items-center gap-3">
-          <img src={logo} alt="HCC" className="h-11 w-11 rounded-full object-cover" width={44} height={44} />
+          <img src={logoVietmy} alt="Cao đẳng Việt Mỹ" className="h-11 w-auto max-h-11 object-contain" width={140} height={44} />
           <div>
             <p className="m-0 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--hcc-gold-bright)]">
               /quantri

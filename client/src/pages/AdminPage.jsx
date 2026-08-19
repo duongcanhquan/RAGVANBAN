@@ -11,7 +11,7 @@ import {
   UploadCloud,
   Webhook,
 } from 'lucide-react'
-import logo from '../assets/hcc-logo.jpg'
+import logoVietmy from '../assets/logo-vietmy.png'
 import { adminFetch } from '../lib/adminApi'
 
 const ALLOWED_RE =
@@ -414,15 +414,15 @@ export default function AdminPage() {
         <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <img
-              src={logo}
-              alt="HCC"
-              width={52}
+              src={logoVietmy}
+              alt="Cao đẳng Việt Mỹ"
+              width={160}
               height={52}
-              className="h-12 w-12 rounded-full object-cover shadow-[0_0_0_3px_rgba(232,185,35,0.85)]"
+              className="h-12 w-auto object-contain"
             />
             <div>
               <p className="m-0 mb-0.5 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--hcc-gold-bright)]">
-                HCC · Quản trị
+                Quản trị
               </p>
               <h1 className="m-0 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
                 Trung tâm số hóa

@@ -1,10 +1,11 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet } from 'react-router-dom'
 import {
   FolderTree,
   Lightbulb,
   MessageSquareText,
 } from 'lucide-react'
-import logo from '../assets/hcc-logo.jpg'
+import logoVietmy from '../assets/logo-vietmy.png'
+import logoEquest from '../assets/logo-equest.png'
 
 const NAV = [
   { to: '/', end: true, label: 'Hỏi đáp', short: 'Hỏi', Icon: MessageSquareText },
@@ -13,7 +14,7 @@ const NAV = [
 ]
 
 /**
- * Shell HCC — brand ghim giấy sát mép trái · nav căn mép cột bàn làm việc.
+ * Header: Việt Mỹ trái · menu giữa · EQuest phải.
  */
 export default function AppLayout() {
   return (
@@ -25,74 +26,70 @@ export default function AppLayout() {
         Bỏ qua đến nội dung
       </a>
 
-      <header className="safe-top relative z-40 shrink-0 overflow-visible border-b border-[var(--hcc-line)]/80 bg-[var(--hcc-canvas)]/90 backdrop-blur-xl">
-        <div
-          className="pointer-events-none absolute inset-x-0 top-0 h-full opacity-[0.35]"
-          aria-hidden="true"
-          style={{
-            backgroundImage:
-              'radial-gradient(circle at 1px 1px, rgba(196,30,58,0.07) 1px, transparent 0)',
-            backgroundSize: '14px 14px',
-          }}
-        />
+      <header className="site-header safe-top relative z-40 shrink-0 border-b border-[var(--hcc-gold)]/35 bg-[#0a1628]">
+        <div className="relative flex h-[var(--nav-h)] items-center justify-between gap-2 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] sm:gap-4 sm:px-4">
+          <Link
+            to="/"
+            className="relative z-10 flex h-full max-w-[42%] shrink-0 items-center sm:max-w-[30%]"
+          >
+            <img
+              src={logoVietmy}
+              alt="Cao đẳng Việt Mỹ Hà Nội"
+              className="h-10 w-auto max-w-full object-contain object-left sm:h-12"
+              width={180}
+              height={48}
+              decoding="async"
+            />
+          </Link>
 
-        <div className="relative flex h-[var(--nav-h)] w-full items-center gap-3 pt-1.5 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] sm:gap-4">
-          <div className="paper-pin brand-pin z-10 shrink-0">
-            <span className="push-pin" aria-hidden="true" />
-            <div className="flex items-center gap-2 sm:gap-2.5">
-              <img
-                src={logo}
-                alt="Logo HCC — Hành chính công"
-                width={40}
-                height={40}
-                className="h-8 w-8 shrink-0 rounded-full object-cover shadow-[0_0_0_2px_#fff,0_0_0_3px_var(--hcc-gold)] sm:h-9 sm:w-9"
-                decoding="async"
-              />
-              <div className="min-w-0 pr-1">
-                <p className="m-0 truncate text-[13px] font-semibold tracking-tight text-[var(--hcc-red)] sm:text-[15px]">
-                  HCC Văn bản thông minh
-                </p>
-                <p className="m-0 truncate text-[10px] text-[var(--hcc-muted)] sm:text-[11px]">
-                  Tra cứu · Tư vấn · Có căn cứ pháp lý
-                </p>
-              </div>
-            </div>
+          <p className="relative z-10 m-0 min-w-0 flex-1 truncate px-1 text-center text-[11px] font-medium leading-tight text-white/90 lg:hidden">
+            Hệ thống tra cứu văn bản thông minh
+          </p>
+
+          <div className="pointer-events-none absolute inset-0 hidden flex-col items-center justify-center gap-0.5 lg:flex">
+            <p className="m-0 text-[12px] font-semibold tracking-wide text-white">
+              Hệ thống tra cứu văn bản thông minh
+            </p>
+            <nav
+              className="pointer-events-auto flex items-center gap-0.5 rounded-full bg-white/10 p-0.5"
+              aria-label="Điều hướng chính"
+            >
+              {NAV.map(({ to, end, label, Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={end}
+                  className={({ isActive }) =>
+                    `inline-flex min-h-8 cursor-pointer items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-medium transition duration-200 ${
+                      isActive
+                        ? 'bg-[var(--hcc-gold)] text-[#0a1628] shadow-sm'
+                        : 'text-white/85 hover:bg-white/10 hover:text-white'
+                    }`
+                  }
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  {label}
+                </NavLink>
+              ))}
+            </nav>
           </div>
 
-          <nav
-            className="nav-pins ml-auto hidden min-w-0 items-end gap-1.5 overflow-x-auto lg:flex"
-            aria-label="Điều hướng chính"
-          >
-            {NAV.map(({ to, end, label, Icon, gold }, i) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={end}
-                className={({ isActive }) =>
-                  `paper-pin nav-pin group relative inline-flex cursor-pointer items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition duration-200 ${
-                    isActive
-                      ? gold
-                        ? 'nav-pin--gold'
-                        : 'nav-pin--active'
-                      : 'nav-pin--idle'
-                  }`
-                }
-                style={{
-                  ['--pin-tilt']: `${(i % 2 === 0 ? -1.2 : 1.1) + i * 0.15}deg`,
-                }}
-              >
-                <span className="push-pin push-pin--sm" aria-hidden="true" />
-                <Icon className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden="true" />
-                {label}
-              </NavLink>
-            ))}
-          </nav>
+          <div className="relative z-10 flex h-full max-w-[42%] shrink-0 items-center justify-end sm:max-w-[30%]">
+            <img
+              src={logoEquest}
+              alt="EQuest — The Quest for Excellence"
+              className="h-10 w-auto max-w-full object-contain object-right sm:h-12"
+              width={160}
+              height={48}
+              decoding="async"
+            />
+          </div>
         </div>
       </header>
 
       <div
         id="main-content"
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
         style={{ paddingBottom: 'var(--bottom-nav-h)' }}
       >
         <Outlet />

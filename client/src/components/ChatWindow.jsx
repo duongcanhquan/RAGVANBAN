@@ -28,7 +28,7 @@ export default function ChatWindow({
       {empty && (
         <section className="rounded-2xl border border-[var(--hcc-line)]/80 bg-white/70 px-4 py-4 sm:px-5">
           <h1 className="m-0 text-lg font-semibold tracking-tight text-[var(--hcc-ink)] sm:text-xl">
-            Tra cứu & tư vấn văn bản
+            Hệ thống tra cứu văn bản thông minh
           </h1>
           <p className="m-0 mt-1 max-w-3xl text-sm text-[var(--hcc-muted)]">
             {modeConfig?.hint ||

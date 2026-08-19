@@ -14,13 +14,13 @@ const SUPER_EMAIL = () =>
 
 async function countProfiles() {
   const sb = getSupabase();
-  if (!sb) return 0;
+  if (!sb) return { count: 0, error: null, configured: false };
   const { count, error } = await sb.from('admin_profiles').select('id', { count: 'exact', head: true });
   if (error) {
     console.warn('[quantri] count profiles:', error.message);
-    return 0;
+    return { count: 0, error: error.message, configured: true };
   }
-  return count || 0;
+  return { count: count || 0, error: null, configured: true };
 }
 
 async function loadAdminById(userId) {
@@ -92,24 +92,29 @@ async function bootstrapSuperAdmin() {
   if (!isConfigured()) {
     return { ok: false, error: 'Chưa cấu hình Supabase SERVICE_ROLE' };
   }
-  const existing = await countProfiles();
-  if (existing > 0) {
+  const counted = await countProfiles();
+  if (counted.error) {
+    return {
+      ok: false,
+      error: `Không đọc được bảng admin_profiles (${counted.error}). Chạy supabase/setup-all.sql trong SQL Editor.`,
+    };
+  }
+  if (counted.count > 0) {
     return { ok: true, skipped: true, message: 'Đã có tài khoản quản trị' };
   }
 
   const email = SUPER_EMAIL();
-  const password = process.env.SUPER_ADMIN_PASSWORD;
-  if (!password) {
-    return {
-      ok: false,
-      error:
-        'Thiếu SUPER_ADMIN_PASSWORD trên server (Vercel env). Thêm biến này, Redeploy, rồi đăng nhập lại.',
-    };
-  }
-
   const sb = getSupabase();
   let user = await findAuthUserByEmail(sb, email);
   if (!user) {
+    const password = process.env.SUPER_ADMIN_PASSWORD;
+    if (!password) {
+      return {
+        ok: false,
+        error:
+          'Thiếu SUPER_ADMIN_PASSWORD trên server (Vercel env). Thêm biến này (≥ 8 ký tự), Redeploy, rồi đăng nhập lại.',
+      };
+    }
     const created = await sb.auth.admin.createUser({
       email,
       password,
@@ -117,12 +122,17 @@ async function bootstrapSuperAdmin() {
       app_metadata: { role: 'super_admin' },
     });
     if (created.error) {
-      return { ok: false, error: created.error.message };
+      let msg = created.error.message;
+      if (/pwned|leaked|weak|hibp|password/i.test(msg) && /leak|pwned|weak|compromised/i.test(msg)) {
+        msg =
+          'SUPER_ADMIN_PASSWORD quá yếu hoặc đã bị lộ (Supabase từ chối). Đặt mật khẩu mới ≥ 8 ký tự, Redeploy, rồi đăng nhập lại.';
+      }
+      return { ok: false, error: msg };
     }
     user = created.data.user;
   } else {
+    // Không ghi đè mật khẩu đã đổi — chỉ xác nhận email + gắn role.
     await sb.auth.admin.updateUserById(user.id, {
-      password,
       email_confirm: true,
       app_metadata: { ...(user.app_metadata || {}), role: 'super_admin' },
     });
@@ -138,6 +148,23 @@ async function bootstrapSuperAdmin() {
   });
 
   return { ok: true, created: true, email };
+}
+
+/** Auth đã vào được nhưng thiếu dòng admin_profiles — gắn super-admin đúng email env. */
+async function ensureSuperAdminProfile(user) {
+  const email = String(user?.email || '').trim().toLowerCase();
+  if (!user?.id || email !== SUPER_EMAIL()) return null;
+  const existing = await loadAdminById(user.id);
+  if (existing) return existing;
+  await upsertProfile({
+    id: user.id,
+    email,
+    display_name: 'Quản trị hệ thống',
+    role: 'super_admin',
+    is_active: true,
+    must_change_password: false,
+  });
+  return loadAdminById(user.id);
 }
 
 async function listAdmins() {
@@ -268,4 +295,5 @@ module.exports = {
   updateAdmin,
   deleteAdmin,
   markPasswordChanged,
+  ensureSuperAdminProfile,
 };

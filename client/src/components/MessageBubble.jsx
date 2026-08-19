@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Bot, User } from 'lucide-react'
 import CitationChip from './CitationChip'
-import logo from '../assets/hcc-logo.jpg'
+import logoVietmy from '../assets/logo-vietmy.png'
 
 /**
  * MessageBubble — hiển thị độ tin cậy + copy nhanh.
@@ -54,11 +54,11 @@ export default function MessageBubble({
         </div>
       ) : (
         <img
-          src={logo}
+          src={logoVietmy}
           alt=""
           width={32}
           height={32}
-          className="mt-1 h-8 w-8 shrink-0 rounded-full object-cover shadow-[0_0_0_2px_var(--hcc-gold)]"
+          className="mt-1 h-8 w-8 shrink-0 rounded-md bg-[#0a1628] object-contain p-0.5"
           aria-hidden="true"
         />
       )}

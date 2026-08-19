@@ -21,11 +21,14 @@ const router = express.Router();
 
 router.get('/status', async (_req, res, next) => {
   try {
-    const n = isConfigured() ? await countProfiles() : 0;
+    const counted = isConfigured() ? await countProfiles() : { count: 0, error: null };
+    const password = String(process.env.SUPER_ADMIN_PASSWORD || '');
     res.json({
       supabase: isConfigured(),
-      needsBootstrap: isConfigured() && n === 0,
-      hasPasswordEnv: Boolean(process.env.SUPER_ADMIN_PASSWORD),
+      needsBootstrap: isConfigured() && !counted.error && counted.count === 0,
+      profileCount: counted.count,
+      profileError: counted.error,
+      hasPasswordEnv: Boolean(password) && !password.includes('your-'),
     });
   } catch (err) {
     next(err);

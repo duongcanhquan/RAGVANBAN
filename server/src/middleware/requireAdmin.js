@@ -3,7 +3,7 @@
  */
 
 const { getSupabase, isConfigured } = require('../services/supabase');
-const { loadAdminById } = require('../services/quantriStore');
+const { loadAdminById, ensureSuperAdminProfile } = require('../services/quantriStore');
 const { isSuperAdmin } = require('../services/adminAccess');
 
 function bearerToken(req) {
@@ -29,7 +29,20 @@ async function requireAdmin(req, res, next) {
       res.status(401).json({ error: 'Phiên đăng nhập hết hạn' });
       return;
     }
-    const admin = await loadAdminById(data.user.id);
+    let admin;
+    try {
+      admin = await loadAdminById(data.user.id);
+      if (!admin) admin = await ensureSuperAdminProfile(data.user);
+    } catch (profileErr) {
+      const msg = String(profileErr.message || '');
+      if (/admin_profiles|schema cache|does not exist/i.test(msg)) {
+        res.status(503).json({
+          error: 'Chưa có bảng admin_profiles. Mở Supabase → SQL Editor → chạy supabase/setup-all.sql',
+        });
+        return;
+      }
+      throw profileErr;
+    }
     if (!admin || !admin.is_active) {
       res.status(403).json({ error: 'Tài khoản không có quyền quản trị' });
       return;

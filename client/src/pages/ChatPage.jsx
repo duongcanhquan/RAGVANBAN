@@ -210,7 +210,7 @@ export default function ChatPage() {
     <div className={`${shellH} flex w-full overflow-hidden`}>
       {/* Cột chính: hỏi đáp */}
       <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-transparent">
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--hcc-line)]/70 bg-white/75 px-4 py-2.5 backdrop-blur-md xl:px-6">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--hcc-line)]/70 bg-white/75 px-4 py-1.5 backdrop-blur-md xl:px-6">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <div
               className="inline-flex rounded-full border border-[var(--hcc-line)] bg-white p-1"

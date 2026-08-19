@@ -35,8 +35,8 @@
   --shadow-gold: 0 6px 20px rgba(232, 185, 35, 0.35);
   --font-sans: 'Be Vietnam Pro', system-ui, sans-serif;
   --radius-lg: 1.25rem;
-  --nav-h: 4.15rem;
-  --bottom-nav-h: 4.25rem;
+  --nav-h: 3.75rem;
+  --bottom-nav-h: 3.75rem;
   --workbench-w: 0px;
 }
 
@@ -235,6 +235,7 @@ body {
 
 @media (min-width: 1024px) {
   :root {
+    --nav-h: 4.35rem;
     --bottom-nav-h: 0px;
   }
 }
@@ -251,11 +252,7 @@ body {
   }
 }
 
-.nav-pins {
-  margin-right: var(--workbench-w);
-}
-
-/* ——— Ghim giấy (header brand + nav) ——— */
+/* ——— Ghim giấy (trang quản trị) ——— */
 .paper-pin {
   position: relative;
   background:

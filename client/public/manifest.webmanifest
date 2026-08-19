@@ -1,26 +1,26 @@
 {
-  "name": "HCC Văn bản thông minh",
-  "short_name": "HCC VB",
-  "description": "Hệ thống tra cứu & tư vấn văn bản hành chính — có căn cứ pháp lý",
+  "name": "Hệ thống tra cứu văn bản thông minh",
+  "short_name": "Tra cứu VB",
+  "description": "Hệ thống tra cứu & tư vấn văn bản hành chính — Cao đẳng Việt Mỹ · EQuest",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#faf6f7",
-  "theme_color": "#c41e3a",
+  "background_color": "#0a1628",
+  "theme_color": "#0a1628",
   "lang": "vi",
   "icons": [
     {
-      "src": "/hcc-logo.jpg",
+      "src": "/logo-vietmy.png",
       "sizes": "192x192",
-      "type": "image/jpeg",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/hcc-logo.jpg",
+      "src": "/logo-vietmy.png",
       "sizes": "512x512",
-      "type": "image/jpeg",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ],
-  "categories": ["government", "productivity"]
+  "categories": ["education", "productivity"]
 }

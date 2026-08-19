@@ -86,7 +86,7 @@ export default function ScenariosPage() {
   }
 
   return (
-    <div className="safe-x mx-auto min-h-[calc(100dvh-var(--nav-h)-var(--bottom-nav-h))] w-full max-w-6xl py-4 xl:px-6">
+    <div className="safe-x mx-auto h-full min-h-0 w-full max-w-6xl overflow-y-auto py-4 xl:px-6">
       <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="m-0 mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--hcc-red)]">
