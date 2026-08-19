@@ -381,10 +381,6 @@ export default function CategoryTreeEditor() {
   return (
     <section>
       <h2 className="m-0 text-lg font-semibold">Chuyên mục</h2>
-      <p className="m-0 mt-1 mb-4 text-sm text-white/65">
-        Thêm · sửa · xóa. Kéo icon nắm bên trái để đổi vị trí; giữ Shift (hoặc thả về phía phải) để đưa vào
-        trong mục đích.
-      </p>
       {error ? <p className="mb-4 text-sm text-red-200">{error}</p> : null}
 
       {isSuper ? (
