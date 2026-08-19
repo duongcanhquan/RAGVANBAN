@@ -189,7 +189,7 @@ router.post('/', async (req, res) => {
     if (isGreeting(message)) {
       const answer =
         uiMode === 'advise'
-          ? 'Chào bạn. Mô tả ngắn tình huống cần tư vấn (đối tượng, việc đang hỏi).'
+          ? 'Chào bạn. Mô tả tình huống cần tư vấn: đối tượng, việc xảy ra, điểm cần quyết định.'
           : 'Chào bạn. Hãy nêu số hiệu, điều khoản cần tra, hoặc mô tả ngắn tình huống.';
       sendEvent(res, 'meta', {
         status: 'Sẵn sàng',

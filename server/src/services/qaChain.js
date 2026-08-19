@@ -270,7 +270,7 @@ async function streamAnswer(question, matches, deps, onToken) {
 
   const modeHint =
     mode === 'advise'
-      ? 'TƯ VẤN (pháp chế/luật sư): phân tích theo context; kết luận “trường hợp này” sẽ áp dụng gì; nêu điều kiện/ngoại lệ (nếu có) và hướng xử lý tương ứng; chỉ rõ nên đọc mục/điều nào ngay + cần đọc thêm phần nào để chú ý.'
+      ? 'TƯ VẤN (pháp chế/luật sư giáo dục): đánh giá nhanh hoàn cảnh; lý luận ngắn gọn, sắc bén bám context; kết luận áp dụng + điều kiện/ngoại lệ; hướng xử lý/định hướng phù hợp câu hỏi; chỉ rõ nên đọc mục/điều nào ngay và cần đọc thêm phần nào. Không mô tả dài, không suy diễn ngoài văn bản.'
       : mode === 'compare'
         ? 'SO SÁNH: tách bản còn hiệu lực và điểm đã sửa.'
         : 'TRA CỨU: chỉ định hướng văn bản liên quan để người dùng tự đọc (không phân tích áp dụng); nêu rõ văn bản liên quan trực tiếp + điều/khoản/mục cần đọc ngay; nếu còn liên quan gián tiếp thì liệt kê thêm “Tham khảo thêm” kèm mục/điều/khoản cần đọc; nêu hiệu lực; không giải thích cách áp dụng.';
@@ -369,7 +369,7 @@ function buildNoContextAnswer(mode = 'lookup', extras = {}) {
   }
   const tip =
     mode === 'advise'
-      ? 'Bạn có thể mô tả rõ hơn: loại thủ tục, đối tượng (cá nhân/tổ chức), tỉnh/thành nếu liên quan.'
+      ? 'Bạn có thể mô tả rõ hơn: đối tượng (học sinh/giảng viên/CBNV), việc xảy ra, và điểm cần quyết định.'
       : 'Bạn có thể nêu số hiệu, lĩnh vực, hoặc từ khóa điều khoản cần tra.';
   return {
     answer: `Không tìm thấy thông tin phù hợp trong kho văn bản còn hiệu lực.\n\nGợi ý: ${tip}\n\nNguồn: (không có)`,

@@ -15,8 +15,8 @@ export const MODES = {
     id: 'advise',
     label: 'Tư vấn',
     short: 'Phân tích và áp dụng',
-    hint: '',
-    placeholder: 'Mô tả tình huống cần tư vấn…',
+    hint: 'Pháp chế/luật sư giáo dục: lý luận ngắn gọn, sắc bén — đánh giá tình huống và hướng xử lý dựa trên văn bản.',
+    placeholder: 'Mô tả tình huống: đối tượng, việc xảy ra, cần quyết định gì…',
     examples: [],
   },
 }

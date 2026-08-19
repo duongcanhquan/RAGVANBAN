@@ -27,13 +27,25 @@ const DEFAULT_LOOKUP_TEMPLATE = `Mẫu tra cứu (định hướng đọc, khôn
 **Hiệu lực:** 1 dòng (nếu có sửa đổi thì nêu bản đang áp dụng)
 **Nguồn:** 1 dòng/VB`;
 
-const DEFAULT_ADVISE_TEMPLATE = `Mẫu tư vấn (giọng pháp chế/luật sư):
-**Kết luận cho “trường hợp này”:** nêu 1–2 câu “sẽ áp dụng/giải quyết” theo đúng context
-**Điều khoản dùng để quyết định:** Điều/khoản · số hiệu · cơ quan (kèm hiệu lực 1 dòng nếu có)
-**Điều kiện & ngoại lệ (nếu có):** nêu điều kiện áp dụng và trường hợp không áp dụng/khác
-**Nên đọc ngay ở đâu:** chỉ rõ mục/điều cần đọc trước để hiểu đúng
-**Cần đọc thêm (để chú ý):** nếu có phần liên quan gián tiếp (ngoại lệ, trường hợp khác, hướng dẫn bổ sung) liệt kê kèm vị trí cần đọc
+const DEFAULT_ADVISE_TEMPLATE = `Mẫu tư vấn (pháp chế/luật sư — giáo dục):
+**Đánh giá nhanh:** 1–2 câu nêu điểm then chốt (đối tượng · việc · vấn đề cần quyết)
+**Kết luận áp dụng:** quy định áp dụng thế nào cho “trường hợp này” — ngắn, sắc bén
+**Lý luận:** 2–4 ý logic (điều kiện → căn cứ → hướng xử lý/định hướng), bám context
+**Căn cứ:** Điều/khoản · số hiệu · cơ quan (hiệu lực 1 dòng nếu có)
+**Nên đọc ngay:** mục/điều cần mở trước
+**Cần đọc thêm (để chú ý):** ngoại lệ, trường hợp khác, VB liên quan gián tiếp
 **Nguồn:** 1 dòng/VB`;
+
+/** Chỉ áp dụng khi mode = advise — bổ sung vai pháp chế/luật sư giáo dục. */
+const ADVISE_MODE_RULES = `
+Chế độ TƯ VẤN (pháp chế/luật sư giáo dục):
+- Dùng văn bản trong context làm nền tảng duy nhất; lý luận sắc bén, ngắn gọn, vào trọng tâm hoàn cảnh và câu hỏi.
+- Không mô tả dài dòng, không lặp câu hỏi, không giảng giải chung chung ngoài context.
+- Đánh giá tình huống: đối tượng, việc xảy ra, điểm then chốt cần quyết định.
+- Kết luận áp dụng: quy định nào áp dụng, điều kiện/ngoại lệ, hướng xử lý/định hướng phù hợp.
+- Chỉ rõ nên đọc mục/điều nào ngay và cần đọc thêm phần nào để chú ý.
+- Thiếu thông tin trong context thì nói thiếu, không suy diễn.
+`.trim();
 
 const DEFAULT_COMPARE_TEMPLATE = `Mẫu so sánh:
 **Còn hiệu lực:** số hiệu · ngày
@@ -167,11 +179,17 @@ function composeSystemPrompt(mode = 'lookup', voice = defaultVoice(), extras = {
     : '';
   const skills = extras.skillContext ? `\n${extras.skillContext}\n` : '';
 
-  return `${v.hardRules}
+  const modeRules = mode === 'advise' ? `\n${ADVISE_MODE_RULES}\n` : '';
+  const lengthLine =
+    mode === 'advise'
+      ? 'Tối đa ~280 từ. Lý luận ngắn, sắc bén; không mô tả dài, không lặp câu hỏi.'
+      : LENGTH_HINT[v.length] || LENGTH_HINT.short;
+
+  return `${v.hardRules}${modeRules}
 
 Vai trò: ${v.role}
 Giọng: ${TONE_HINT[v.tone] || TONE_HINT.formal}
-Độ dài: ${LENGTH_HINT[v.length] || LENGTH_HINT.short}
+Độ dài: ${lengthLine}
 ${extra}${skills}
 ${template}`;
 }
@@ -219,6 +237,7 @@ module.exports = {
   PRESET_ALIASES,
   DEFAULT_LOOKUP_TEMPLATE,
   DEFAULT_ADVISE_TEMPLATE,
+  ADVISE_MODE_RULES,
   DEFAULT_COMPARE_TEMPLATE,
   defaultVoice,
   normalizeVoice,

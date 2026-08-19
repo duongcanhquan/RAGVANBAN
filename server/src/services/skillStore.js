@@ -75,10 +75,11 @@ Không trộn hai bản thành một quy định. Hết hiệu lực chỉ cản
       'áp dụng',
       'xử lý',
     ],
-    instructions: `Tư vấn = áp quy định trong context vào tình huống người dùng mô tả.
-- Kết luận: quy định này áp cho đối tượng/việc đó như thế nào (được/không, điều kiện, hệ quả).
-- Hồ sơ/bước/nơi nộp chỉ khi người dùng hỏi thủ tục VÀ các mục đó có trong context.
-- Không nói "không tìm thấy" nếu đã có điều/khoản liên quan. Thiếu thủ tục hành chính thì nêu phần đã có và nói rõ phần kho chưa có.`,
+    instructions: `Tư vấn tình huống theo kiểu pháp chế/luật sư giáo dục — bám văn bản trong context.
+- Đánh giá nhanh hoàn cảnh; kết luận áp dụng ngắn gọn, sắc bén.
+- Lý luận logic: điều kiện → căn cứ → hướng xử lý/định hướng phù hợp câu hỏi.
+- Chỉ rõ đọc mục/điều nào ngay và cần đọc thêm phần nào để chú ý.
+- Hồ sơ/bước chỉ khi được hỏi và có trong context. Thiếu thì nói thiếu, không suy diễn.`,
   },
 ];
 
