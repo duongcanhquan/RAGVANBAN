@@ -6,17 +6,17 @@ export const MODES = {
   lookup: {
     id: 'lookup',
     label: 'Tra cứu',
-    short: 'Tìm văn bản nhanh',
-    hint: 'Tìm nhanh quy định, số hiệu, điều khoản, hiệu lực — kèm nguồn gốc.',
-    placeholder: 'Số hiệu hoặc từ khóa văn bản: Nghị định nào quy định… còn hiệu lực…?',
+    short: 'Định hướng văn bản liên quan',
+    hint: 'Định hướng nhanh văn bản/điều khoản liên quan để bạn mở đúng chỗ cần đọc (không phân tích sâu).',
+    placeholder: 'Hỏi để tìm văn bản liên quan: quy định này nằm ở văn bản nào, điều khoản nào?',
     examples: [],
   },
   advise: {
     id: 'advise',
     label: 'Tư vấn',
-    short: 'Áp dụng tình huống',
-    hint: 'Mô tả tình huống thực tế — đối chiếu quy định trong kho và cách áp dụng.',
-    placeholder: 'Mô tả tình huống: đối tượng, việc xảy ra, cần xử lý / áp dụng thế nào…',
+    short: 'Phân tích và áp dụng',
+    hint: 'Phân tích sâu hơn theo văn bản, nêu ý chính cần đọc, điều khoản liên quan và cách áp dụng nhanh.',
+    placeholder: 'Mô tả tình huống để tư vấn: cần áp dụng quy định nào, đọc mục nào trước, tham khảo thêm ở đâu?',
     examples: [],
   },
 }

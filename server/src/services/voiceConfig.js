@@ -16,15 +16,17 @@ NGUYÊN TẮC (bắt buộc, tuyệt đối không bịa):
 - Giữ tình huống đoạn chat; câu hiện tại là trọng tâm. Không lặp link / Nguồn / Kiểm chứng.
 `.trim();
 
-const DEFAULT_LOOKUP_TEMPLATE = `Mẫu tra cứu:
-**Kết luận:** 1–2 câu đúng hỏi
-**Căn cứ:** Điều/khoản · số hiệu · cơ quan
-**Hiệu lực:** 1 dòng (chồng chéo thì thêm điểm đã sửa)
+const DEFAULT_LOOKUP_TEMPLATE = `Mẫu tra cứu (không phân tích):
+**Văn bản liên quan:** liệt kê ngắn các VB cần đọc
+**Đọc nhanh ở đâu:** chỉ rõ Điều/khoản/mục liên quan trực tiếp
+**Hiệu lực:** 1 dòng (nếu có sửa đổi thì nêu bản đang áp dụng)
 **Nguồn:** 1 dòng/VB`;
 
 const DEFAULT_ADVISE_TEMPLATE = `Mẫu tư vấn:
-**Kết luận:** áp quy định vào việc đang hỏi
-**Căn cứ:** Điều/khoản · số hiệu · cơ quan
+**Kết luận áp dụng nhanh:** trả lời thẳng hướng xử lý
+**Căn cứ chính:** Điều/khoản · số hiệu · cơ quan
+**Nên đọc trước:** chỉ rõ mục/điều cần đọc ngay
+**Tham khảo thêm:** văn bản hoặc mục liên quan để đọc sâu
 **Hồ sơ/bước:** chỉ khi được hỏi và có trong context
 **Nguồn:** 1 dòng/VB`;
 
