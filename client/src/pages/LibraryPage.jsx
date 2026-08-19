@@ -273,7 +273,7 @@ export default function LibraryPage() {
       )}
       {!loading && !filtered.length && (
         <p className="glass-panel rounded-2xl p-4 text-sm text-[var(--hcc-muted)]">
-          Chưa có chuyên mục. Quản trị thêm mục tại /quantri → Cài đặt.
+          Chưa có chuyên mục. Quản trị thêm mục tại /quantri.
         </p>
       )}
 
