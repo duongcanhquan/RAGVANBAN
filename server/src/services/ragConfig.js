@@ -80,6 +80,13 @@ function assertUploadSize(byteLength, maxBytes) {
   return true;
 }
 
+/** Trần multer theo cấu hình RAG — không đệm tới UPLOAD_MAX_BYTES_MAX nếu admin đặt thấp hơn. */
+function multerFileSizeCap(maxBytes) {
+  const n = Number(maxBytes);
+  if (!Number.isFinite(n) || n < 1) return defaultRag().uploadMaxBytes;
+  return Math.min(Math.max(Math.round(n), 1), UPLOAD_MAX_BYTES_MAX);
+}
+
 function formatBytes(n) {
   const x = Number(n) || 0;
   if (x < 1024) return `${Math.round(x)} byte`;
@@ -158,6 +165,7 @@ module.exports = {
   getRagConfig,
   setRagConfig,
   assertUploadSize,
+  multerFileSizeCap,
   uploadLimits,
   splitUploadFiles,
   formatBytes,

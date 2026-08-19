@@ -40,6 +40,7 @@ export default function QuantriShell() {
     })
     const { data } = supabase.auth.onAuthStateChange((event, next) => {
       if (event === 'TOKEN_REFRESHED') return
+      clearAuthTokenCache()
       setSession(next)
     })
     unsub = () => data.subscription.unsubscribe()
@@ -115,6 +116,7 @@ export default function QuantriShell() {
         const bootData = await boot.json().catch(() => ({}))
         if (!boot.ok) throw new Error(bootData.error || 'Không tạo được tài khoản super-admin')
       }
+      clearAuthTokenCache()
       const { error: signErr } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,

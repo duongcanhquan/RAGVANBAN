@@ -21,25 +21,27 @@ const { ensureBrain, liveKeysReport, brainNotReadyMessage } = require('../servic
 const { assertCanUseCategory } = require('../services/adminAccess');
 const { parseDriveResource } = require('../services/googleDrive');
 const { ingestDriveFile, syncDriveFolder } = require('../services/driveIngest');
-const { getRagConfig, assertUploadSize, UPLOAD_MAX_BYTES_MAX } = require('../services/ragConfig');
+const { getRagConfig, assertUploadSize, multerFileSizeCap, formatBytes } = require('../services/ragConfig');
 const { getFlags } = require('../services/integrations');
 const { listenSseAbort } = require('../services/sseAbort');
 const { publicErrorMessage } = require('../services/publicError');
 
 const router = express.Router();
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: UPLOAD_MAX_BYTES_MAX },
-  fileFilter: (_req, file, cb) => {
-    if (!isAllowedUpload(file.originalname, file.mimetype)) {
-      return cb(
-        new Error('Định dạng không hỗ trợ. Dùng PDF, DOC/DOCX, PPT/PPTX, ảnh, TXT/MD.')
-      );
-    }
-    cb(null, true);
-  },
-});
+function createUploader(maxBytes) {
+  return multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: multerFileSizeCap(maxBytes) },
+    fileFilter: (_req, file, cb) => {
+      if (!isAllowedUpload(file.originalname, file.mimetype)) {
+        return cb(
+          new Error('Định dạng không hỗ trợ. Dùng PDF, DOC/DOCX, PPT/PPTX, ảnh, TXT/MD.')
+        );
+      }
+      cb(null, true);
+    },
+  });
+}
 
 function initSse(res) {
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
@@ -99,8 +101,21 @@ async function runWithSse(req, res, work) {
 
 router.post('/', async (req, res) => {
   if (!(await requireLiveKeys(res))) return;
-  upload.single('file')(req, res, async (err) => {
+  let rag;
+  try {
+    rag = await getRagConfig();
+  } catch (e) {
+    res.status(500).json({ error: publicErrorMessage(e, 'Không đọc được giới hạn upload') });
+    return;
+  }
+  createUploader(rag.uploadMaxBytes).single('file')(req, res, async (err) => {
     if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        res.status(413).json({
+          error: `File vượt giới hạn ${formatBytes(rag.uploadMaxBytes)} đã đặt trong RAG & số hóa`,
+        });
+        return;
+      }
       res.status(400).json({ error: err.message || 'Upload thất bại' });
       return;
     }
@@ -109,7 +124,6 @@ router.post('/', async (req, res) => {
       return;
     }
     try {
-      const rag = await getRagConfig();
       assertUploadSize(req.file.size, rag.uploadMaxBytes);
     } catch (sizeErr) {
       res.status(sizeErr.status || 413).json({ error: sizeErr.message });

@@ -234,10 +234,18 @@ Bãi bỏ Nghị định số 99/2015/NĐ-CP.
     assert.match(formatBytes(80_000), /KB/);
   });
 
+  test('multerFileSizeCap theo trần RAG, không mặc định 512MB', () => {
+    const { multerFileSizeCap, UPLOAD_MAX_BYTES_MAX } = require('../src/services/ragConfig');
+    assert.strictEqual(multerFileSizeCap(40 * 1024 * 1024), 40 * 1024 * 1024);
+    assert.strictEqual(multerFileSizeCap(UPLOAD_MAX_BYTES_MAX + 1), UPLOAD_MAX_BYTES_MAX);
+    assert.ok(multerFileSizeCap(NaN) < UPLOAD_MAX_BYTES_MAX);
+  });
+
   test('multer dùng trần cấu hình chứ không cứng 80MB', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../src/routes/upload.js'), 'utf8');
-    assert.ok(/UPLOAD_MAX_BYTES_MAX/.test(src), 'upload.js phải lấy giới hạn từ ragConfig');
+    assert.ok(/multerFileSizeCap/.test(src), 'upload.js phải kẹp fileSize theo rag.uploadMaxBytes');
     assert.ok(!/fileSize:\s*80\s*\*/.test(src), 'không còn hardcode 80MB');
+    assert.ok(!/fileSize:\s*UPLOAD_MAX_BYTES_MAX/.test(src), 'không đệm 512MB trước khi đọc rag');
   });
 
   function twoHundredMb() {
