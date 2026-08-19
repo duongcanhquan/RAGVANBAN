@@ -51,7 +51,7 @@ export default function MessageBubble({
     >
       {isUser ? (
         <div
-          className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--hcc-red)] text-white shadow-sm"
+          className={`mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--hcc-red)] text-white shadow-sm sm:h-8 sm:w-8`}
           aria-hidden="true"
         >
           <User className="h-4 w-4" />
@@ -62,13 +62,13 @@ export default function MessageBubble({
           alt=""
           width={32}
           height={32}
-          className="mt-1 h-8 w-8 shrink-0 rounded-md bg-[#0a1628] object-contain p-0.5"
+          className="mt-1 h-7 w-7 shrink-0 rounded-md bg-[#0a1628] object-contain p-0.5 sm:h-8 sm:w-8"
           aria-hidden="true"
         />
       )}
 
       <div
-        className={`max-w-[min(100%,42rem)] rounded-2xl px-4 py-3 text-left text-[15px] leading-relaxed xl:max-w-[min(100%,48rem)] 2xl:max-w-[min(100%,52rem)] ${
+        className={`max-w-[min(100%,42rem)] rounded-2xl px-3 py-2.5 text-left text-[15px] leading-relaxed sm:px-4 sm:py-3 xl:max-w-[min(100%,48rem)] 2xl:max-w-[min(100%,52rem)] ${
           isUser
             ? 'rounded-tr-md bg-[var(--hcc-red)] text-white shadow-[var(--shadow-md)]'
             : 'glass-panel rounded-tl-md text-slate-100'

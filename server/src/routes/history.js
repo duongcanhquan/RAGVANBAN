@@ -1,8 +1,8 @@
 /**
- * GET  /api/history?sessionId=&limit=
+ * GET  /api/history?sessionId=&limit=  — chỉ quản trị (không lộ log người khác)
  * GET  /api/history/:id
  * POST /api/history/:id/mark-knowledge
- * POST /api/history/save  — lưu Q&A thủ công / đồng bộ từ client
+ * POST /api/history/save
  */
 
 const express = require('express');
@@ -12,16 +12,23 @@ const { createScenario } = require('../services/knowledgeStore');
 
 const router = express.Router();
 
-router.get('/', async (req, res) => {
-  const sessionId = String(req.query.sessionId || '').trim();
-  const limit = Math.min(Number(req.query.limit) || 40, 100);
-  const knowledgeOnly = req.query.knowledge === '1' || req.query.knowledge === 'true';
-
-  const result = await listChatLogs({ sessionId: sessionId || undefined, limit, knowledgeOnly });
-  res.json(result);
+router.get('/', requireAdmin, async (req, res, next) => {
+  try {
+    const sessionId = String(req.query.sessionId || '').trim();
+    const limit = Math.min(Number(req.query.limit) || 40, 100);
+    const knowledgeOnly = req.query.knowledge === '1' || req.query.knowledge === 'true';
+    const result = await listChatLogs({
+      sessionId: sessionId || undefined,
+      limit,
+      knowledgeOnly,
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireAdmin, async (req, res) => {
   const result = await getChatLog(req.params.id);
   if (!result.ok) {
     res.status(404).json(result);
@@ -30,7 +37,7 @@ router.get('/:id', async (req, res) => {
   res.json(result);
 });
 
-router.post('/save', async (req, res) => {
+router.post('/save', requireAdmin, async (req, res) => {
   const { sessionId, question, answer, citationsUsed, markKnowledge } = req.body || {};
   if (!question) {
     res.status(400).json({ error: 'Thiếu question' });
@@ -48,12 +55,7 @@ router.post('/save', async (req, res) => {
   res.json(inserted);
 });
 
-router.post('/:id/mark-knowledge', async (req, res, next) => {
-  if (req.body?.asScenario) {
-    return requireAdmin(req, res, () => {
-      markAndMaybeScenario(req, res).catch(next);
-    });
-  }
+router.post('/:id/mark-knowledge', requireAdmin, (req, res, next) => {
   markAndMaybeScenario(req, res).catch(next);
 });
 

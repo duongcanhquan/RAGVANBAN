@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { History, PanelRightClose, PanelRightOpen, Plus, Scale, Sparkles, Volume2, VolumeX } from 'lucide-react'
+import { History, LogOut, PanelRightClose, PanelRightOpen, Plus, Scale, Sparkles, Volume2, VolumeX } from 'lucide-react'
 import ChatWindow from '../components/ChatWindow'
 import ChatInput from '../components/ChatInput'
+import CategoryScopePicker from '../components/CategoryScopePicker'
 import HistoryPanel from '../components/HistoryPanel'
 import WorkbenchPanel from '../components/WorkbenchPanel'
 import { streamChat } from '../lib/streamChat'
-import { getConversationId, getSessionId, newConversationId, rememberConversationId } from '../lib/session'
-import { saveLocalTurn } from '../lib/chatHistory'
+import { getConversationId, getSessionId, newConversationId, rememberConversationId, startFreshSession } from '../lib/session'
+import { clearSessionHistory, saveLocalTurn } from '../lib/chatHistory'
 import {
   conversationHistoryFromMessages,
   threadToMessages,
@@ -28,17 +29,36 @@ export default function ChatPage() {
   const [statusText, setStatusText] = useState('')
   const [error, setError] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
-  const [sideOpen, setSideOpen] = useState(true)
+  const [sideOpen, setSideOpen] = useState(() => {
+    if (typeof window === 'undefined') return false
+    try {
+      if (!window.matchMedia('(min-width: 1280px)').matches) return false
+      return localStorage.getItem('hcc_side_open') !== '0'
+    } catch {
+      return false
+    }
+  })
   const [quickKeywords, setQuickKeywords] = useState([])
   const [talkCfg, setTalkCfg] = useState(null)
   const [disclaimer, setDisclaimer] = useState('')
   const [speakOn, setSpeakOn] = useState(true)
   const [listening, setListening] = useState(false)
   const [historyTick, setHistoryTick] = useState(0)
+  const [categoryIds, setCategoryIds] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem('hcc_chat_category_ids')
+      const parsed = raw ? JSON.parse(raw) : []
+      return Array.isArray(parsed) ? parsed.filter(Boolean).slice(0, 40) : []
+    } catch {
+      return []
+    }
+  })
   const abortRef = useRef(null)
+  const inFlightRef = useRef(false)
   const speakRef = useRef(null)
   const listenRef = useRef(null)
-  const sessionId = getSessionId()
+  const transcriptRef = useRef('')
+  const [sessionId, setSessionId] = useState(() => getSessionId())
   const [conversationId, setConversationId] = useState(() => getConversationId())
   const ttsSupported =
     typeof window !== 'undefined' && typeof window.speechSynthesis !== 'undefined'
@@ -95,7 +115,7 @@ export default function ChatPage() {
   useEffect(() => {
     return () => {
       speakRef.current?.cancel()
-      listenRef.current?.stop()
+      listenRef.current?.abort?.()
     }
   }, [])
 
@@ -118,12 +138,12 @@ export default function ChatPage() {
   }, [location, navigate])
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('hcc_side_open')
-      if (saved === '0') setSideOpen(false)
-    } catch {
-      // ignore
+    function onHide(e) {
+      if (e.persisted) return
+      clearSessionHistory()
     }
+    window.addEventListener('pagehide', onHide)
+    return () => window.removeEventListener('pagehide', onHide)
   }, [])
 
   useEffect(() => {
@@ -145,16 +165,68 @@ export default function ChatPage() {
     })
   }
 
+  function setCategoryScope(ids) {
+    const next = Array.isArray(ids) ? ids.filter(Boolean).slice(0, 40) : []
+    setCategoryIds(next)
+    try {
+      sessionStorage.setItem('hcc_chat_category_ids', JSON.stringify(next))
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function stopGeneration() {
+    abortRef.current?.abort()
+    speakRef.current?.cancel()
+  }
+
   function newChat() {
+    stopGeneration()
+    inFlightRef.current = false
     speakRef.current?.cancel()
     listenRef.current?.abort?.()
     listenRef.current = null
     setListening(false)
+    setStreaming(false)
     setConversationId(newConversationId())
     setMessages([])
+    transcriptRef.current = ''
     setInput('')
     setError('')
     setStatusText('')
+  }
+
+  function endSession() {
+    const ok =
+      typeof window === 'undefined' ||
+      window.confirm(
+        'Kết thúc phiên? Lịch sử hỏi đáp trên máy này sẽ bị xóa. Người sau không xem được.'
+      )
+    if (!ok) return
+    stopGeneration()
+    inFlightRef.current = false
+    speakRef.current?.cancel()
+    listenRef.current?.abort?.()
+    listenRef.current = null
+    setListening(false)
+    setStreaming(false)
+    clearSessionHistory()
+    try {
+      sessionStorage.removeItem('hcc_chat_category_ids')
+    } catch {
+      /* ignore */
+    }
+    const next = startFreshSession()
+    setSessionId(next.sessionId)
+    setConversationId(next.conversationId)
+    setCategoryIds([])
+    setMessages([])
+    transcriptRef.current = ''
+    setInput('')
+    setError('')
+    setStatusText('')
+    setHistoryTick((n) => n + 1)
+    setHistoryOpen(false)
   }
 
   function toggleSpeak() {
@@ -171,12 +243,16 @@ export default function ChatPage() {
 
   function handleMic() {
     if (talkCfg?.enabled !== true) return
-    unlockSpeech()
+    speakRef.current?.cancel()
     if (listening) {
-      listenRef.current?.stop()
-      listenRef.current = null
-      setListening(false)
+      stopListening({ send: false })
       return
+    }
+    unlockSpeech()
+    try {
+      window.speechSynthesis?.cancel()
+    } catch {
+      /* ignore */
     }
     if (!speechRecognitionSupported()) {
       setError(
@@ -187,26 +263,53 @@ export default function ChatPage() {
       return
     }
     setError('')
+    transcriptRef.current = ''
+    setInput('')
     setListening(true)
     listenRef.current = startSpeechListen({
       lang: talkCfg.lang || 'vi-VN',
       onText: (text) => {
-        if (text) setInput(text)
+        const next = String(text || '')
+        transcriptRef.current = next
+        if (next) setInput(next)
       },
       onReady: (text) => {
         listenRef.current = null
         setListening(false)
-        if (text?.trim()) sendMessage(text.trim())
+        const q = String(text || transcriptRef.current || '').trim()
+        if (q) sendMessage(q)
       },
       onEnd: () => setListening(false),
       onError: (err) => {
         setListening(false)
-        setError(err.message || 'Không nghe được')
+        if (err.message) setError(err.message)
       },
     })
   }
 
+  function stopListening({ send = false } = {}) {
+    const rec = listenRef.current
+    listenRef.current = null
+    const q = String(rec?.snapshot?.() || transcriptRef.current || input || '').trim()
+    if (!rec) {
+      setListening(false)
+      if (send && q) sendMessage(q)
+      return
+    }
+    if (send) {
+      rec.abort()
+      setListening(false)
+      if (q) sendMessage(q)
+      else setError('Chưa nghe thấy câu nói. Bấm mic, nói, rồi Gửi.')
+      return
+    }
+    rec.stop()
+  }
+
   function restoreFromHistory(item) {
+    if (inFlightRef.current || streaming) stopGeneration()
+    inFlightRef.current = false
+    setStreaming(false)
     const cid = String(item?.conversationId || item?.id || '').trim()
     setConversationId(cid ? rememberConversationId(cid) : newConversationId())
     const restored = threadToMessages(item)
@@ -233,9 +336,12 @@ export default function ChatPage() {
     ])
   }
 
-  async function sendMessage(text) {
+  async function sendMessage(text, opts = {}) {
     const question = String(text || '').trim()
-    if (!question || streaming) return
+    if (!question || inFlightRef.current) return
+    inFlightRef.current = true
+    const qaMode = opts.mode === 'advise' || opts.mode === 'lookup' ? opts.mode : mode
+    if (opts.mode === 'advise' || opts.mode === 'lookup') setMode(opts.mode)
 
     listenRef.current?.abort?.()
     listenRef.current = null
@@ -243,11 +349,12 @@ export default function ChatPage() {
     unlockSpeech()
 
     setError('')
+    transcriptRef.current = ''
     setInput('')
     setStreaming(true)
     setStatusText('Đang tiếp nhận câu hỏi…')
 
-    const history = conversationHistoryFromMessages(messages, 12)
+    const history = conversationHistoryFromMessages(messages, 6)
     const userMsg = { id: crypto.randomUUID(), role: 'user', content: question }
     const assistantId = crypto.randomUUID()
 
@@ -260,7 +367,7 @@ export default function ChatPage() {
         content: '',
         sources: [],
         streaming: true,
-        qaMode: mode,
+        qaMode,
       },
     ])
 
@@ -279,8 +386,9 @@ export default function ChatPage() {
       await streamChat(question, {
         signal: controller.signal,
         sessionId,
-        mode,
+        mode: qaMode,
         history,
+        categoryIds,
         voiceTalk: Boolean(talkCfg?.enabled === true && speakOn),
         onMeta: (meta) => {
           if (meta.status) setStatusText(meta.status)
@@ -355,6 +463,7 @@ export default function ChatPage() {
         )
       }
     } finally {
+      inFlightRef.current = false
       setStreaming(false)
       setStatusText('')
       setMessages((prev) =>
@@ -370,10 +479,10 @@ export default function ChatPage() {
     <div className={`${shellH} flex w-full overflow-hidden`}>
       {/* Cột chính: hỏi đáp */}
       <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-transparent">
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-black/20 px-4 py-1.5 backdrop-blur-md xl:px-6">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="flex shrink-0 flex-col gap-2 border-b border-white/10 bg-black/20 px-3 py-2 backdrop-blur-md sm:px-4 xl:flex-row xl:items-center xl:justify-between xl:px-6">
+          <div className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
             <div
-              className="inline-flex rounded-full border border-white/15 bg-white/10 p-1"
+              className="grid w-full grid-cols-2 gap-1 rounded-2xl border border-white/15 bg-white/10 p-1 sm:inline-flex sm:w-auto sm:rounded-full"
               role="tablist"
               aria-label="Chế độ"
             >
@@ -385,7 +494,7 @@ export default function ChatPage() {
                   aria-selected={mode === m.id}
                   disabled={streaming}
                   onClick={() => setMode(m.id)}
-                  className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition sm:text-sm ${
+                  className={`inline-flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-semibold transition sm:min-h-9 sm:rounded-full sm:text-xs ${
                     mode === m.id
                       ? m.id === 'advise'
                         ? 'btn-gold'
@@ -394,9 +503,9 @@ export default function ChatPage() {
                   } disabled:opacity-50`}
                 >
                   {m.id === 'advise' ? (
-                    <Sparkles className="h-3.5 w-3.5" />
+                    <Sparkles className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
                   ) : (
-                    <Scale className="h-3.5 w-3.5" />
+                    <Scale className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
                   )}
                   {m.label}
                 </button>
@@ -412,13 +521,14 @@ export default function ChatPage() {
             ) : null}
           </div>
 
-          <div className="flex shrink-0 items-center gap-0.5">
+          <div className="flex shrink-0 items-center justify-end gap-0.5">
             {talkCfg?.enabled === true ? (
               <button
                 type="button"
                 onClick={toggleSpeak}
-                className="inline-flex cursor-pointer items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white"
+                className="inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-1 rounded-xl px-2.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white sm:min-h-9"
                 aria-pressed={speakOn}
+                aria-label={speakOn ? 'Tắt đọc' : 'Bật đọc'}
                 title={
                   !ttsSupported
                     ? 'Trình duyệt không hỗ trợ đọc thoại'
@@ -427,8 +537,8 @@ export default function ChatPage() {
                       : 'Bật đọc ngay khi AI viết'
                 }
               >
-                {speakOn && ttsSupported ? <Volume2 className="h-3.5 w-3.5 text-emerald-300" /> : <VolumeX className="h-3.5 w-3.5" />}
-                <span className="hidden sm:inline">
+                {speakOn && ttsSupported ? <Volume2 className="h-4 w-4 text-emerald-300" /> : <VolumeX className="h-4 w-4" />}
+                <span className="hidden md:inline">
                   {!ttsSupported ? 'Không TTS' : speakOn ? 'Đang nói' : 'Im lặng'}
                 </span>
               </button>
@@ -436,23 +546,33 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={newChat}
-              className="inline-flex cursor-pointer items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white"
+              className="inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-1 rounded-xl px-2.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white sm:min-h-9"
+              aria-label="Chat mới"
             >
-              <Plus className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Chat mới</span>
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">Mới</span>
             </button>
             <button
               type="button"
               onClick={() => setHistoryOpen(true)}
-              className="inline-flex cursor-pointer items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white xl:hidden"
+              className="inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-xl px-2.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white sm:min-h-9 xl:hidden"
             >
-              <History className="h-3.5 w-3.5" />
-              Lịch sử
+              <History className="h-4 w-4" />
+              Phiên này
+            </button>
+            <button
+              type="button"
+              onClick={endSession}
+              className="inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-xl px-2.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white sm:min-h-9"
+              title="Xóa lịch sử trên máy và bắt đầu phiên mới"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">Hết phiên</span>
             </button>
             <button
               type="button"
               onClick={toggleSide}
-              className="hidden cursor-pointer items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white xl:inline-flex"
+              className="hidden min-h-9 cursor-pointer items-center gap-1 rounded-xl px-2.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white xl:inline-flex"
               aria-pressed={sideOpen}
               title={sideOpen ? 'Ẩn bàn làm việc' : 'Hiện bàn làm việc'}
             >
@@ -483,14 +603,25 @@ export default function ChatPage() {
           </div>
         )}
 
+        <CategoryScopePicker
+          selectedIds={categoryIds}
+          onChange={setCategoryScope}
+          disabled={streaming}
+        />
+
         <ChatInput
           value={input}
-          onChange={setInput}
-          onSubmit={() => sendMessage(input)}
+          onChange={(next) => {
+            transcriptRef.current = next
+            setInput(next)
+          }}
+          onSubmit={() => sendMessage(transcriptRef.current || input)}
           disabled={streaming}
+          streaming={streaming}
+          onStop={stopGeneration}
           placeholder={
             listening
-              ? 'Đang nghe… hãy nói câu hỏi'
+              ? 'Đang thu… nói câu hỏi, bấm Dừng hoặc Gửi khi xong'
               : talkCfg?.enabled === true
                 ? `${modeConfig.placeholder} · hoặc bấm mic`
                 : modeConfig.placeholder
@@ -499,6 +630,7 @@ export default function ChatPage() {
           voiceEnabled={talkCfg?.enabled === true}
           listening={listening}
           onMicClick={handleMic}
+          onStopListen={stopListening}
         />
       </section>
 
@@ -523,6 +655,9 @@ export default function ChatPage() {
         onClose={() => setHistoryOpen(false)}
         sessionId={sessionId}
         onRestore={restoreFromHistory}
+        streaming={streaming}
+        refreshKey={historyTick}
+        onEndSession={endSession}
       />
     </div>
   )

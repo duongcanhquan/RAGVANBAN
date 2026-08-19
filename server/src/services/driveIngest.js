@@ -49,13 +49,15 @@ function summarizeDriveUrlJob(items) {
       });
     }
   }
-  const okFiles = files.filter((f) => f.ok && f.id);
-  const first = okFiles[0] || files[0] || {};
+  const okFiles = files.filter((f) => f.ok && f.id && !f.duplicate);
+  const skippedDupes = files.filter((f) => f.duplicate);
+  const first = okFiles[0] || skippedDupes[0] || files[0] || {};
   const n = okFiles.length;
   return {
     files,
     chunks: okFiles.reduce((sum, f) => sum + Number(f.chunks || 0), 0),
     processed: n,
+    skippedDuplicates: skippedDupes.length,
     failed: files.filter((f) => !f.ok).length,
     fileName: n === 1 ? first.fileName : n ? `${n} file Drive` : 'Drive',
     displayName: n === 1 ? first.displayName || first.fileName : n ? `${n} file từ Google Drive` : 'Drive',
@@ -77,7 +79,7 @@ function pickNewDriveFiles(files, ingestedIds, limit) {
   const fresh = listed
     .filter((f) => f?.id && !seen.has(String(f.id)))
     .sort((a, b) => String(b.modifiedTime || '').localeCompare(String(a.modifiedTime || '')));
-  const n = Math.min(20, Math.max(1, Number(limit) || 8));
+  const n = Math.min(40, Math.max(1, Number(limit) || 8));
   return {
     listed: listed.length,
     skipped: listed.length - fresh.length,
@@ -97,6 +99,43 @@ function driveFileIdFromWebhookBody(body) {
   return '';
 }
 
+function skippedDriveResult(doc, extra = {}) {
+  const view = extra.driveWebViewLink || doc.drive_web_view_link || extra.downloadUrl || '';
+  return {
+    duplicate: true,
+    skipped: true,
+    id: doc.id,
+    fileName: doc.file_name,
+    displayName: doc.display_name || doc.file_name,
+    chunks: doc.chunk_count || 0,
+    source: 'google_drive',
+    driveFileId: extra.driveFileId || doc.drive_file_id,
+    driveWebViewLink: view,
+    storageUrl: doc.storage_url || view,
+    downloadUrl: view,
+    message:
+      extra.message ||
+      `File Drive đã có trong kho «${doc.display_name || doc.file_name}» — không OCR/vector lại.`,
+  };
+}
+
+async function rememberDriveIdOnDocument(doc, driveFileId, driveWebViewLink) {
+  if (!doc?.id || !driveFileId) return;
+  const have = String(doc.drive_file_id || doc.metadata?.drive_file_id || '').trim();
+  if (have === String(driveFileId)) return;
+  const { updateDocument } = require('./supabase');
+  await updateDocument(doc.id, {
+    drive_file_id: driveFileId,
+    drive_web_view_link: driveWebViewLink || doc.drive_web_view_link || null,
+    metadata: {
+      ...(doc.metadata || {}),
+      drive_file_id: driveFileId,
+      drive_web_view_link: driveWebViewLink || doc.drive_web_view_link || null,
+      source: 'google_drive',
+    },
+  });
+}
+
 async function ingestDriveFile(fileId, options = {}) {
   const { onProgress, categoryId = null } = options;
 
@@ -104,10 +143,20 @@ async function ingestDriveFile(fileId, options = {}) {
     if (typeof onProgress === 'function') onProgress({ stage, percent, message });
   };
 
+  const { getDocumentByDriveFileId, getDocumentByContentHash, getDocumentByFileName } = require('./supabase');
+  const already = await getDocumentByDriveFileId(fileId);
+  if (already.item) {
+    notify(
+      'dedup',
+      100,
+      `File Drive đã có trong kho — bỏ qua, không vector lại: ${already.item.display_name || already.item.file_name}`
+    );
+    return skippedDriveResult(already.item, { driveFileId: fileId });
+  }
+
   notify('drive', 5, `Đang đọc file Drive: ${fileId}`);
   const file = await downloadPdf(fileId);
   const { fileFingerprint, decideDuplicate, duplicateMessage } = require('./documentDedup');
-  const { getDocumentByContentHash, getDocumentByFileName } = require('./supabase');
   const fp = fileFingerprint(file.buffer);
   const [byHash, byName] = await Promise.all([
     getDocumentByContentHash(fp.sha256),
@@ -120,20 +169,12 @@ async function ingestDriveFile(fileId, options = {}) {
   if (decision.action === 'reuse' && decision.document) {
     notify('dedup', 100, duplicateMessage(decision.document));
     const doc = decision.document;
-    return {
-      duplicate: true,
-      skipped: true,
-      id: doc.id,
-      fileName: doc.file_name,
-      displayName: doc.display_name || doc.file_name,
-      chunks: doc.chunk_count || 0,
-      source: 'google_drive',
+    await rememberDriveIdOnDocument(doc, file.driveFileId, file.driveWebViewLink);
+    return skippedDriveResult(doc, {
       driveFileId: file.driveFileId,
       driveWebViewLink: file.driveWebViewLink,
-      storageUrl: doc.storage_url || file.driveWebViewLink,
-      downloadUrl: file.driveWebViewLink,
       message: duplicateMessage(doc),
-    };
+    });
   }
 
   let publicUrl = file.driveWebViewLink;
@@ -209,6 +250,18 @@ async function syncDriveFolder(options = {}) {
     skipped += picked.skipped;
     pending += picked.pending;
     const slice = picked.queued;
+    if (!slice.length) {
+      if (typeof onProgress === 'function') {
+        onProgress({
+          stage: 'sync',
+          percent: 100,
+          message: picked.skipped
+            ? `Không có file mới — ${picked.skipped} file đã có trong kho, không OCR/vector lại.`
+            : 'Thư mục không có PDF/Word mới.',
+        });
+      }
+      continue;
+    }
     for (let i = 0; i < slice.length; i += 1) {
       const f = slice[i];
       if (typeof onProgress === 'function') {
@@ -220,7 +273,10 @@ async function syncDriveFolder(options = {}) {
       }
       try {
         const r = await ingestDriveFile(f.id, { onProgress, categoryId: t.categoryId });
-        if (!r?.id) {
+        if (r?.duplicate || r?.skipped) {
+          allResults.push({ ok: true, fileId: f.id, name: f.name, ...r });
+          ingestedIds.push(f.id);
+        } else if (!r?.id) {
           allResults.push({
             ok: false,
             fileId: f.id,
@@ -243,7 +299,7 @@ async function syncDriveFolder(options = {}) {
     }
   }
 
-  const recorded = allResults.filter((r) => r.id);
+  const recorded = allResults.filter((r) => r.id && !r.duplicate && !r.skipped);
   const failed = allResults.filter((r) => r.ok === false || r.error);
 
   if (!recorded.length && failed.length) {

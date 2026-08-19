@@ -129,6 +129,9 @@ function buildPineconeRecords(documents, vectors, idPrefix = 'doc') {
       url_file_goc: link,
       ten_file: String(meta.ten_file || ''),
       linh_vuc: String(meta.linh_vuc || ''),
+      category_id: String(meta.category_id || ''),
+      document_id: String(documentId || ''),
+      folder_path: String(meta.folder_path || '').slice(0, 240),
       chunk_index: Number(meta.chunk_index ?? i),
       text: String(doc.pageContent || '').slice(0, 35000),
     };
@@ -271,6 +274,9 @@ async function updateVectorsMetadataByFileName(fileName, patch, deps = {}) {
   if (patch.loai_van_ban !== undefined) metaPatch.loai_van_ban = String(patch.loai_van_ban || '');
   if (patch.ten_file !== undefined) metaPatch.ten_file = String(patch.ten_file || '');
   if (patch.linh_vuc !== undefined) metaPatch.linh_vuc = String(patch.linh_vuc || '');
+  if (patch.category_id !== undefined) metaPatch.category_id = String(patch.category_id || '');
+  if (patch.document_id !== undefined) metaPatch.document_id = String(patch.document_id || '');
+  if (patch.folder_path !== undefined) metaPatch.folder_path = String(patch.folder_path || '').slice(0, 240);
   if (!Object.keys(metaPatch).length) return { ok: true, updated: 0 };
 
   const target = pineconeHandle(pinecone, indexName, namespace, peekPineconeIndexHost(indexName));

@@ -104,6 +104,39 @@ const deduped = groupHistoryIntoThreads([
 assert.equal(deduped.length, 1)
 assert.equal(deduped[0].turnCount, 1)
 
+function memoryStore() {
+  const m = new Map()
+  return {
+    getItem: (k) => (m.has(k) ? m.get(k) : null),
+    setItem: (k, v) => {
+      m.set(k, String(v))
+    },
+    removeItem: (k) => {
+      m.delete(k)
+    },
+  }
+}
+
+const sessionMem = memoryStore()
+const localMem = memoryStore()
+globalThis.sessionStorage = sessionMem
+globalThis.localStorage = localMem
+localMem.setItem('rag_user_session', 'old-shared-device')
+localMem.setItem('hcc_chat_history_v1', '{"items":[{"id":"leak"}]}')
+
+const { getSessionId, startFreshSession, purgeLegacyDeviceHistory } = await import('../src/lib/session.js')
+
+purgeLegacyDeviceHistory()
+assert.equal(localMem.getItem('rag_user_session'), null)
+assert.equal(localMem.getItem('hcc_chat_history_v1'), null)
+
+const a = getSessionId()
+assert.ok(a && a !== 'anonymous' && a !== 'old-shared-device')
+const fresh = startFreshSession()
+assert.notEqual(fresh.sessionId, a)
+assert.equal(localMem.getItem('rag_user_session'), null)
+
 console.log('✓ extractSourceChips')
 console.log('✓ conversationHistoryFromMessages')
 console.log('✓ groupHistoryIntoThreads')
+console.log('✓ session is tab-only; legacy localStorage history is purged')

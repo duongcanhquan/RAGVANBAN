@@ -20,12 +20,8 @@ const {
   ensureBrain,
 } = require('../services/clients');
 const { insertChatLog } = require('../services/supabase');
-const {
-  findRelevantScenarios,
-  formatScenariosForPrompt,
-} = require('../services/knowledgeStore');
 const { matchSkillsForQuestion, formatSkillsForPrompt } = require('../services/skillStore');
-const { getVoice } = require('../services/voiceConfig');
+const { getVoice, answerMaxTokens } = require('../services/voiceConfig');
 const { getTalk } = require('../services/voiceTalk');
 const { shouldCompare } = require('../services/conflictBrief');
 const { getRagConfig, publicRagPayload } = require('../services/ragConfig');
@@ -35,6 +31,8 @@ const {
   recall,
   mergeMatches,
   beginSessionRequest,
+  supersedeSessionWork,
+  endSessionWork,
   normalizeConversationTurns,
   lastUserQuestion,
   expandSearchQuery,
@@ -42,8 +40,10 @@ const {
   isGreeting,
 } = require('../services/sessionSearchCache');
 const { bindSseAbort } = require('../services/sseAbort');
+const { throwIfAborted, isAbortError, defaultChatTimeoutMs, combineSignals } = require('../services/abortControl');
 const { publicErrorMessage } = require('../services/publicError');
-const { isAbortError, throwIfAborted, defaultChatTimeoutMs } = require('../services/abortControl');
+const { resolveCategoryScope, applyScopeToIntent, scopeKey } = require('../services/categoryScope');
+const { checkChatRate, acquireChatSlot } = require('../services/chatGate');
 
 const router = express.Router();
 
@@ -115,7 +115,11 @@ async function streamWithFallback(question, matches, onToken, scenarioContext, q
     'chat',
     async (provider) => {
       throwIfAborted(signal);
-      const llm = getLLM(provider, { temperature, streaming: true });
+      const llm = getLLM(provider, {
+        temperature,
+        streaming: true,
+        maxTokens: answerMaxTokens(voice, { mode: qaMode, spoken }),
+      });
       let sent = 0;
       try {
         const result = await streamAnswer(
@@ -157,14 +161,54 @@ router.post('/', async (req, res) => {
     return;
   }
 
+  const limited = checkChatRate(req);
+  if (limited) {
+    res.status(429).json({ error: limited });
+    return;
+  }
+
   initSse(res);
 
   const { signal, aborted, dispose } = bindSseAbort(res, {
     timeoutMs: defaultChatTimeoutMs(),
   });
   const closed = () => aborted();
+  let slot = null;
+  let sessionAc = null;
+  let workSignal = signal;
 
   try {
+    if (isGreeting(message)) {
+      const answer =
+        uiMode === 'advise'
+          ? 'Chào bạn. Mô tả ngắn tình huống cần tư vấn (đối tượng, việc đang hỏi).'
+          : 'Chào bạn. Hãy nêu số hiệu, điều khoản cần tra, hoặc mô tả ngắn tình huống.';
+      sendEvent(res, 'meta', {
+        status: 'Sẵn sàng',
+        qaMode: uiMode,
+        mode: 'live',
+        voiceTalk: false,
+      });
+      for (let i = 0; i < answer.length; i += 48) {
+        throwIfAborted(signal);
+        sendEvent(res, 'token', { token: answer.slice(i, i + 48) });
+      }
+      sendEvent(res, 'done', {
+        answer,
+        sources: [],
+        intent: { needs_retrieval: false, muc_dich: uiMode === 'advise' ? 'tu_van' : 'tra_cuu' },
+        confidence: confidenceFromSources([]),
+        qaMode: uiMode,
+        mode: 'live',
+      });
+      res.end();
+      return;
+    }
+
+    slot = await acquireChatSlot(signal);
+    sessionAc = supersedeSessionWork(userSession);
+    workSignal = combineSignals(signal, sessionAc?.signal) || signal;
+
     await ensureBrain();
     if (!hasLiveKeys()) {
       await mockStream(res, message, userSession, uiMode);
@@ -189,7 +233,8 @@ router.post('/', async (req, res) => {
     let searchQuery = followUp
       ? expandSearchQuery(message, conversationTurns, prevTurnQuestion)
       : message;
-    if (uiMode === 'advise') searchQuery = expandAdviseQuery(searchQuery);
+    const heur = heuristicIntent(message, uiMode);
+    if (uiMode === 'advise' || heur.muc_dich === 'tu_van') searchQuery = expandAdviseQuery(searchQuery);
 
     sendEvent(res, 'meta', {
       status: followUp ? 'Đang hỏi tiếp trong cùng tình huống…' : 'Đang xác định lĩnh vực…',
@@ -200,18 +245,19 @@ router.post('/', async (req, res) => {
     });
 
     let intent;
-    const skipLlm = rag.skipIntentLlmWhenAnchored && shouldSkipIntentLlm(message, uiMode);
+    const skipLlm =
+      (rag.skipIntentLlmWhenAnchored && shouldSkipIntentLlm(message, uiMode)) || followUp;
     try {
       if (skipLlm) {
-        intent = heuristicIntent(message, uiMode);
+        intent = heur;
         intent._provider = 'heuristic';
       } else {
         const routed = await withProviderFallback(
           'chat',
           async (provider) => {
-            throwIfAborted(signal);
+            throwIfAborted(workSignal);
             const llm = getLLM(provider, { temperature: 0, streaming: false });
-            return routeIntent(message, { llm, useLlm: true, mode: uiMode, signal });
+            return routeIntent(message, { llm, useLlm: true, mode: uiMode, signal: workSignal });
           },
           chatOpts
         );
@@ -227,16 +273,24 @@ router.post('/', async (req, res) => {
       intent.muc_dich = 'tu_van';
       intent.skipLinhVucFilter = true;
     }
-    if (!isGreeting(message)) intent.needs_retrieval = true;
+    const scope = await resolveCategoryScope(req.body?.categoryIds).catch((err) => {
+      console.warn('[chat] category scope:', err.message);
+      return null;
+    });
+    if (scope) applyScopeToIntent(intent, scope);
+    intent.needs_retrieval = true;
 
     let qaMode = resolveQaMode(uiMode, intent);
-    throwIfAborted(signal);
+    throwIfAborted(workSignal);
 
     sendEvent(res, 'meta', {
-      status: 'Đang tìm văn bản còn hiệu lực…',
+      status: scope?.labels?.length
+        ? `Đang tìm trong: ${scope.labels.join(', ')}…`
+        : 'Đang tìm văn bản còn hiệu lực…',
       intent,
       qaMode,
       mode: 'live',
+      scopeLabels: scope?.labels || [],
     });
 
     const voice = await getVoice();
@@ -253,14 +307,15 @@ router.post('/', async (req, res) => {
         topK: rag.topK,
         maxPerDoc: rag.maxPerDoc,
         maxTotal: rag.maxTotal,
-        signal,
+        signal: workSignal,
       };
       matches = await hybridSearch(searchQuery, intent, searchOpts);
-      throwIfAborted(signal);
-      if (followUp && prev?.matches?.length) {
+      throwIfAborted(workSignal);
+      const thisScope = scopeKey(intent);
+      if (followUp && prev?.matches?.length && prev.scopeKey === thisScope) {
         matches = mergeMatches(prev.matches, matches, rag.maxTotal + rag.maxPerDoc);
       }
-      remember(userSession, { question: message, matches, searchQuery }, seq);
+      remember(userSession, { question: message, matches, searchQuery, scopeKey: thisScope }, seq);
     }
 
     if (qaMode === 'lookup' && shouldCompare(matches)) {
@@ -274,20 +329,15 @@ router.post('/', async (req, res) => {
       co_quan_ban_hanh: m.co_quan_ban_hanh,
     }));
 
-    throwIfAborted(signal);
-    const [relatedScenarios, matchedSkills] = await Promise.all([
-      findRelevantScenarios(message, 2),
-      matchSkillsForQuestion(message),
-    ]);
-    const scenarioContext = formatScenariosForPrompt(relatedScenarios);
+    throwIfAborted(workSignal);
+    const matchedSkills = matches.length ? await matchSkillsForQuestion(message) : [];
     const skillContext = formatSkillsForPrompt(matchedSkills);
     const previewConfidence = confidenceFromSources(sourcesPreview);
 
-    throwIfAborted(signal);
+    throwIfAborted(workSignal);
     sendEvent(res, 'meta', {
       intent,
       sources: sourcesPreview,
-      scenarios: relatedScenarios.map((s) => ({ id: s.id, title: s.title })),
       confidence: previewConfidence,
       qaMode,
       mode: 'live',
@@ -299,9 +349,11 @@ router.post('/', async (req, res) => {
     });
 
     if (!matches.length) {
-      const { answer, sources, confidence } = buildNoContextAnswer(qaMode);
+      const { answer, sources, confidence } = buildNoContextAnswer(qaMode, {
+        scopeLabels: scope?.labels || intent.scopeLabels,
+      });
       for (let i = 0; i < answer.length; i += 48) {
-        throwIfAborted(signal);
+        throwIfAborted(workSignal);
         sendEvent(res, 'token', { token: answer.slice(i, i + 48) });
       }
       await persistLog({ userSession, question: message, sources, answer });
@@ -323,13 +375,13 @@ router.post('/', async (req, res) => {
       (token) => {
         if (!closed()) sendEvent(res, 'token', { token });
       },
-      scenarioContext,
+      '',
       qaMode,
       voice,
       {
         spoken: voiceRequested,
         fastChat,
-        signal,
+        signal: workSignal,
         skillContext,
         conversationTurns,
       }
@@ -369,6 +421,8 @@ router.post('/', async (req, res) => {
       res.end();
     }
   } finally {
+    endSessionWork(userSession, sessionAc);
+    if (slot) slot.release();
     dispose();
   }
 });

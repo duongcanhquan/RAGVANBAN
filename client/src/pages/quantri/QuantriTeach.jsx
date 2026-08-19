@@ -5,7 +5,7 @@ import { adminFetch } from '../../lib/adminApi'
 
 const TABS = [
   { id: 'skills', label: 'Kỹ năng' },
-  { id: 'samples', label: 'Bài mẫu' },
+  { id: 'samples', label: 'Tình huống' },
   { id: 'learn', label: 'Học mỗi ngày' },
 ]
 
@@ -30,12 +30,6 @@ export default function QuantriTeach() {
   const [ok, setOk] = useState('')
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState(null)
-  const [sampleForm, setSampleForm] = useState({
-    title: '',
-    situation: '',
-    suggested_question: '',
-    sample_answer: '',
-  })
 
   const load = useCallback(async () => {
     const res = await adminFetch('/api/quantri/skills')
@@ -113,28 +107,6 @@ export default function QuantriTeach() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Không xóa được')
       setItems(data.items || [])
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function saveSample(e) {
-    e.preventDefault()
-    setBusy(true)
-    setError('')
-    try {
-      const res = await adminFetch('/api/scenarios', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(sampleForm),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'Không lưu bài mẫu')
-      setSampleForm({ title: '', situation: '', suggested_question: '', sample_answer: '' })
-      await load()
-      setOk('Đã thêm bài mẫu. Khi câu hỏi gần giống, AI học bố cục trả lời.')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -345,55 +317,26 @@ export default function QuantriTeach() {
       {tab === 'samples' ? (
         <section className="space-y-3">
           <p className="m-0 text-xs text-white/55">
-            Bài mẫu = few-shot. AI học bố cục, không copy số liệu nếu khác văn bản lần hỏi.
-            Có thể lưu từ lịch sử chat («Làm giàu AI»).
+            Tình huống Q&A do admin / quản lý soạn sẵn theo hạng mục. Trang ngoài chỉ xem và tìm —
+            không nhờ AI trả lời.
           </p>
-          <form onSubmit={saveSample} className="space-y-2 rounded-2xl border border-white/10 bg-black/25 p-4">
-            <input
-              required
-              value={sampleForm.title}
-              onChange={(e) => setSampleForm((s) => ({ ...s, title: e.target.value }))}
-              placeholder="Tên bài (vd. Cấp lại CCCD)"
-              className="w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm"
-            />
-            <textarea
-              required
-              rows={2}
-              value={sampleForm.situation}
-              onChange={(e) => setSampleForm((s) => ({ ...s, situation: e.target.value }))}
-              placeholder="Tình huống / cách hỏi"
-              className="w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm"
-            />
-            <input
-              value={sampleForm.suggested_question}
-              onChange={(e) => setSampleForm((s) => ({ ...s, suggested_question: e.target.value }))}
-              placeholder="Câu hỏi mẫu"
-              className="w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm"
-            />
-            <textarea
-              rows={5}
-              value={sampleForm.sample_answer}
-              onChange={(e) => setSampleForm((s) => ({ ...s, sample_answer: e.target.value }))}
-              placeholder="Câu trả lời mẫu — kết luận trước, căn cứ, một nguồn"
-              className="w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm"
-            />
-            <button
-              type="submit"
-              disabled={busy}
-              className="btn-gold inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold"
-            >
-              <BookOpen className="h-3.5 w-3.5" />
-              Lưu bài mẫu
-            </button>
-          </form>
-          {samples.map((s) => (
+          <Link
+            to="/quantri/tinh-huong"
+            className="btn-gold inline-flex min-h-11 items-center gap-2 rounded-2xl px-4 text-sm font-semibold"
+          >
+            <BookOpen className="h-4 w-4" />
+            Mở trang Tình huống
+          </Link>
+          {samples.slice(0, 8).map((s) => (
             <article key={s.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
-              <h2 className="m-0 text-sm font-semibold">{s.title}</h2>
-              <p className="m-0 mt-1 text-xs text-white/60">{s.suggested_question || s.situation}</p>
+              <h2 className="m-0 text-sm font-semibold">{s.title || s.question}</h2>
+              <p className="m-0 mt-1 line-clamp-2 text-xs text-white/60">
+                {s.question || s.suggested_question || s.situation}
+              </p>
             </article>
           ))}
           {!samples.length ? (
-            <p className="text-xs text-white/45">Chưa có bài mẫu. Thêm ở đây hoặc đánh dấu lịch sử chat.</p>
+            <p className="text-xs text-white/45">Chưa có Q&A. Thêm tại Tình huống.</p>
           ) : null}
         </section>
       ) : null}

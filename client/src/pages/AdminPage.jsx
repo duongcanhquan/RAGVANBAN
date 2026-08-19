@@ -143,6 +143,7 @@ export default function AdminPage() {
   const [httpUploadMaxBytes, setHttpUploadMaxBytes] = useState(DIRECT_UPLOAD_MAX_BYTES)
   const [driveHint, setDriveHint] = useState(null)
   const inputRef = useRef(null)
+  const ingestLock = useRef(false)
 
   const loadStats = useCallback(async () => {
     try {
@@ -371,12 +372,13 @@ export default function AdminPage() {
   }
 
   async function handleUpload() {
-    if (!files.length || uploading) return
+    if (!files.length || uploading || ingestLock.current) return
     if (!isSuper && !categoryId) {
       setError('Chọn ngành / hạng mục / chủ đề trước khi upload')
       return
     }
     setUploading(true)
+    ingestLock.current = true
     setError('')
     setResult(null)
     try {
@@ -400,17 +402,19 @@ export default function AdminPage() {
       loadStats()
       loadDocs()
     } finally {
+      ingestLock.current = false
       setUploading(false)
     }
   }
 
   async function handlePasteText() {
-    if (!pasteText.trim() || uploading) return
+    if (!pasteText.trim() || uploading || ingestLock.current) return
     if (!isSuper && !categoryId) {
       setError('Chọn ngành / hạng mục / chủ đề trước khi nạp')
       return
     }
     setUploading(true)
+    ingestLock.current = true
     setError('')
     setResult(null)
     setProgress({ percent: 1, message: 'Đang số hóa văn bản dán…' })
@@ -446,18 +450,20 @@ export default function AdminPage() {
       setError(e.message)
       setProgress({ percent: 0, message: '' })
     } finally {
+      ingestLock.current = false
       setUploading(false)
     }
   }
 
   async function handleWebUrl() {
     const links = driveLinks.map((s) => s.trim()).filter(Boolean)
-    if (!links.length || uploading) return
+    if (!links.length || uploading || ingestLock.current) return
     if (!isSuper && !categoryId) {
       setError('Chọn ngành / hạng mục / chủ đề trước khi nạp')
       return
     }
     setUploading(true)
+    ingestLock.current = true
     setError('')
     setResult(null)
     setProgress({ percent: 1, message: 'Đang đọc link Drive / website…' })
@@ -511,6 +517,7 @@ export default function AdminPage() {
       loadDocs()
       loadStats()
     } finally {
+      ingestLock.current = false
       setUploading(false)
     }
   }
@@ -557,20 +564,25 @@ export default function AdminPage() {
   }
 
   async function reindexIds(ids) {
-    if (!ids.length) return
+    if (!ids.length || uploading || ingestLock.current) return
     if (!window.confirm(`Số hóa lại ${ids.length} tài liệu từ file gốc (R2/Drive)? Vector cũ sẽ bị thay.`)) return
     setError('')
     setUploading(true)
+    ingestLock.current = true
     const failed = []
-    for (const id of ids) {
-      const res = await adminFetch(`/api/library/documents/${id}/reindex`, { method: 'POST' })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || data.ok === false) failed.push({ id, error: data.error || 'Lỗi' })
+    try {
+      for (const id of ids) {
+        const res = await adminFetch(`/api/library/documents/${id}/reindex`, { method: 'POST' })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok || data.ok === false) failed.push({ id, error: data.error || 'Lỗi' })
+      }
+      if (failed.length) setError(`Số hóa lại lỗi ${failed.length}/${ids.length}: ${failed[0].error}`)
+    } finally {
+      ingestLock.current = false
+      setUploading(false)
+      loadDocs()
+      loadStats()
     }
-    if (failed.length) setError(`Số hóa lại lỗi ${failed.length}/${ids.length}: ${failed[0].error}`)
-    setUploading(false)
-    loadDocs()
-    loadStats()
   }
 
   async function applyBulkCategory() {
@@ -703,7 +715,7 @@ export default function AdminPage() {
               không lưu thêm R2.
             </p>
 
-            <div className="mb-3 flex flex-wrap gap-1 rounded-full border border-white/15 bg-white/5 p-0.5">
+            <div className="mb-3 grid grid-cols-3 gap-1 rounded-2xl border border-white/15 bg-white/5 p-0.5">
               {[
                 { id: 'file', label: 'File', Icon: UploadCloud },
                 { id: 'text', label: 'Dán text', Icon: Type },
@@ -713,7 +725,7 @@ export default function AdminPage() {
                   key={id}
                   type="button"
                   onClick={() => setIngestTab(id)}
-                  className={`inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  className={`inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition ${
                     ingestTab === id ? 'btn-gold' : 'text-white/70 hover:bg-white/10 hover:text-white'
                   }`}
                 >
@@ -730,7 +742,7 @@ export default function AdminPage() {
               <select
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value)}
-                className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white outline-none focus:border-[var(--hcc-gold)]"
+                className="min-h-11 w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-base text-white outline-none focus:border-[var(--hcc-gold)] sm:text-sm"
               >
                 <option value="" className="text-[var(--hcc-ink)]">
                   {isSuper ? 'Tự gợi ý theo nội dung văn bản' : '— Chọn phần bạn được giao —'}
@@ -994,27 +1006,33 @@ export default function AdminPage() {
             {result ? (
               <div
                 className={`mt-3 rounded-2xl border p-4 text-sm ${
-                  result.duplicate || result.failed
+                  result.duplicate || result.failed || (Number(result.skipped) > 0 && !result.processed)
                     ? 'border-amber-400/30 bg-amber-400/10 text-amber-50'
                     : 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100'
                 }`}
               >
                 <p className="m-0 font-medium">
-                  {result.duplicate
-                    ? result.message || 'File trùng — không lưu thêm R2/vector'
+                  {result.duplicate || (Number(result.skipped) > 0 && !result.processed)
+                    ? result.message ||
+                      (result.skipped
+                        ? `Không có file mới — ${result.skipped} file đã có trong kho`
+                        : result.message || 'File trùng — không lưu thêm vector')
                     : result.failed && !result.processed
                       ? `Không ghi được danh mục: ${result.displayName || result.fileName || 'Google Drive'}`
                       : `Số hóa thành công: ${result.displayName || result.fileName || 'Google Drive'}`}
                   {result.count > 1 ? ` · ${result.count} link` : ''}
                 </p>
-                {result.duplicate ? (
+                {result.duplicate || (Number(result.skipped) > 0 && !result.processed) ? (
                   <p className="m-0 mt-1 text-xs text-amber-50/80">
-                    Dùng «Số hóa lại» trên danh mục nếu cần OCR/vector lại — không tốn thêm R2.
+                    Hệ thống chỉ số hóa file Drive chưa có trong kho. Dùng «Số hóa lại» nếu cần OCR/vector lại file cũ.
                   </p>
                 ) : result.skipped || result.processed ? (
                   <p className="m-0 mt-1 text-xs text-emerald-100/75">
                     File mới xử lý {result.processed || 0}
                     {result.skipped ? ` · đã có trong kho ${result.skipped}` : ''}
+                    {result.pending > result.processed
+                      ? ` · còn ${result.pending - (result.processed || 0)} file mới (lần sau dán lại link)`
+                      : ''}
                     {result.failed ? ` · lỗi ${result.failed}` : ''}
                   </p>
                 ) : null}
@@ -1094,12 +1112,12 @@ export default function AdminPage() {
             </div>
 
             {selectedIds.length ? (
-              <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-white/5 p-3">
+              <div className="mb-3 flex shrink-0 flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 p-3 sm:flex-row sm:flex-wrap sm:items-center">
                 <span className="text-xs text-white/70">{selectedIds.length} đã chọn</span>
                 <select
                   value={bulkCategoryId}
                   onChange={(e) => setBulkCategoryId(e.target.value)}
-                  className="rounded-xl border border-white/15 bg-black/20 px-2 py-1.5 text-xs"
+                  className="min-h-11 w-full rounded-xl border border-white/15 bg-black/20 px-2 py-1.5 text-base sm:w-auto sm:min-w-[12rem] sm:text-xs"
                 >
                   <option value="">— Chuyển chuyên mục —</option>
                   {categoryOptions.map((o) => (
@@ -1112,7 +1130,7 @@ export default function AdminPage() {
                   type="button"
                   disabled={!bulkCategoryId}
                   onClick={applyBulkCategory}
-                  className="rounded-full bg-white/10 px-3 py-1 text-xs disabled:opacity-40"
+                  className="min-h-11 rounded-full bg-white/10 px-3 text-xs disabled:opacity-40"
                 >
                   Áp dụng
                 </button>
@@ -1120,14 +1138,14 @@ export default function AdminPage() {
                   type="button"
                   disabled={uploading}
                   onClick={() => reindexIds(selectedIds)}
-                  className="rounded-full bg-white/10 px-3 py-1 text-xs disabled:opacity-40"
+                  className="min-h-11 rounded-full bg-white/10 px-3 text-xs disabled:opacity-40"
                 >
                   Số hóa lại đã chọn
                 </button>
                 <button
                   type="button"
                   onClick={() => deleteIds(selectedIds)}
-                  className="rounded-full bg-red-500/20 px-3 py-1 text-xs text-red-100"
+                  className="min-h-11 rounded-full bg-red-500/20 px-3 text-xs text-red-100"
                 >
                   Xóa đã chọn
                 </button>
@@ -1202,6 +1220,7 @@ export default function AdminPage() {
                             />
                             <input
                               type="checkbox"
+                              className="h-4 w-4 shrink-0"
                               checked={selected.has(doc.id)}
                               onClick={(e) => e.stopPropagation()}
                               onChange={() => toggleOne(doc.id)}
@@ -1238,7 +1257,7 @@ export default function AdminPage() {
                               value={doc.category_id || ''}
                               onClick={(e) => e.stopPropagation()}
                               onChange={(e) => changeDocCategory(doc, e.target.value)}
-                              className="max-w-[11rem] rounded-lg border border-white/15 bg-black/20 px-2 py-1 text-[11px]"
+                              className="max-w-full min-h-11 w-full rounded-lg border border-white/15 bg-black/20 px-2 py-1 text-base sm:max-w-[11rem] sm:min-h-8 sm:w-auto sm:text-[11px]"
                             >
                               {isSuper ? <option value="">Chưa gắn</option> : null}
                               {categoryOptions.map((o) => (
@@ -1257,7 +1276,7 @@ export default function AdminPage() {
                                 setEditSoHieu(doc.so_hieu || '')
                                 setEditTrangThai(doc.trang_thai || 'Còn hiệu lực')
                               }}
-                              className="rounded-full bg-white/10 p-1.5"
+                              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full bg-white/10"
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
@@ -1269,7 +1288,7 @@ export default function AdminPage() {
                                 e.stopPropagation()
                                 reindexIds([doc.id])
                               }}
-                              className="rounded-full bg-white/10 p-1.5"
+                              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full bg-white/10"
                             >
                               <RefreshCw className="h-3.5 w-3.5" />
                             </button>
@@ -1280,7 +1299,7 @@ export default function AdminPage() {
                                 e.stopPropagation()
                                 deleteIds([doc.id])
                               }}
-                              className="rounded-full bg-red-500/20 p-1.5 text-red-100"
+                              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full bg-red-500/20 text-red-100"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>

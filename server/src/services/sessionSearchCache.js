@@ -4,13 +4,32 @@
  */
 
 const { extractSoHieuList } = require('../ingestion/legalChunker');
+const { abortError } = require('./abortControl');
 
 const TTL_MS = 12 * 60 * 1000;
+const STORE_MAX = 400;
 const store = new Map();
 const seqBySession = new Map();
+const abortBySession = new Map();
 
 function sessionKey(sessionId) {
   return String(sessionId || '').trim();
+}
+
+function evictSession(key) {
+  store.delete(key);
+  seqBySession.delete(key);
+  const ac = abortBySession.get(key);
+  if (ac) {
+    abortBySession.delete(key);
+    if (!ac.signal.aborted) {
+      try {
+        ac.abort(abortError('client'));
+      } catch {
+        /* ignore */
+      }
+    }
+  }
 }
 
 function beginSessionRequest(sessionId) {
@@ -18,23 +37,57 @@ function beginSessionRequest(sessionId) {
   if (!key || key === 'anonymous') return 0;
   const n = (seqBySession.get(key) || 0) + 1;
   seqBySession.set(key, n);
+  if (seqBySession.size > STORE_MAX + 50) {
+    const oldest = seqBySession.keys().next().value;
+    if (oldest && !store.has(oldest)) seqBySession.delete(oldest);
+  }
   return n;
 }
 
-function normalizeConversationTurns(raw, { maxTurns = 12, userMax = 500, asstMax = 700 } = {}) {
+function supersedeSessionWork(sessionId) {
+  const key = sessionKey(sessionId);
+  if (!key || key === 'anonymous') return null;
+  const prev = abortBySession.get(key);
+  if (prev && !prev.signal.aborted) {
+    try {
+      prev.abort(abortError('client'));
+    } catch {
+      /* ignore */
+    }
+  }
+  const ac = new AbortController();
+  abortBySession.set(key, ac);
+  return ac;
+}
+
+function endSessionWork(sessionId, ac) {
+  const key = sessionKey(sessionId);
+  if (!key || !ac) return;
+  if (abortBySession.get(key) === ac) abortBySession.delete(key);
+}
+
+function compactTurnContent(role, content, max) {
+  let s = String(content || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (role === 'assistant') {
+    s = s
+      .replace(/\s*(?:\*\*)?Nguồn:(?:\*\*)?[\s\S]*$/i, '')
+      .replace(/\s*\*\*Kiểm chứng:\*\*[\s\S]*$/i, '')
+      .trim();
+  }
+  if (!s) return '';
+  return s.length > max ? `${s.slice(0, max)}…` : s;
+}
+
+function normalizeConversationTurns(raw, { maxTurns = 6, userMax = 320, asstMax = 220 } = {}) {
   const out = [];
   for (const t of Array.isArray(raw) ? raw : []) {
     const role = t?.role === 'assistant' ? 'assistant' : t?.role === 'user' ? 'user' : '';
     if (!role) continue;
-    const content = String(t.content || '')
-      .replace(/\s+/g, ' ')
-      .trim();
+    const content = compactTurnContent(role, t.content, role === 'user' ? userMax : asstMax);
     if (!content) continue;
-    const max = role === 'user' ? userMax : asstMax;
-    out.push({
-      role,
-      content: content.length > max ? `${content.slice(0, max)}…` : content,
-    });
+    out.push({ role, content });
   }
   return out.slice(-maxTurns);
 }
@@ -47,7 +100,9 @@ function lastUserQuestion(turns = []) {
 }
 
 function isGreeting(question) {
-  return /^(xin chào|chào|hello|hi|cảm ơn|thanks|ok|oke)\b/i.test(String(question || '').trim());
+  return /^(xin chào|chào bạn|chào|hello|hi|cảm ơn|thanks|ok|oke)[\s!.]*$/i.test(
+    String(question || '').trim()
+  );
 }
 
 function isFollowUpQuestion(question, previousQuestion, turns = []) {
@@ -82,7 +137,7 @@ function expandAdviseQuery(question) {
   const q = String(question || '').trim();
   if (!q) return q;
   if (q.length > 220 && /quy định|điều khoản|áp dụng/i.test(q)) return q;
-  return `${q}\nQuy định áp dụng, điều khoản, đối tượng, hồ sơ, trình tự, hình thức xử lý.`.slice(0, 800);
+  return `${q}\nQuy định áp dụng, điều khoản, đối tượng, hồ sơ, trình tự.`.slice(0, 480);
 }
 
 function expandSearchQuery(question, turns = [], previousQuestion = '') {
@@ -92,16 +147,16 @@ function expandSearchQuery(question, turns = [], previousQuestion = '') {
   const users = turns.filter((t) => t.role === 'user').map((t) => t.content);
   if (!users.length && prev) users.push(prev);
   const unique = [...new Set([...users.slice(-2), q])].filter(Boolean);
-  return unique.join('\n').slice(0, 800);
+  return unique.join('\n').slice(0, 480);
 }
 
 function formatConversationForPrompt(turns = []) {
   if (!turns.length) return '';
   const lines = turns.map((t) => {
-    const who = t.role === 'user' ? 'Cán bộ' : 'AI';
+    const who = t.role === 'user' ? 'Người hỏi' : 'AI';
     return `${who}: ${t.content}`;
   });
-  return `Ngữ cảnh đoạn chat này (câu hiện tại tiếp nối các lượt trước — giữ tình huống, đối tượng, văn bản đang nói; không hỏi lại từ đầu):
+  return `Ngữ cảnh đoạn chat (giữ tình huống; câu hiện tại là trọng tâm):
 ${lines.join('\n')}`;
 }
 
@@ -117,9 +172,17 @@ function remember(sessionId, payload, seq) {
     at: Date.now(),
     seq: seq != null ? Number(seq) : undefined,
   });
-  if (store.size > 400) {
-    const oldest = store.keys().next().value;
-    store.delete(oldest);
+  if (store.size > STORE_MAX) {
+    let oldestKey = null;
+    let oldestAt = Infinity;
+    for (const [k, row] of store) {
+      const at = Number(row?.at) || 0;
+      if (at < oldestAt) {
+        oldestAt = at;
+        oldestKey = k;
+      }
+    }
+    if (oldestKey && oldestKey !== key) evictSession(oldestKey);
   }
   return true;
 }
@@ -139,6 +202,16 @@ function recall(sessionId) {
 function invalidateSessionCache() {
   store.clear();
   seqBySession.clear();
+  for (const ac of abortBySession.values()) {
+    if (!ac.signal.aborted) {
+      try {
+        ac.abort(abortError('client'));
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  abortBySession.clear();
 }
 
 function mergeMatches(prev, next, max = 16) {
@@ -161,6 +234,8 @@ module.exports = {
   mergeMatches,
   invalidateSessionCache,
   beginSessionRequest,
+  supersedeSessionWork,
+  endSessionWork,
   normalizeConversationTurns,
   lastUserQuestion,
   expandSearchQuery,

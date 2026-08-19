@@ -18,6 +18,27 @@ function isAbortError(err) {
   return err.abortKind === 'client' || err.abortKind === 'timeout';
 }
 
+function combineSignals(...signals) {
+  const list = signals.filter(Boolean);
+  if (!list.length) return undefined;
+  if (list.length === 1) return list[0];
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any(list);
+  const ac = new AbortController();
+  const onAbort = () => {
+    if (ac.signal.aborted) return;
+    const reason = list.find((s) => s.aborted)?.reason;
+    ac.abort(isAbortError(reason) ? reason : abortError(reason?.abortKind === 'timeout' ? 'timeout' : 'client'));
+  };
+  for (const s of list) {
+    if (s.aborted) {
+      onAbort();
+      return ac.signal;
+    }
+    s.addEventListener('abort', onAbort, { once: true });
+  }
+  return ac.signal;
+}
+
 function throwIfAborted(signal) {
   if (!signal?.aborted) return;
   const reason = signal.reason;
@@ -83,5 +104,6 @@ module.exports = {
   throwIfAborted,
   raceAbort,
   abortableAsyncIter,
+  combineSignals,
   defaultChatTimeoutMs,
 };

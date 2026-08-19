@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Brain, FileText, GraduationCap, KeyRound, LogOut, Settings, Users, PenLine, Search } from 'lucide-react'
+import { Brain, FileText, GraduationCap, KeyRound, Lightbulb, LogOut, Settings, Users, PenLine, Search } from 'lucide-react'
 import { supabase, supabaseConfigured } from '../../lib/supabase'
 import { adminFetch, clearAuthTokenCache } from '../../lib/adminApi'
 import { explainLoginError } from '../../lib/authErrors'
@@ -179,7 +179,7 @@ export default function QuantriShell() {
           <label className="text-xs font-medium text-white/70">
             Email
             <input
-              className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-sm text-white outline-none"
+              className="mt-1 min-h-11 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-base text-white outline-none sm:text-sm"
               type="email"
               autoComplete="username"
               value={email}
@@ -190,7 +190,7 @@ export default function QuantriShell() {
           <label className="text-xs font-medium text-white/70">
             Mật khẩu
             <input
-              className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-sm text-white outline-none"
+              className="mt-1 min-h-11 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-base text-white outline-none sm:text-sm"
               type="password"
               autoComplete="current-password"
               value={password}
@@ -206,7 +206,7 @@ export default function QuantriShell() {
           <button
             type="submit"
             disabled={busy}
-            className="relative z-20 cursor-pointer rounded-xl bg-[var(--hcc-red)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+            className="relative z-20 min-h-11 cursor-pointer rounded-xl bg-[var(--hcc-red)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
           >
             {busy ? 'Đang vào…' : 'Đăng nhập'}
           </button>
@@ -226,6 +226,7 @@ export default function QuantriShell() {
 
   const links = [
     { to: '/quantri', end: true, label: 'Tài liệu', Icon: FileText },
+    { to: '/quantri/tinh-huong', end: false, label: 'Tình huống', Icon: Lightbulb },
     { to: '/quantri/day-ai', end: false, label: 'Dạy AI', Icon: GraduationCap },
     ...(me.role === 'super_admin'
       ? [
@@ -243,22 +244,32 @@ export default function QuantriShell() {
 
   return (
     <div className="admin-shell flex min-h-dvh flex-col bg-[#1a1214] text-slate-100">
-      <header className="flex flex-wrap items-center gap-3 border-b border-white/10 px-4 py-3">
-        <img src={logoVietmy} alt="" className="h-9 w-auto max-h-9 object-contain" width={120} height={36} />
-        <div className="min-w-0 flex-1">
-          <p className="m-0 text-sm font-semibold">Quản trị</p>
-          <p className="m-0 truncate text-[11px] text-white/55">
-            {me.display_name || me.email} · {me.role === 'super_admin' ? 'Toàn quyền' : 'Theo chuyên mục'}
-          </p>
+      <header className="sticky top-0 z-30 flex flex-col gap-2 border-b border-white/10 bg-[#1a1214]/95 px-3 py-2 backdrop-blur-xl sm:flex-row sm:flex-wrap sm:items-center sm:gap-3 sm:px-4 sm:py-3">
+        <div className="flex items-center gap-3">
+          <img src={logoVietmy} alt="" className="h-8 w-auto max-h-8 object-contain sm:h-9 sm:max-h-9" width={120} height={36} />
+          <div className="min-w-0 flex-1">
+            <p className="m-0 text-sm font-semibold">Quản trị</p>
+            <p className="m-0 truncate text-[11px] text-white/55">
+              {me.display_name || me.email} · {me.role === 'super_admin' ? 'Toàn quyền' : 'Theo chuyên mục'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onLogout}
+            className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full bg-white/10 px-3 text-xs text-white/80 sm:hidden"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Thoát
+          </button>
         </div>
-        <nav className="flex flex-wrap gap-1">
+        <nav className="-mx-3 flex gap-1 overflow-x-auto px-3 pb-0.5 [scrollbar-width:none] sm:mx-0 sm:flex-1 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
           {links.map(({ to, end, label, Icon }) => (
             <NavLink
               key={to}
               to={to}
               end={end}
               className={({ isActive }) =>
-                `inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium ${
+                `inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full px-3 text-xs font-medium ${
                   isActive ? 'bg-white text-[var(--hcc-red)]' : 'bg-white/10 text-white/80'
                 }`
               }
@@ -271,7 +282,7 @@ export default function QuantriShell() {
         <button
           type="button"
           onClick={onLogout}
-          className="inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 text-xs text-white/80"
+          className="hidden min-h-11 items-center gap-1 rounded-full bg-white/10 px-3 text-xs text-white/80 sm:inline-flex"
         >
           <LogOut className="h-3.5 w-3.5" />
           Thoát

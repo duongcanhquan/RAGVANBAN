@@ -12,6 +12,23 @@ const {
 const { rerankLegal } = require('./rerank');
 const { raceAbort, throwIfAborted } = require('./abortControl');
 const { assertEmbeddingFitsIndex, getPineconeIndexDimension, peekPineconeIndexHost } = require('./embeddingDim');
+const { hasCategoryScope } = require('./categoryScope');
+
+function scopeOrFilter(intent = {}) {
+  const ors = [];
+  if (intent.category_id_in?.length) {
+    ors.push({ category_id: { $in: intent.category_id_in.slice(0, 100) } });
+  }
+  if (intent.document_id_in?.length) {
+    ors.push({ document_id: { $in: intent.document_id_in.slice(0, 100) } });
+  }
+  if (intent.ten_file_in?.length) {
+    ors.push({ ten_file: { $in: intent.ten_file_in.slice(0, 100) } });
+  }
+  if (!ors.length) return null;
+  if (ors.length === 1) return ors[0];
+  return { $or: ors };
+}
 
 function buildMetadataFilter(intent = {}) {
   const onlyActive = intent.onlyActive !== false;
@@ -32,6 +49,9 @@ function buildMetadataFilter(intent = {}) {
   if (intent.dieu) {
     conditions.push({ dieu: { $eq: String(intent.dieu) } });
   }
+
+  const scoped = scopeOrFilter(intent);
+  if (scoped) conditions.push(scoped);
 
   if (conditions.length === 0) return undefined;
   if (conditions.length === 1) return conditions[0];
@@ -67,8 +87,8 @@ function normalizeMatch(match) {
 }
 
 function rankMatches(matches, options = {}) {
-  const maxPerDoc = Number(options.maxPerDoc) || 4;
-  const maxTotal = Number(options.maxTotal) || 12;
+  const maxPerDoc = Number(options.maxPerDoc) || 3;
+  const maxTotal = Number(options.maxTotal) || 8;
   const byDoc = new Map();
 
   for (const m of matches || []) {
@@ -124,9 +144,9 @@ async function hybridSearch(question, intent, deps) {
     pinecone,
     indexName,
     namespace = '',
-    topK = 16,
-    maxPerDoc = 4,
-    maxTotal = 12,
+    topK = 12,
+    maxPerDoc = 3,
+    maxTotal = 8,
     signal,
   } = deps;
 
@@ -161,6 +181,7 @@ async function hybridSearch(question, intent, deps) {
         vector,
         Math.min(10, topK),
         buildMetadataFilter({
+          ...intent,
           onlyActive,
           so_hieu_in: anchors.soHieu,
           dieu: anchors.dieu || undefined,
@@ -174,7 +195,12 @@ async function hybridSearch(question, intent, deps) {
           target,
           vector,
           8,
-          buildMetadataFilter({ onlyActive, so_hieu_in: anchors.soHieu }),
+          buildMetadataFilter({
+            ...intent,
+            onlyActive,
+            so_hieu_in: anchors.soHieu,
+            dieu: undefined,
+          }),
           signal
         )
       );
@@ -185,7 +211,7 @@ async function hybridSearch(question, intent, deps) {
   throwIfAborted(signal);
   let matches = batches.flat();
 
-  if (matches.length === 0 && intent?.linh_vuc && intent.linh_vuc !== 'Chung') {
+  if (matches.length === 0 && intent?.linh_vuc && intent.linh_vuc !== 'Chung' && !hasCategoryScope(intent)) {
     matches = await queryIndex(
       target,
       vector,
@@ -207,8 +233,10 @@ async function hybridSearch(question, intent, deps) {
         vector,
         Math.min(8, topK),
         buildMetadataFilter({
+          ...intent,
           onlyActive,
           so_hieu_in: relatedIds,
+          dieu: undefined,
         }),
         signal
       ),
@@ -220,6 +248,7 @@ async function hybridSearch(question, intent, deps) {
           vector,
           8,
           buildMetadataFilter({
+            ...intent,
             onlyActive,
             so_hieu_in: relatedIds,
             dieu: dieuFromHits,

@@ -100,6 +100,17 @@ async function run() {
     assert.strictEqual(filter.$and.length, 2);
   });
 
+  test('buildMetadataFilter phạm vi danh mục không nới cả kho khi hết kết quả lĩnh vực', () => {
+    const filter = buildMetadataFilter({
+      linh_vuc: 'Thuế',
+      skipLinhVucFilter: true,
+      category_id_in: ['cccd'],
+    });
+    const blob = JSON.stringify(filter);
+    assert.match(blob, /category_id/);
+    assert.equal(blob.includes('"linh_vuc"'), false);
+  });
+
   test('rankMatches giữ nhiều đoạn cùng số hiệu, điểm cao trước', () => {
     const ranked = rankMatches([
       normalizeMatch({
@@ -240,6 +251,27 @@ async function run() {
     const { answer, sources } = buildNoContextAnswer();
     assert.ok(/không tìm thấy/i.test(answer));
     assert.strictEqual(sources.length, 0);
+  });
+
+  test('formatContext gọn metadata, không lặp nhãn rỗng', () => {
+    const ctx = formatContext([
+      {
+        text: 'Điều 1. Thời hạn 07 ngày.',
+        loai_van_ban: 'Nghị định',
+        so_hieu: '01/2024/NĐ-CP',
+        co_quan_ban_hanh: 'Chính phủ',
+        trang_thai: 'Còn hiệu lực',
+        url_file_goc: 'https://example.com/a.pdf',
+      },
+    ]);
+    assert.ok(ctx.includes('Điều 1'));
+    assert.ok(!/Cơ quan:/.test(ctx));
+    assert.ok(!/Quan hệ: —/.test(ctx));
+    assert.ok(!/BẢN ĐỒ NGUỒN/.test(ctx));
+  });
+
+  test('shouldSkipIntentLlm với câu ngắn không neo', () => {
+    assert.equal(shouldSkipIntentLlm('Thời hạn xử lý kỷ luật học sinh?'), true);
   });
 
   console.log(`\nKết quả: ${passed} passed, ${failed} failed`);

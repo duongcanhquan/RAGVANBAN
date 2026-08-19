@@ -12,6 +12,7 @@ import QuantriBrain from './pages/quantri/QuantriBrain'
 import QuantriVoice from './pages/quantri/QuantriVoice'
 import QuantriTeach from './pages/quantri/QuantriTeach'
 import QuantriRag from './pages/quantri/QuantriRag'
+import QuantriScenarios from './pages/quantri/QuantriScenarios'
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="cai-dat" element={<QuantriSettings />} />
           <Route path="bo-nao" element={<QuantriBrain />} />
           <Route path="day-ai" element={<QuantriTeach />} />
+          <Route path="tinh-huong" element={<QuantriScenarios />} />
           <Route path="giong-ai" element={<QuantriVoice />} />
           <Route path="rag" element={<QuantriRag />} />
           <Route path="chuyen-muc" element={<Navigate to="/quantri/cai-dat" replace />} />

@@ -248,10 +248,22 @@ async function run() {
     assert.ok(/không được trái/i.test(prompt));
   });
 
-  test('applyPreset phap_che', () => {
-    const v = applyPreset('phap_che');
+  test('applyPreset giang_vien và alias phap_che', () => {
+    const v = applyPreset('giang_vien');
     assert.strictEqual(v.tone, 'detailed');
-    assert.strictEqual(v.preset, 'phap_che');
+    assert.strictEqual(v.preset, 'giang_vien');
+    const alias = applyPreset('phap_che');
+    assert.strictEqual(alias.preset, 'giang_vien');
+    assert.strictEqual(applyPreset('can_bo').preset, 'can_bo_nv');
+    assert.strictEqual(applyPreset('nguoi_dan').preset, 'hoc_sinh');
+  });
+
+  test('normalizeVoice giữ luật cứng tùy chỉnh', () => {
+    const custom = 'NGUYÊN TẮC (bắt buộc, tuyệt đối không bịa):\n- Chỉ dùng context nhà trường.';
+    const v = normalizeVoice({ hardRules: custom, preset: 'hoc_sinh' });
+    assert.ok(v.hardRules.includes('nhà trường'));
+    const prompt = composeSystemPrompt('lookup', v);
+    assert.ok(prompt.startsWith(custom.slice(0, 20)));
   });
 
   test('normalizeVoice kẹp temperature ≤ 0.3', () => {
@@ -428,7 +440,7 @@ async function run() {
 
   test('shouldSkipIntentLlm khi có số hiệu', () => {
     assert.strictEqual(shouldSkipIntentLlm('Điều 5 Nghị định 01/2024/NĐ-CP quy định gì?'), true);
-    assert.strictEqual(shouldSkipIntentLlm('xin chào'), false);
+    assert.strictEqual(shouldSkipIntentLlm('xin chào'), true);
   });
 
   test('normalizeRag kẹp topK', () => {
@@ -485,7 +497,7 @@ async function run() {
     assert.strictEqual(turns.length, 6);
     assert.strictEqual(turns[0].content, 'Ba');
     const prompt = formatConversationForPrompt(turns.slice(0, 2));
-    assert.match(prompt, /Cán bộ: Ba/);
+    assert.match(prompt, /Người hỏi: Ba/);
     assert.match(prompt, /tình huống/);
     const advised = expandAdviseQuery('Nếu tôi là học sinh thì bị xử lý thế nào?');
     assert.match(advised, /học sinh/);

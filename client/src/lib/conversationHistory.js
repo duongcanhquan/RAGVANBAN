@@ -2,7 +2,7 @@
  * Lượt chat đã xong — gửi kèm POST /api/chat để AI nhớ tình huống trong đoạn.
  * Gom lịch sử thành từng đoạn chat (không tách mỗi câu hỏi thành một mục).
  */
-export function conversationHistoryFromMessages(messages, maxTurns = 12) {
+export function conversationHistoryFromMessages(messages, maxTurns = 6) {
   return (Array.isArray(messages) ? messages : [])
     .filter((m) => {
       if (m?.streaming) return false

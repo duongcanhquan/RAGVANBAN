@@ -173,6 +173,16 @@ function getLocalDocumentByFileName(fileName) {
   return ensure().items.find((d) => d.file_name === name) || null;
 }
 
+function getLocalDocumentByDriveFileId(driveFileId) {
+  const id = String(driveFileId || '').trim();
+  if (!id) return null;
+  return (
+    ensure().items.find(
+      (d) => String(d.drive_file_id || d.metadata?.drive_file_id || '').trim() === id
+    ) || null
+  );
+}
+
 function updateLocalDocument(id, patch) {
   try {
     const data = ensure();
@@ -192,6 +202,9 @@ function updateLocalDocument(id, patch) {
       chuyen_mon: patch.chuyen_mon !== undefined ? patch.chuyen_mon : cur.chuyen_mon,
       storage_path: patch.storage_path !== undefined ? patch.storage_path : cur.storage_path,
       storage_url: patch.storage_url !== undefined ? patch.storage_url : cur.storage_url,
+      drive_file_id: patch.drive_file_id !== undefined ? patch.drive_file_id : cur.drive_file_id,
+      drive_web_view_link:
+        patch.drive_web_view_link !== undefined ? patch.drive_web_view_link : cur.drive_web_view_link,
       content_sha256: patch.content_sha256 !== undefined ? patch.content_sha256 : cur.content_sha256,
       byte_size: patch.byte_size !== undefined ? patch.byte_size : cur.byte_size,
       chunk_count: patch.chunk_count !== undefined ? Number(patch.chunk_count) || 0 : cur.chunk_count,
@@ -201,6 +214,10 @@ function updateLocalDocument(id, patch) {
         ...(patch.display_name !== undefined ? { display_name: patch.display_name } : {}),
         ...(patch.mo_ta !== undefined ? { mo_ta: patch.mo_ta } : {}),
         ...(patch.sort_order !== undefined ? { sort_order: Number(patch.sort_order) || 0 } : {}),
+        ...(patch.drive_file_id !== undefined ? { drive_file_id: patch.drive_file_id } : {}),
+        ...(patch.drive_web_view_link !== undefined
+          ? { drive_web_view_link: patch.drive_web_view_link }
+          : {}),
       },
     };
     write(data);
@@ -219,6 +236,7 @@ module.exports = {
   getLocalDocument,
   getLocalDocumentByFileName,
   getLocalDocumentByContentHash,
+  getLocalDocumentByDriveFileId,
   updateLocalDocument,
   isServerlessReadOnly,
   LOCAL_PATH,

@@ -36,7 +36,7 @@ export default function AppLayout() {
             <img
               src={logoVietmy}
               alt="Cao đẳng Việt Mỹ Hà Nội"
-              className="h-10 w-auto max-w-full object-contain object-left sm:h-12"
+              className="h-8 w-auto max-w-full object-contain object-left sm:h-10 lg:h-12"
               width={180}
               height={48}
               decoding="async"
@@ -79,7 +79,7 @@ export default function AppLayout() {
             <img
               src={logoEquest}
               alt="EQuest — The Quest for Excellence"
-              className="h-10 w-auto max-w-full object-contain object-right sm:h-12"
+              className="h-8 w-auto max-w-full object-contain object-right sm:h-10 lg:h-12"
               width={160}
               height={48}
               decoding="async"
@@ -100,7 +100,7 @@ export default function AppLayout() {
         className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#1a080c]/95 backdrop-blur-xl lg:hidden"
         aria-label="Tab điện thoại"
       >
-        <div className="mx-auto grid max-w-lg grid-cols-3 px-1 pt-1">
+        <div className="mx-auto grid max-w-lg grid-cols-3 px-1 pt-0.5">
           {NAV.map(({ to, end, short, Icon }) => (
             <NavLink
               key={to}

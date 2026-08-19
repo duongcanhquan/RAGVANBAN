@@ -69,7 +69,7 @@ function openAiHeaders(creds) {
   };
 }
 
-function chatOpenAICompat(creds, { temperature, streaming, model }) {
+function chatOpenAICompat(creds, { temperature, streaming, model, maxTokens }) {
   const { ChatOpenAI } = require('@langchain/openai');
   const opts = {
     apiKey: creds.apiKey,
@@ -77,6 +77,7 @@ function chatOpenAICompat(creds, { temperature, streaming, model }) {
     temperature,
     streaming,
   };
+  if (maxTokens) opts.maxTokens = maxTokens;
   const configuration = {};
   if (creds.baseUrl) configuration.baseURL = creds.baseUrl;
   const headers = openAiHeaders(creds);
@@ -95,6 +96,8 @@ function getLLM(provider, options = {}) {
   const streaming = options.streaming ?? true;
   const creds = providerCreds(p);
 
+  const maxTokens = Number(options.maxTokens) > 0 ? Math.round(Number(options.maxTokens)) : undefined;
+
   if (!creds.hasKey) {
     throw new Error(`Thiếu API key cho ${creds.name || p}`);
   }
@@ -109,6 +112,7 @@ function getLLM(provider, options = {}) {
       model: normalizeGeminiChatModel(options.model || creds.chatModel || GEMINI_CHAT_CURRENT),
       temperature,
       streaming,
+      ...(maxTokens ? { maxOutputTokens: maxTokens } : {}),
     });
   }
 
@@ -116,6 +120,7 @@ function getLLM(provider, options = {}) {
     temperature,
     streaming,
     model: options.model,
+    maxTokens,
   });
 }
 

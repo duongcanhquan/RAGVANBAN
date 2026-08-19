@@ -419,6 +419,37 @@ async function getDocumentByContentHash(hash) {
   return { ok: false };
 }
 
+async function getDocumentByDriveFileId(driveFileId) {
+  const id = String(driveFileId || '').trim();
+  if (!id) return { ok: false };
+  const sb = getSupabase();
+  if (sb) {
+    if (!missingDocumentColumns.has('drive_file_id')) {
+      const res = await sb.from('documents').select('*').eq('drive_file_id', id).limit(1).maybeSingle();
+      if (res.error) {
+        const col = missingColumnFromPgError(res.error);
+        if (col === 'drive_file_id' || /drive_file_id|schema cache/i.test(pgErrorText(res.error))) {
+          rememberMissingDocumentColumn('drive_file_id');
+        } else {
+          console.warn('[supabase] getDocumentByDriveFileId:', pgErrorText(res.error));
+        }
+      } else if (res.data) {
+        return { ok: true, source: 'supabase', id: res.data.id, item: hydrateDocument(res.data) };
+      }
+    }
+    const { data, error } = await sb
+      .from('documents')
+      .select('*')
+      .filter('metadata->>drive_file_id', 'eq', id)
+      .limit(1)
+      .maybeSingle();
+    if (!error && data) return { ok: true, source: 'supabase', id: data.id, item: hydrateDocument(data) };
+  }
+  const local = require('./localDocuments').getLocalDocumentByDriveFileId(id);
+  if (local) return { ok: true, source: 'local', id: local.id, item: local };
+  return { ok: false };
+}
+
 async function getDocumentByFileName(fileName) {
   const name = String(fileName || '').trim();
   if (!name) return { ok: false };
@@ -457,6 +488,10 @@ async function updateDocument(id, patch) {
   if (patch.chuyen_mon !== undefined) payload.chuyen_mon = patch.chuyen_mon || null;
   if (patch.storage_path !== undefined) payload.storage_path = patch.storage_path || null;
   if (patch.storage_url !== undefined) payload.storage_url = patch.storage_url || null;
+  if (patch.drive_file_id !== undefined) payload.drive_file_id = patch.drive_file_id || null;
+  if (patch.drive_web_view_link !== undefined) {
+    payload.drive_web_view_link = patch.drive_web_view_link || null;
+  }
   if (patch.content_sha256 !== undefined) payload.content_sha256 = patch.content_sha256 || null;
   if (patch.byte_size !== undefined) payload.byte_size = patch.byte_size != null ? Number(patch.byte_size) : null;
   if (patch.chunk_count !== undefined) payload.chunk_count = Number(patch.chunk_count) || 0;
@@ -524,6 +559,7 @@ module.exports = {
   updateDocumentCategory,
   getDocument,
   getDocumentByFileName,
+  getDocumentByDriveFileId,
   getDocumentByContentHash,
   listIngestedDriveFileIds,
   updateDocument,

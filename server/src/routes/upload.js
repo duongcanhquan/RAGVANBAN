@@ -384,9 +384,11 @@ router.post('/url', async (req, res) => {
         source: 'google_drive',
         count: items.length,
         items,
-        skipped: items.reduce((n, it) => n + Number(it.skipped || 0), 0),
-        pending: items.reduce((n, it) => n + Number(it.pending || 0), 0),
         ...summary,
+        skipped:
+          items.reduce((n, it) => n + (typeof it.skipped === 'number' ? it.skipped : 0), 0) +
+          Number(summary.skippedDuplicates || 0),
+        pending: items.reduce((n, it) => n + Number(it.pending || 0), 0),
       });
       return;
     }

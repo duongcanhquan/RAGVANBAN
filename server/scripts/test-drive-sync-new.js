@@ -108,3 +108,38 @@ test('tóm tắt folder không có id catalog thì processed = 0', () => {
   assert.equal(summary.id, undefined);
   assert.equal(summary.failed, 3);
 });
+
+test('file Drive trùng không tính là file mới đã xử lý', () => {
+  const summary = summarizeDriveUrlJob([
+    {
+      type: 'folder',
+      skipped: 4,
+      processed: 0,
+      results: [
+        {
+          ok: true,
+          duplicate: true,
+          skipped: true,
+          id: 'doc-old',
+          fileName: 'cũ.pdf',
+          chunks: 9,
+        },
+      ],
+    },
+  ]);
+  assert.equal(summary.processed, 0);
+  assert.equal(summary.skippedDuplicates, 1);
+  assert.equal(summary.chunks, 0);
+});
+
+test('giới hạn hàng đợi Drive theo limit, tối đa 40', () => {
+  const files = Array.from({ length: 50 }, (_, i) => ({
+    id: `new-${i}`,
+    name: `${i}.pdf`,
+    modifiedTime: `2026-08-${String((i % 28) + 1).padStart(2, '0')}T00:00:00.000Z`,
+  }));
+  const picked = pickNewDriveFiles(files, [], 40);
+  assert.equal(picked.queued.length, 40);
+  assert.equal(picked.skipped, 0);
+  assert.equal(picked.pending, 50);
+});

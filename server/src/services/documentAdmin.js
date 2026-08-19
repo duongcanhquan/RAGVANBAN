@@ -168,7 +168,8 @@ async function patchDocument(admin, id, body) {
     catalog.so_hieu !== undefined ||
     catalog.trang_thai !== undefined ||
     catalog.file_name !== undefined ||
-    catalog.loai_van_ban !== undefined;
+    catalog.loai_van_ban !== undefined ||
+    categoryChanged;
   let pinecone = { skipped: true };
   if (metaChanged) {
     try {
@@ -181,6 +182,9 @@ async function patchDocument(admin, id, body) {
           trang_thai: next.trang_thai,
           loai_van_ban: next.loai_van_ban,
           ten_file: next.file_name,
+          category_id: next.category_id || categoryId || '',
+          document_id: next.id,
+          folder_path: next.folder_path || folderPath || '',
         },
         {
           pinecone: getPinecone(),

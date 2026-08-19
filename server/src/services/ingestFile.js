@@ -189,6 +189,8 @@ async function ingestTextContent(text, options = {}) {
         trang_thai: metadata.trang_thai,
         storage_path: storagePath || undefined,
         storage_url: publicUrl || metadata.link_goc || undefined,
+        drive_file_id: options.driveFileId || undefined,
+        drive_web_view_link: options.driveWebViewLink || undefined,
         content_sha256: options.contentSha256 || undefined,
         byte_size: options.byteSize,
         category_id: categoryId,

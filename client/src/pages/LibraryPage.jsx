@@ -181,7 +181,7 @@ export default function LibraryPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Lọc theo chuyên mục, số hiệu, tên file…"
-          className="field-glass w-full rounded-2xl border py-3 pl-10 pr-3 text-sm"
+          className="field-glass w-full rounded-2xl border py-3 pl-10 pr-3 text-base sm:text-sm"
         />
       </div>
 

@@ -63,6 +63,15 @@ function relationLine(m) {
     .join('; ');
 }
 
+function trimChunkText(text, max = 1100) {
+  const src = String(text || '').replace(/\s+\n/g, '\n').trim();
+  if (src.length <= max) return src;
+  const cut = src.slice(0, max);
+  const lastStop = Math.max(cut.lastIndexOf('.\n'), cut.lastIndexOf('. '), cut.lastIndexOf('\n'));
+  const kept = lastStop > max * 0.55 ? cut.slice(0, lastStop + 1) : cut;
+  return `${kept.trim()}…`;
+}
+
 function formatContext(matches) {
   if (!matches?.length) return '(Không có đoạn văn bản nào được truy xuất.)';
 
@@ -72,6 +81,13 @@ function formatContext(matches) {
       const m = group[0];
       const title =
         [m.loai_van_ban, m.so_hieu].filter(Boolean).join(' ') || m.ten_file || `Nguồn ${i + 1}`;
+      const meta = [
+        m.co_quan_ban_hanh,
+        m.trang_thai,
+        m.ngay_ban_hanh,
+      ]
+        .filter(Boolean)
+        .join(' · ');
       const link = m.link_goc || m.url_file_goc || '';
       const rel =
         [...new Set(group.map(relationLine).filter(Boolean))].join('; ') || '';
@@ -79,18 +95,11 @@ function formatContext(matches) {
       const chunks = group
         .map((part) => {
           const article = articleLabel(part);
-          return `${article ? `— ${article} —` : '— Đoạn —'}\n${part.text}`;
+          return `${article ? `— ${article} —` : '— Đoạn —'}\n${trimChunkText(part.text)}`;
         })
         .join('\n\n');
-      return `[#${i + 1}] ${title}
-Cơ quan: ${m.co_quan_ban_hanh || '—'}
-Trạng thái: ${m.trang_thai || '—'}
-Ngày: ${m.ngay_ban_hanh || '—'}
-${rel ? `Quan hệ: ${rel}` : 'Quan hệ: —'}
-${related ? 'Ghi chú: đoạn kéo theo quan hệ sửa đổi/bổ sung (đối chiếu với VB đang hỏi).' : ''}
-URL: ${link}
-Các điều trong cùng văn bản (chỉ dùng điều trả lời đúng câu hỏi):
-${chunks}`;
+      return `[#${i + 1}] ${title}${meta ? ` · ${meta}` : ''}
+${link ? `${link}\n` : ''}${rel ? `Quan hệ: ${rel}\n` : ''}${related ? 'Ghi chú: quan hệ sửa đổi/bổ sung.\n' : ''}${chunks}`;
     })
     .join('\n\n====\n\n');
 
@@ -238,43 +247,24 @@ async function streamAnswer(question, matches, deps, onToken) {
   const conversationBlock = formatConversationForPrompt(conversationTurns);
 
   const scenarioBlock = scenarioContext
-    ? `\nTình huống mẫu liên quan (chỉ tham khảo quy trình; ưu tiên văn bản pháp lý trong context):\n${scenarioContext}\n`
+    ? `\nBài mẫu (học bố cục, không copy số liệu):\n${scenarioContext}\n`
     : '';
 
   const modeHint =
     mode === 'advise'
-      ? 'Chế độ: TƯ VẤN TÌNH HUỐNG — lấy quy định trong context và áp vào việc đang hỏi. Không bắt context phải là quy trình nộp hồ sơ. Có điều/khoản liên quan thì kết luận cách áp dụng; hồ sơ/bước chỉ khi có trong context.'
+      ? 'TƯ VẤN: áp quy định trong context vào việc đang hỏi. Có điều liên quan thì kết luận cách áp dụng.'
       : mode === 'compare'
-        ? 'Chế độ: SO SÁNH / SỬA ĐỔI — tách bản còn hiệu lực và điểm đã bị sửa.'
-        : 'Chế độ: TRA CỨU NHANH — tìm đúng văn bản/điều khoản, kết luận + căn cứ + hiệu lực.';
+        ? 'SO SÁNH: tách bản còn hiệu lực và điểm đã sửa.'
+        : 'TRA CỨU: kết luận đúng hỏi + căn cứ + hiệu lực.';
 
-  const spokenHint = spoken
-    ? '\nChế độ GIỌNG NÓI: câu ngắn, xuống dòng sớm, dễ đọc thành tiếng. Tránh bảng markdown dài. Nguồn để cuối.'
-    : '';
-
-  const focusHint = `
-Yêu cầu trọng tâm (bắt buộc):
-- Câu đầu tiên phải trả lời trực tiếp câu hỏi (có/không, con số, đối tượng, thời hạn, điều kiện). Cấm mở đầu chung chung như "Theo quy định hiện hành", "Văn bản có một số nội dung liên quan".
-- Chỉ lấy điều/khoản trong context thực sự cần cho câu hỏi. Có nhiều điều cùng một văn bản thì không liệt kê hết — không tóm tắt cả văn bản.
-- Điều/Khoản nêu trong phần căn cứ. Mục Nguồn: mỗi văn bản đúng 1 dòng, 1 URL. Không nhân bản nguồn theo từng điều. Không lặp link. Không lặp mục Kiểm chứng.
-${
-  mode === 'advise'
-    ? '- Tư vấn: nếu context có quy định liên quan tình huống thì phải trả lời cách áp dụng. Cấm bảo không có dữ liệu chỉ vì không thấy mục “hồ sơ/nơi nộp”.'
-    : ''
-}`;
+  const spokenHint = spoken ? ' Giọng nói: câu ngắn, không bảng dài.' : '';
 
   const userPrompt = `${modeHint}${spokenHint}
-${focusHint}
-${conversationBlock ? `\n${conversationBlock}\n` : ''}
-Câu hỏi hiện tại (trọng tâm):
-"""${question}"""
-${scenarioBlock}
-Context văn bản (đã lọc hết hiệu lực khi có; các điều cùng một VB đã gom chung):
-"""
+${conversationBlock ? `${conversationBlock}\n` : ''}Hỏi: ${question}
+${scenarioBlock}Context:
 ${context}
-"""
 
-Hãy trả lời đúng câu hỏi theo quy tắc hệ thống. Nếu hai văn bản mâu thuẫn, nêu cả hai và chỉ rõ bản nào còn hiệu lực theo trạng thái/ngày trong context.`;
+Trả lời đúng hỏi. Thiếu thì nói thiếu.`;
 
   let answer = '';
   const streamOpts = signal ? { signal } : undefined;
@@ -337,13 +327,22 @@ Hãy trả lời đúng câu hỏi theo quy tắc hệ thống. Nếu hai văn b
   };
 }
 
-function buildNoContextAnswer(mode = 'lookup') {
+function buildNoContextAnswer(mode = 'lookup', extras = {}) {
+  const labels = (extras.scopeLabels || []).filter(Boolean);
+  if (labels.length) {
+    return {
+      answer: `Không tìm thấy thông tin phù hợp trong phạm vi đã chọn (${labels.join(', ')}).\n\nBỏ chọn mục để tìm cả kho, hoặc chọn mục khác.\n\nNguồn: (không có)`,
+      sources: [],
+      confidence: confidenceFromSources([]),
+      mode,
+    };
+  }
   const tip =
     mode === 'advise'
       ? 'Bạn có thể mô tả rõ hơn: loại thủ tục, đối tượng (cá nhân/tổ chức), tỉnh/thành nếu liên quan.'
       : 'Bạn có thể nêu số hiệu, lĩnh vực, hoặc từ khóa điều khoản cần tra.';
   return {
-    answer: `Không tìm thấy thông tin phù hợp trong kho văn bản còn hiệu lực để trả lời câu hỏi này.\n\nGợi ý: ${tip}\n\nNguồn: (không có)`,
+    answer: `Không tìm thấy thông tin phù hợp trong kho văn bản còn hiệu lực.\n\nGợi ý: ${tip}\n\nNguồn: (không có)`,
     sources: [],
     confidence: confidenceFromSources([]),
     mode,

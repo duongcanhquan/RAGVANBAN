@@ -1,6 +1,6 @@
 /**
  * Nhận giọng nói (Web Speech API) — tiếng Việt.
- * Gom cả các đoạn final trước đó; không ghi đè input bằng mảnh sau.
+ * rec.start() phải chạy ngay trong lần bấm (cùng user gesture), không await getUserMedia trước.
  */
 
 export function speechRecognitionSupported() {
@@ -21,6 +21,7 @@ export function speechErrorMessage(code) {
     case 'language-not-supported':
       return 'Trình duyệt chưa hỗ trợ tiếng Việt cho mic. Thử Chrome hoặc Edge.'
     case 'no-speech':
+      return 'Chưa nghe thấy giọng. Nói gần mic hơn, rồi bấm Dừng khi xong.'
     case 'aborted':
       return ''
     default:
@@ -51,9 +52,40 @@ export function mergeListenTranscript(results, resultIndex = 0) {
   return { finalText, interim, display }
 }
 
-export function shouldCommitListen(text, isFinal) {
-  if (!isFinal) return false
-  return String(text || '').trim().length >= 12
+export function joinListenParts(kept, sessionFinal, interim) {
+  return [kept, sessionFinal, interim]
+    .map((s) => String(s || '').trim())
+    .filter(Boolean)
+    .join(' ')
+}
+
+export function shouldCommitListen(text) {
+  return String(text || '').trim().length >= 3
+}
+
+/** no-speech / network: tiếp tục nghe; not-allowed: dừng. */
+export function isRetryableListenError(code) {
+  const c = String(code || '')
+  return c === 'no-speech' || c === 'network' || c === 'aborted'
+}
+
+function RecognitionCtor() {
+  if (typeof window === 'undefined') return null
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null
+}
+
+function preferContinuous() {
+  if (typeof navigator === 'undefined') return true
+  return !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '')
+}
+
+function makeRec(Ctor, lang) {
+  const rec = new Ctor()
+  rec.lang = lang || 'vi-VN'
+  rec.interimResults = true
+  rec.continuous = preferContinuous()
+  rec.maxAlternatives = 1
+  return rec
 }
 
 export function startSpeechListen({
@@ -62,29 +94,32 @@ export function startSpeechListen({
   onReady,
   onEnd,
   onError,
-  silenceMs = 2000,
+  onStart,
+  silenceMs = 2400,
 } = {}) {
-  const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition
+  const Ctor = RecognitionCtor()
   if (!Ctor) {
     onError?.(new Error('Trình duyệt chưa hỗ trợ nhận giọng nói. Dùng Chrome hoặc Edge (HTTPS).'))
-    return { stop() {} }
+    return { stop() {}, abort() {}, snapshot: () => '' }
   }
-  if (typeof window !== 'undefined' && window.isSecureContext === false) {
+  if (window.isSecureContext === false) {
     onError?.(new Error('Mic chỉ hoạt động trên HTTPS hoặc localhost.'))
-    return { stop() {} }
+    return { stop() {}, abort() {}, snapshot: () => '' }
   }
 
-  const rec = new Ctor()
-  rec.lang = lang
-  rec.interimResults = true
-  rec.continuous = true
-  rec.maxAlternatives = 1
-
+  let rec = makeRec(Ctor, lang)
   let stopped = false
   let committed = false
+  let started = false
+  let restartTimer = null
+  let startWatch = null
+  let keptFinals = ''
+  let sessionFinal = ''
+  let lastInterim = ''
   let lastDisplay = ''
-  let lastFinal = ''
   let silenceTimer = null
+  let networkFails = 0
+  let langTriedFallback = false
 
   function clearSilence() {
     if (silenceTimer) {
@@ -93,93 +128,197 @@ export function startSpeechListen({
     }
   }
 
-  function commit(text, { fromStop } = {}) {
-    const t = String(text || '').trim()
-    if (committed) return
-    if (!t) {
-      if (fromStop) onEnd?.()
-      return
+  function clearRestart() {
+    if (restartTimer) {
+      clearTimeout(restartTimer)
+      restartTimer = null
     }
-    if (!fromStop && !shouldCommitListen(t, true)) return
-    if (fromStop && t.length < 3) {
-      onEnd?.()
-      return
+  }
+
+  function clearStartWatch() {
+    if (startWatch) {
+      clearTimeout(startWatch)
+      startWatch = null
     }
-    committed = true
-    stopped = true
-    clearSilence()
+  }
+
+  function haltRec() {
     try {
       rec.stop()
     } catch {
-      // ignore
+      /* ignore */
     }
+  }
+
+  function displayNow(interim = lastInterim) {
+    return joinListenParts(keptFinals, sessionFinal, interim)
+  }
+
+  function publish(interim = lastInterim) {
+    lastDisplay = displayNow(interim)
+    if (lastDisplay) onText?.(lastDisplay, Boolean(keptFinals || sessionFinal))
+    return lastDisplay
+  }
+
+  function snapshotText() {
+    return String(displayNow() || lastDisplay || '').trim()
+  }
+
+  function closeOut() {
+    clearSilence()
+    clearRestart()
+    clearStartWatch()
+    haltRec()
+  }
+
+  function commit(text) {
+    const t = String(text || snapshotText()).trim()
+    if (committed) return
+    if (!shouldCommitListen(t)) return
+    committed = true
+    stopped = true
+    closeOut()
     onReady?.(t)
     onEnd?.()
   }
 
-  rec.onresult = (e) => {
-    const merged = mergeListenTranscript(e.results, e.resultIndex)
-    lastFinal = merged.finalText
-    lastDisplay = merged.display
-    if (merged.display) onText?.(merged.display, Boolean(merged.finalText))
+  function armSilence() {
     clearSilence()
-    if (merged.finalText) {
-      silenceTimer = setTimeout(() => commit(lastFinal), silenceMs)
-    }
+    silenceTimer = setTimeout(() => {
+      const t = snapshotText()
+      if (shouldCommitListen(t)) commit(t)
+    }, silenceMs)
   }
 
-  rec.onerror = (e) => {
-    const code = e.error || ''
-    if (code === 'aborted' || code === 'no-speech') {
-      if (code === 'no-speech' && lastDisplay && !stopped) return
-      if (!stopped) onEnd?.()
-      return
+  function bind(instance) {
+    instance.onstart = () => {
+      if (stopped || committed) return
+      started = true
+      clearStartWatch()
+      onStart?.()
     }
-    stopped = true
-    clearSilence()
-    const msg = speechErrorMessage(code)
-    onError?.(new Error(msg || code))
-    onEnd?.()
-  }
 
-  rec.onend = () => {
-    if (stopped || committed) return
-    try {
-      rec.start()
-    } catch {
+    instance.onresult = (e) => {
+      if (stopped || committed) return
+      networkFails = 0
+      const merged = mergeListenTranscript(e.results, e.resultIndex)
+      sessionFinal = merged.finalText
+      lastInterim = merged.interim
+      publish(merged.interim)
+      armSilence()
+    }
+
+    instance.onerror = (e) => {
+      const code = e.error || ''
+      if (stopped || committed) return
+      if (code === 'no-speech') {
+        if (shouldCommitListen(snapshotText())) armSilence()
+        return
+      }
+      if (code === 'aborted') return
+      if (code === 'network') {
+        networkFails += 1
+        if (networkFails < 3) return
+      }
+      if (code === 'language-not-supported' && !langTriedFallback) {
+        langTriedFallback = true
+        rec.lang = 'vi'
+        return
+      }
+      stopped = true
+      closeOut()
+      const msg = speechErrorMessage(code)
+      if (msg) onError?.(new Error(msg))
       onEnd?.()
     }
+
+    instance.onend = () => {
+      if (sessionFinal || lastInterim) {
+        keptFinals = joinListenParts(keptFinals, sessionFinal, lastInterim)
+        sessionFinal = ''
+        lastInterim = ''
+        lastDisplay = keptFinals
+        if (keptFinals) onText?.(keptFinals, true)
+      }
+      if (stopped || committed) return
+      scheduleRestart()
+    }
   }
+
+  function scheduleRestart() {
+    if (stopped || committed) return
+    clearRestart()
+    restartTimer = setTimeout(() => {
+      if (stopped || committed) return
+      rec = makeRec(Ctor, langTriedFallback ? 'vi' : lang)
+      bind(rec)
+      try {
+        rec.start()
+      } catch {
+        setTimeout(() => {
+          if (stopped || committed) return
+          try {
+            rec.start()
+          } catch {
+            if (shouldCommitListen(snapshotText())) commit(snapshotText())
+            else {
+              stopped = true
+              closeOut()
+              onEnd?.()
+            }
+          }
+        }, 220)
+      }
+    }, 180)
+  }
+
+  bind(rec)
+
+  startWatch = setTimeout(() => {
+    if (started || stopped || committed) return
+    stopped = true
+    closeOut()
+    onError?.(
+      new Error('Không bật được nhận giọng. Dùng Chrome hoặc Edge, cho phép micro, rồi bấm mic lại.')
+    )
+    onEnd?.()
+  }, 20000)
 
   try {
     rec.start()
   } catch (err) {
     const msg = speechErrorMessage(err?.message) || err?.message || 'Không bật được mic'
+    closeOut()
     onError?.(new Error(msg))
     onEnd?.()
+    return { stop() {}, abort() {}, snapshot: () => '' }
   }
 
   return {
+    /** Dừng thu, giữ câu trong ô — không gửi. */
     stop() {
       stopped = true
-      clearSilence()
-      try {
-        rec.stop()
-      } catch {
-        // ignore
-      }
-      commit(lastDisplay || lastFinal, { fromStop: true })
+      committed = true
+      const t = snapshotText()
+      closeOut()
+      if (t) onText?.(t, true)
+      else onError?.(new Error('Chưa nghe thấy câu nói. Bấm mic, nói rõ, rồi bấm Dừng hoặc Gửi.'))
+      onEnd?.()
     },
+    /** Dừng thu, không báo lỗi — caller tự gửi hoặc hủy. */
     abort() {
       stopped = true
       committed = true
-      clearSilence()
-      try {
-        rec.stop()
-      } catch {
-        // ignore
-      }
+      const t = snapshotText()
+      closeOut()
+      if (t) onText?.(t, true)
       onEnd?.()
+    },
+    snapshot() {
+      return snapshotText()
+    },
+    started() {
+      return started
     },
   }
 }

@@ -130,6 +130,7 @@ Câu hỏi: """${String(question).trim()}"""`;
 function shouldSkipIntentLlm(question, mode = 'lookup') {
   const q = String(question || '').trim();
   if (!q) return true;
+  if (q.length < 140) return true;
   const { parseQuestionAnchors } = require('../ingestion/legalChunker');
   const a = parseQuestionAnchors(q);
   if (a.soHieu.length || a.dieu) return true;

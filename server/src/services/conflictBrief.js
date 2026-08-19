@@ -56,9 +56,7 @@ function buildConflictBrief(matches = []) {
 
   const hasOverlap =
     bySo.size >= 2 || [...bySo.values()].some((r) => r.sua.size || r.thay.size || r.bai.size);
-  if (!hasOverlap && bySo.size === 1) {
-    return `BẢN ĐỒ NGUỒN (1 văn bản):\n${lines.join('\n')}`;
-  }
+  if (!hasOverlap) return '';
 
   return `BẢN ĐỒ CHỒNG CHÉO (bắt buộc đối chiếu trước khi kết luận):
 ${lines.join('\n')}

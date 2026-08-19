@@ -1,13 +1,17 @@
 /**
- * Kho tình huống mẫu — Supabase hoặc file JSON local (cá nhân / offline).
+ * Kho tình huống Q&A — admin/quản lý nhập sẵn theo hạng mục.
+ * Supabase hoặc file JSON local.
  */
 
 const fs = require('fs');
 const path = require('path');
 const { randomUUID } = require('crypto');
 const { getSupabase, isConfigured } = require('./supabase');
+const { expandCategoryIds } = require('./categoryScope');
 
 const LOCAL_PATH = path.resolve(__dirname, '../../data/scenarios.json');
+
+let omitCategoryColumn = false;
 
 function ensureLocalFile() {
   try {
@@ -18,11 +22,7 @@ function ensureLocalFile() {
   if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) return;
   const dir = path.dirname(LOCAL_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(
-    LOCAL_PATH,
-    JSON.stringify({ scenarios: [] }, null, 2),
-    'utf8'
-  );
+  fs.writeFileSync(LOCAL_PATH, JSON.stringify({ scenarios: [] }, null, 2), 'utf8');
 }
 
 function isDemoScenario(s = {}) {
@@ -53,65 +53,160 @@ function writeLocal(data) {
   fs.writeFileSync(LOCAL_PATH, JSON.stringify(data, null, 2), 'utf8');
 }
 
-async function listScenarios({ limit = 100, q = '' } = {}) {
+function sanitizeSearch(q) {
+  return String(q || '')
+    .replace(/[%_,()]/g, ' ')
+    .trim()
+    .slice(0, 120);
+}
+
+function buildScenarioRow(input = {}) {
+  const question = String(
+    input.suggested_question || input.suggestedQuestion || input.question || ''
+  )
+    .trim()
+    .slice(0, 2000);
+  const answer = String(input.sample_answer || input.sampleAnswer || input.answer || '')
+    .trim()
+    .slice(0, 20000);
+  const title = String(input.title || question)
+    .trim()
+    .slice(0, 200);
+  const situation = String(input.situation || question)
+    .trim()
+    .slice(0, 8000);
+  const categoryId = String(input.category_id || input.categoryId || '').trim() || null;
+  const tags = Array.isArray(input.tags)
+    ? input.tags.map((t) => String(t).trim()).filter(Boolean).slice(0, 20)
+    : String(input.tags || '')
+        .split(/[,;]/)
+        .map((t) => t.trim())
+        .filter(Boolean)
+        .slice(0, 20);
+
+  return {
+    title,
+    situation,
+    suggested_question: question,
+    sample_answer: answer,
+    tags,
+    category_id: categoryId,
+    created_by: String(input.created_by || input.createdBy || 'anonymous').slice(0, 120),
+  };
+}
+
+function presentScenario(item = {}) {
+  const question = item.suggested_question || item.question || '';
+  const answer = item.sample_answer || item.answer || '';
+  return {
+    ...item,
+    question,
+    answer,
+    category_id: item.category_id || null,
+  };
+}
+
+function matchesQuery(item, needle) {
+  if (!needle) return true;
+  return [item.title, item.situation, item.suggested_question, item.sample_answer, ...(item.tags || [])]
+    .join(' ')
+    .toLowerCase()
+    .includes(needle);
+}
+
+function filterScenarioItems(items, { q = '', categoryIds = [] } = {}) {
+  const needle = String(q || '').toLowerCase().trim();
+  const cats = new Set((categoryIds || []).map(String).filter(Boolean));
+  return (items || []).filter((s) => {
+    if (cats.size) {
+      const cid = String(s.category_id || '');
+      if (!cid || !cats.has(cid)) return false;
+    }
+    return matchesQuery(s, needle);
+  });
+}
+
+async function expandCategoryFilter(categoryId) {
+  const id = String(categoryId || '').trim();
+  if (!id) return [];
+  try {
+    const { listCategories } = require('./taxonomyStore');
+    const cats = await listCategories();
+    return expandCategoryIds(cats.items || [], [id]);
+  } catch {
+    return [id];
+  }
+}
+
+function isMissingCategoryColumn(error) {
+  const msg = String(error?.message || error || '').toLowerCase();
+  return msg.includes('category_id') && (msg.includes('column') || msg.includes('schema cache') || msg.includes('does not exist'));
+}
+
+async function listScenarios({ limit = 100, q = '', categoryId = '' } = {}) {
+  const needle = sanitizeSearch(q);
+  const categoryIds = await expandCategoryFilter(categoryId);
   const sb = getSupabase();
   if (sb && isConfigured()) {
-    let query = sb
-      .from('scenarios')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (q) {
+    let query = sb.from('scenarios').select('*').order('created_at', { ascending: false }).limit(Math.min(limit, 400));
+    if (needle) {
       query = query.or(
-        `title.ilike.%${q}%,situation.ilike.%${q}%,suggested_question.ilike.%${q}%`
+        `title.ilike.%${needle}%,situation.ilike.%${needle}%,suggested_question.ilike.%${needle}%,sample_answer.ilike.%${needle}%`
       );
     }
+    if (categoryIds.length && !omitCategoryColumn) {
+      query = query.in('category_id', categoryIds.slice(0, 80));
+    }
     const { data, error } = await query;
-    if (!error) return { ok: true, source: 'supabase', items: withoutDemoScenarios(data || []) };
-    console.warn('[scenarios] supabase list:', error.message);
+    if (!error) {
+      let items = withoutDemoScenarios(data || []).map(presentScenario);
+      if (categoryIds.length && omitCategoryColumn) {
+        items = filterScenarioItems(items, { categoryIds });
+      }
+      return { ok: true, source: 'supabase', items: items.slice(0, limit) };
+    }
+    if (isMissingCategoryColumn(error)) omitCategoryColumn = true;
+    else console.warn('[scenarios] supabase list:', error.message);
   }
 
-  let items = readLocal().scenarios || [];
-  if (q) {
-    const needle = q.toLowerCase();
-    items = items.filter((s) =>
-      [s.title, s.situation, s.suggested_question, ...(s.tags || [])]
-        .join(' ')
-        .toLowerCase()
-        .includes(needle)
-    );
+  let items = withoutDemoScenarios(readLocal().scenarios || []);
+  items = filterScenarioItems(items, { q: needle, categoryIds }).map(presentScenario);
+  return { ok: true, source: 'local', items: items.slice(0, limit) };
+}
+
+async function getScenario(id) {
+  const sid = String(id || '').trim();
+  if (!sid) return { ok: false, error: 'Thiếu id' };
+  const sb = getSupabase();
+  if (sb && isConfigured()) {
+    const { data, error } = await sb.from('scenarios').select('*').eq('id', sid).maybeSingle();
+    if (!error && data) return { ok: true, item: presentScenario(data), source: 'supabase' };
   }
-  return { ok: true, source: 'local', items: withoutDemoScenarios(items).slice(0, limit) };
+  const listed = await listScenarios({ limit: 400 });
+  const item = (listed.items || []).find((s) => s.id === sid);
+  if (!item) return { ok: false, error: 'Không tìm thấy tình huống' };
+  return { ok: true, item, source: listed.source };
 }
 
 async function createScenario(input) {
-  const row = {
-    title: String(input.title || '').trim().slice(0, 200),
-    situation: String(input.situation || '').trim().slice(0, 8000),
-    suggested_question: String(input.suggested_question || input.suggestedQuestion || '').trim().slice(0, 2000),
-    sample_answer: String(input.sample_answer || input.sampleAnswer || '').trim().slice(0, 20000),
-    tags: Array.isArray(input.tags)
-      ? input.tags.map((t) => String(t).trim()).filter(Boolean).slice(0, 20)
-      : String(input.tags || '')
-          .split(/[,;]/)
-          .map((t) => t.trim())
-          .filter(Boolean)
-          .slice(0, 20),
-    created_by: String(input.created_by || input.createdBy || 'anonymous').slice(0, 120),
-  };
-
+  const row = buildScenarioRow(input);
   if (!row.title || !row.situation) {
-    return { ok: false, error: 'Cần title và situation' };
+    return { ok: false, error: 'Cần câu hỏi (hoặc tiêu đề) và mô tả tình huống' };
   }
 
   const sb = getSupabase();
   if (sb && isConfigured()) {
-    const { data, error } = await sb
-      .from('scenarios')
-      .insert({ ...row, use_count: 0 })
-      .select('*')
-      .single();
-    if (!error) return { ok: true, source: 'supabase', item: data };
+    const payload = { ...row, use_count: 0 };
+    if (omitCategoryColumn) delete payload.category_id;
+    const { data, error } = await sb.from('scenarios').insert(payload).select('*').single();
+    if (!error) return { ok: true, source: 'supabase', item: presentScenario(data) };
+    if (isMissingCategoryColumn(error) && payload.category_id) {
+      omitCategoryColumn = true;
+      const retry = { ...payload };
+      delete retry.category_id;
+      const second = await sb.from('scenarios').insert(retry).select('*').single();
+      if (!second.error) return { ok: true, source: 'supabase', item: presentScenario(second.data) };
+    }
     console.warn('[scenarios] supabase insert:', error.message);
   }
 
@@ -125,7 +220,46 @@ async function createScenario(input) {
   };
   store.scenarios.unshift(item);
   writeLocal(store);
-  return { ok: true, source: 'local', item };
+  return { ok: true, source: 'local', item: presentScenario(item) };
+}
+
+async function updateScenario(id, input) {
+  const sid = String(id || '').trim();
+  if (!sid) return { ok: false, error: 'Thiếu id' };
+  const row = buildScenarioRow(input);
+  if (!row.title || !row.situation) {
+    return { ok: false, error: 'Cần câu hỏi (hoặc tiêu đề) và mô tả tình huống' };
+  }
+  const patch = {
+    title: row.title,
+    situation: row.situation,
+    suggested_question: row.suggested_question,
+    sample_answer: row.sample_answer,
+    tags: row.tags,
+    updated_at: new Date().toISOString(),
+  };
+  if (!omitCategoryColumn) patch.category_id = row.category_id;
+
+  const sb = getSupabase();
+  if (sb && isConfigured()) {
+    const { data, error } = await sb.from('scenarios').update(patch).eq('id', sid).select('*').single();
+    if (!error) return { ok: true, source: 'supabase', item: presentScenario(data) };
+    if (isMissingCategoryColumn(error)) {
+      omitCategoryColumn = true;
+      const retry = { ...patch };
+      delete retry.category_id;
+      const second = await sb.from('scenarios').update(retry).eq('id', sid).select('*').single();
+      if (!second.error) return { ok: true, source: 'supabase', item: presentScenario(second.data) };
+    }
+    console.warn('[scenarios] supabase update:', error.message);
+  }
+
+  const store = readLocal();
+  const item = (store.scenarios || []).find((s) => s.id === sid);
+  if (!item) return { ok: false, error: 'Không tìm thấy tình huống' };
+  Object.assign(item, patch, { category_id: row.category_id });
+  writeLocal(store);
+  return { ok: true, source: 'local', item: presentScenario(item) };
 }
 
 async function deleteScenario(id) {
@@ -157,14 +291,11 @@ async function bumpUse(id) {
     item.use_count = (item.use_count || 0) + 1;
     item.updated_at = new Date().toISOString();
     writeLocal(store);
-    return { ok: true, item };
+    return { ok: true, item: presentScenario(item) };
   }
   return { ok: true };
 }
 
-/**
- * Tìm tình huống liên quan câu hỏi (keyword đơn giản) để làm giàu context.
- */
 async function findRelevantScenarios(question, limit = 2) {
   const { items } = await listScenarios({ limit: 80 });
   const tokens = String(question || '')
@@ -175,7 +306,7 @@ async function findRelevantScenarios(question, limit = 2) {
 
   const scored = items
     .map((s) => {
-      const hay = [s.title, s.situation, s.suggested_question, ...(s.tags || [])]
+      const hay = [s.title, s.situation, s.suggested_question, s.sample_answer, ...(s.tags || [])]
         .join(' ')
         .toLowerCase();
       let score = 0;
@@ -195,22 +326,26 @@ async function findRelevantScenarios(question, limit = 2) {
 function formatScenariosForPrompt(scenarios) {
   if (!scenarios?.length) return '';
   return scenarios
-    .map((s, i) => {
-      const q = s.suggested_question || s.situation || '';
-      const a = s.sample_answer || '';
-      return `[Bài mẫu ${i + 1}] ${s.title}
-Cách hỏi: ${q}
-${a ? `Cách trả lời mẫu (học bố cục, KHÔNG copy số liệu nếu khác context lần này):\n${a}` : 'Chưa có câu trả lời mẫu.'}`;
+    .slice(0, 1)
+    .map((s) => {
+      const q = String(s.suggested_question || s.situation || '').slice(0, 180);
+      const a = String(s.sample_answer || '').slice(0, 280);
+      return `[Bài mẫu] ${s.title}${q ? `\nHỏi: ${q}` : ''}${a ? `\nBố cục mẫu: ${a}` : ''}`;
     })
-    .join('\n\n');
+    .join('\n');
 }
 
 module.exports = {
   listScenarios,
+  getScenario,
   createScenario,
+  updateScenario,
   deleteScenario,
   bumpUse,
   findRelevantScenarios,
   formatScenariosForPrompt,
+  buildScenarioRow,
+  filterScenarioItems,
+  presentScenario,
   LOCAL_PATH,
 };

@@ -56,9 +56,13 @@ test('matchSkills luôn gắn alwaysOn và kích hoạt so sánh khi hỏi sửa
 });
 
 test('formatSkillsForPrompt không cho skill thắng luật cứng', () => {
-  const block = formatSkillsForPrompt(DEFAULT_SKILLS.slice(0, 1));
+  const block = formatSkillsForPrompt(DEFAULT_SKILLS.filter((s) => s.slug === 'compare-amend'));
   assert.match(block, /nguyên tắc bắt buộc/i);
-  assert.match(block, /Cách đọc văn bản/);
+  assert.match(block, /So sánh sửa đổi/);
+});
+
+test('formatSkillsForPrompt bỏ skill lõi đã nằm trong luật cứng', () => {
+  assert.equal(formatSkillsForPrompt(DEFAULT_SKILLS.filter((s) => s.slug === 'doc-reader')), '');
 });
 
 test('slugify tiếng Việt', () => {

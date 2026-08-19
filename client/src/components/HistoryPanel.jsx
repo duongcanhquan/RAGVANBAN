@@ -1,18 +1,21 @@
 import { useEffect, useState } from 'react'
 import { BookmarkPlus, History, X } from 'lucide-react'
-import {
-  fetchServerHistory,
-  loadLocalHistory,
-  markLocalKnowledge,
-  promoteToScenario,
-} from '../lib/chatHistory'
+import { loadLocalHistory, markLocalKnowledge, promoteToScenario } from '../lib/chatHistory'
 import { groupHistoryIntoThreads } from '../lib/conversationHistory'
 import { adminFetch } from '../lib/adminApi'
 
 /**
- * Panel lịch sử chat — tải lại Q&A / đánh dấu làm giàu kiến thức.
+ * Lịch sử phiên hiện tại — điện thoại: sheet dưới; desktop: drawer phải.
  */
-export default function HistoryPanel({ open, onClose, sessionId, onRestore }) {
+export default function HistoryPanel({
+  open,
+  onClose,
+  sessionId,
+  onRestore,
+  streaming = false,
+  refreshKey = 0,
+  onEndSession,
+}) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
   const [busyId, setBusyId] = useState('')
@@ -35,53 +38,18 @@ export default function HistoryPanel({ open, onClose, sessionId, onRestore }) {
 
   useEffect(() => {
     if (!open) return
-    let cancelled = false
-    ;(async () => {
-      setLoading(true)
-      const local = loadLocalHistory(sessionId)
-      const server = await fetchServerHistory(sessionId)
-      if (cancelled) return
-      const map = new Map()
-      for (const s of server) {
-        map.set(s.id, {
-          id: s.id,
-          question: s.question,
-          answer: s.answer,
-          sources: s.citations_used || [],
-          created_at: s.created_at,
-          marked_knowledge: s.marked_knowledge,
-          from: 'server',
-        })
-      }
-      for (const l of local) {
-        if (!map.has(l.id)) {
-          map.set(l.id, { ...l, from: 'local' })
-        }
-      }
-      setItems(groupHistoryIntoThreads([...map.values()]))
-      setLoading(false)
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [open, sessionId])
+    setLoading(true)
+    const local = loadLocalHistory(sessionId)
+    setItems(groupHistoryIntoThreads(local))
+    setLoading(false)
+  }, [open, sessionId, refreshKey])
 
   async function enrich(item) {
     const last = item.turns?.[item.turns.length - 1] || item
     const targetId = last.id || item.id
     setBusyId(item.id)
     try {
-      if (last.from === 'server') {
-        const res = await adminFetch(`/api/history/${targetId}/mark-knowledge`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ marked: true, asScenario: true }),
-        })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(data.error || 'Không lưu được')
-      } else {
-        await promoteToScenario(last)
-      }
+      await promoteToScenario(last)
       markLocalKnowledge(targetId, true)
       setItems((prev) =>
         prev.map((x) => (x.id === item.id ? { ...x, marked_knowledge: true } : x))
@@ -96,45 +64,49 @@ export default function HistoryPanel({ open, onClose, sessionId, onRestore }) {
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label="Lịch sử chat">
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center xl:items-stretch xl:justify-end"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Lịch sử phiên này"
+    >
       <button
         type="button"
-        className="absolute inset-0 cursor-pointer bg-black/30"
+        className="absolute inset-0 cursor-pointer bg-black/40"
         aria-label="Đóng"
         onClick={onClose}
       />
-      <aside className="relative flex h-full w-full max-w-md flex-col border-l border-white/10 bg-[#1a080c] shadow-2xl">
+      <aside className="relative flex max-h-[85dvh] w-full flex-col rounded-t-3xl border border-white/10 bg-[#1a080c] shadow-2xl xl:h-full xl:max-w-md xl:rounded-none xl:border-l xl:border-t-0">
+        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-white/25 xl:hidden" aria-hidden="true" />
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <div className="flex items-center gap-2 text-[var(--hcc-gold-bright)]">
             <History className="h-5 w-5" />
-            <h2 className="m-0 text-base font-semibold text-[var(--hcc-ink)]">Lịch sử đoạn chat</h2>
+            <h2 className="m-0 text-base font-semibold text-[var(--hcc-ink)]">Phiên này</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="cursor-pointer rounded-xl p-2 text-[var(--hcc-muted)] hover:bg-white/10"
+            className="inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-xl p-2 text-[var(--hcc-muted)] hover:bg-white/10"
             aria-label="Đóng panel"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
         <p className="m-0 border-b border-white/10 px-4 py-2 text-xs text-[var(--hcc-muted)]">
-          Bấm đoạn chat để xem lại cả cuộc hỏi đáp · Bookmark để đưa vào kho tình huống
+          Chỉ trên tab đang mở. Đóng tab hoặc Kết thúc phiên sẽ xóa — người sau không xem được.
         </p>
-        <div className="flex-1 overflow-y-auto p-3">
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
           {loading && <p className="text-sm text-[var(--hcc-muted)]">Đang tải…</p>}
           {!loading && items.length === 0 && (
-            <p className="text-sm text-[var(--hcc-muted)]">Chưa có lịch sử trên thiết bị / server.</p>
+            <p className="text-sm text-[var(--hcc-muted)]">Chưa hỏi gì trong phiên này.</p>
           )}
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {items.map((item) => (
-              <li
-                key={item.id}
-                className="rounded-2xl border border-white/10 bg-white/5 p-3"
-              >
+              <li key={item.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
                 <button
                   type="button"
-                  className="w-full cursor-pointer text-left"
+                  disabled={streaming}
+                  className="min-h-11 w-full cursor-pointer text-left disabled:opacity-40"
                   onClick={() => {
                     onRestore?.(item)
                     onClose()
@@ -145,27 +117,36 @@ export default function HistoryPanel({ open, onClose, sessionId, onRestore }) {
                   </p>
                   <p className="m-0 mt-1 text-[11px] text-[var(--hcc-muted)]">
                     {item.turnCount > 1 ? `${item.turnCount} lượt · ` : ''}
-                    {item.created_at
-                      ? new Date(item.created_at).toLocaleString('vi-VN')
-                      : ''}
+                    {item.created_at ? new Date(item.created_at).toLocaleString('vi-VN') : ''}
                     {item.marked_knowledge ? ' · đã làm giàu' : ''}
                   </p>
                 </button>
                 {canEnrich ? (
-                <button
-                  type="button"
-                  disabled={busyId === item.id || item.marked_knowledge}
-                  onClick={() => enrich(item)}
-                  className="mt-2 inline-flex cursor-pointer items-center gap-1 rounded-xl px-2 py-1 text-xs text-[var(--hcc-gold-bright)] hover:bg-white/10 disabled:opacity-40"
-                >
-                  <BookmarkPlus className="h-3.5 w-3.5" />
-                  {item.marked_knowledge ? 'Đã lưu mẫu' : 'Làm giàu AI'}
-                </button>
+                  <button
+                    type="button"
+                    disabled={busyId === item.id || item.marked_knowledge}
+                    onClick={() => enrich(item)}
+                    className="mt-2 inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-xl px-3 py-1 text-xs text-[var(--hcc-gold-bright)] hover:bg-white/10 disabled:opacity-40"
+                  >
+                    <BookmarkPlus className="h-3.5 w-3.5" />
+                    {item.marked_knowledge ? 'Đã lưu mẫu' : 'Làm giàu AI'}
+                  </button>
                 ) : null}
               </li>
             ))}
           </ul>
         </div>
+        {onEndSession ? (
+          <div className="border-t border-white/10 p-3">
+            <button
+              type="button"
+              onClick={onEndSession}
+              className="inline-flex min-h-11 w-full cursor-pointer items-center justify-center rounded-2xl border border-white/15 bg-white/5 text-sm font-medium text-white/80 hover:bg-white/10"
+            >
+              Kết thúc phiên — xóa lịch sử trên máy
+            </button>
+          </div>
+        ) : null}
       </aside>
     </div>
   )

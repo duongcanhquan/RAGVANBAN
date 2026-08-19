@@ -8,12 +8,11 @@ import {
   FolderTree,
   History,
   Lightbulb,
-  Play,
   Scale,
   Sparkles,
   Zap,
 } from 'lucide-react'
-import { fetchServerHistory, loadLocalHistory } from '../lib/chatHistory'
+import { loadLocalHistory } from '../lib/chatHistory'
 import { groupHistoryIntoThreads } from '../lib/conversationHistory'
 import { MODES } from '../lib/modes'
 import { apiUrl } from '../lib/apiBase'
@@ -57,29 +56,15 @@ export default function WorkbenchPanel({
         setScenarios(d.items || [])
       }
       const local = loadLocalHistory(sessionId)
-      const server = await fetchServerHistory(sessionId)
-      const map = new Map()
-      for (const s of server) {
-        map.set(s.id, {
-          id: s.id,
-          question: s.question,
-          answer: s.answer,
-          sources: s.citations_used || [],
-          created_at: s.created_at,
-        })
-      }
-      for (const l of local) {
-        if (!map.has(l.id)) map.set(l.id, l)
-      }
-      setHistory(groupHistoryIntoThreads([...map.values()]).slice(0, 20))
+      setHistory(groupHistoryIntoThreads(local).slice(0, 24))
     } finally {
       setLoading(false)
     }
-  }, [sessionId, refreshKey])
+  }, [sessionId])
 
   useEffect(() => {
     loadSideData()
-  }, [loadSideData])
+  }, [loadSideData, refreshKey])
 
   function toggle(id) {
     setOpenNodes((p) => ({ ...p, [id]: !p[id] }))
@@ -109,7 +94,7 @@ export default function WorkbenchPanel({
             key={id}
             type="button"
             onClick={() => setTab(id)}
-            className={`flex flex-1 cursor-pointer flex-col items-center gap-0.5 rounded-xl px-1 py-2 text-[10px] font-semibold transition ${
+            className={`flex flex-1 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-2 text-[10px] font-semibold transition min-h-11 ${
               tab === id
                 ? 'bg-white/15 text-[var(--hcc-gold-bright)] shadow-sm'
                 : 'text-white/55 hover:bg-white/10 hover:text-white'
@@ -252,49 +237,45 @@ export default function WorkbenchPanel({
         {tab === 'cases' && (
           <div className="space-y-2">
             <p className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--hcc-muted)]">
-              Tình huống mẫu
+              Q&A có sẵn
             </p>
             {!scenarios.length && (
-              <p className="text-xs text-[var(--hcc-muted)]">Chưa có mẫu — thêm ở Kho tình huống.</p>
+              <p className="text-xs text-[var(--hcc-muted)]">
+                Chưa có tình huống. Admin thêm tại Quản trị → Tình huống.
+              </p>
             )}
             {scenarios.map((s) => (
-              <article
-                key={s.id}
-                className="glass-panel rounded-2xl p-3"
-              >
-                <h3 className="m-0 text-sm font-semibold text-[var(--hcc-ink)]">{s.title}</h3>
-                <p className="m-0 mt-1 line-clamp-2 text-[11px] text-[var(--hcc-muted)]">
-                  {s.situation}
+              <article key={s.id} className="glass-panel rounded-2xl p-3">
+                <h3 className="m-0 text-sm font-semibold text-[var(--hcc-ink)]">
+                  {s.question || s.suggested_question || s.title}
+                </h3>
+                <p className="m-0 mt-1 line-clamp-3 text-[11px] text-[var(--hcc-muted)]">
+                  {s.answer || s.sample_answer || s.situation}
                 </p>
-                <button
-                  type="button"
-                  disabled={streaming}
-                  onClick={() => {
-                    onModeChange?.('advise')
-                    onAsk?.(s.suggested_question || s.title)
-                  }}
-                  className="mt-2 inline-flex cursor-pointer items-center gap-1 rounded-xl bg-[var(--hcc-red)] px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-40"
-                >
-                  <Play className="h-3 w-3" />
-                  Dùng để hỏi
-                </button>
               </article>
             ))}
+            <Link
+              to="/tinh-huong"
+              className="mt-2 block rounded-2xl border border-white/15 bg-white/5 px-3 py-3 text-center text-xs font-medium text-slate-100 hover:border-[var(--hcc-gold)]"
+            >
+              Xem tất cả theo hạng mục
+            </Link>
           </div>
         )}
 
         {tab === 'hist' && (
           <div className="space-y-2">
             <p className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--hcc-muted)]">
-              Đoạn chat gần đây
+              Phiên này (xóa khi đóng tab)
             </p>
             {!history.length && (
-              <p className="text-xs text-[var(--hcc-muted)]">Chưa có lịch sử trên phiên này.</p>
+              <p className="text-xs text-[var(--hcc-muted)]">Chưa hỏi trong phiên đang mở.</p>
             )}
             {history.map((h) => (
               <button
                 key={h.id}
                 type="button"
+                disabled={streaming}
                 onClick={() => onRestore?.(h)}
                 className="w-full cursor-pointer rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-left transition hover:border-[var(--hcc-gold)]"
               >

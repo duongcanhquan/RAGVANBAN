@@ -1,16 +1,36 @@
 /**
- * Session id ổn định trong tab trình duyệt (gắn user_session trên chat_logs).
- * conversationId đổi khi bấm Chat mới — gom lịch sử thành từng đoạn.
+ * Phiên hỏi đáp chỉ sống trong tab đang mở (sessionStorage).
+ * Đóng tab / Kết thúc phiên = hết lịch sử trên máy — người sau không xem được.
  */
 const KEY = 'rag_user_session'
 const CONV_KEY = 'rag_conversation_id'
+const LEGACY_LOCAL = ['rag_user_session', 'rag_conversation_id', 'hcc_chat_history_v1']
+
+function store() {
+  try {
+    return sessionStorage
+  } catch {
+    return null
+  }
+}
+
+export function purgeLegacyDeviceHistory() {
+  try {
+    for (const k of LEGACY_LOCAL) localStorage.removeItem(k)
+  } catch {
+    /* ignore */
+  }
+}
 
 export function getSessionId() {
+  const s = store()
+  if (!s) return 'anonymous'
   try {
-    let id = localStorage.getItem(KEY)
+    purgeLegacyDeviceHistory()
+    let id = s.getItem(KEY)
     if (!id) {
       id = crypto.randomUUID()
-      localStorage.setItem(KEY, id)
+      s.setItem(KEY, id)
     }
     return id
   } catch {
@@ -19,11 +39,13 @@ export function getSessionId() {
 }
 
 export function getConversationId() {
+  const s = store()
+  if (!s) return `c-${Date.now()}`
   try {
-    let id = localStorage.getItem(CONV_KEY)
+    let id = s.getItem(CONV_KEY)
     if (!id) {
       id = crypto.randomUUID()
-      localStorage.setItem(CONV_KEY, id)
+      s.setItem(CONV_KEY, id)
     }
     return id
   } catch {
@@ -31,16 +53,33 @@ export function getConversationId() {
   }
 }
 
+export function rememberConversationId(id) {
+  const next = String(id || '').trim() || crypto.randomUUID()
+  const s = store()
+  try {
+    s?.setItem(CONV_KEY, next)
+  } catch {
+    /* ignore */
+  }
+  return next
+}
+
 export function newConversationId() {
   return rememberConversationId(crypto.randomUUID())
 }
 
-export function rememberConversationId(id) {
-  const next = String(id || '').trim() || crypto.randomUUID()
+/** Xóa phiên trên máy, cấp id mới — dùng khi bấm Kết thúc phiên. */
+export function startFreshSession() {
+  const s = store()
   try {
-    localStorage.setItem(CONV_KEY, next)
+    s?.removeItem(KEY)
+    s?.removeItem(CONV_KEY)
   } catch {
-    // ignore
+    /* ignore */
   }
-  return next
+  purgeLegacyDeviceHistory()
+  return {
+    sessionId: getSessionId(),
+    conversationId: getConversationId(),
+  }
 }

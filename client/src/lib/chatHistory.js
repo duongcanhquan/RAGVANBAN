@@ -1,27 +1,46 @@
-import { apiUrl } from './apiBase'
 import { adminFetch } from './adminApi'
+import { purgeLegacyDeviceHistory } from './session'
 
 const KEY = 'hcc_chat_history_v1'
+const MAX_ITEMS = 24
 
-/**
- * Lưu lịch sử chat trên thiết bị (luôn có) + đồng bộ server khi có Supabase.
- */
-
-export function loadLocalHistory(sessionId) {
+function store() {
   try {
-    const raw = JSON.parse(localStorage.getItem(KEY) || '{"items":[]}')
-    const items = Array.isArray(raw.items) ? raw.items : []
-    if (!sessionId) return items
-    return items.filter((i) => i.sessionId === sessionId)
+    return sessionStorage
+  } catch {
+    return null
+  }
+}
+
+function readItems() {
+  try {
+    purgeLegacyDeviceHistory()
+    const raw = JSON.parse(store()?.getItem(KEY) || '{"items":[]}')
+    return Array.isArray(raw.items) ? raw.items : []
   } catch {
     return []
   }
 }
 
+function writeItems(items) {
+  try {
+    store()?.setItem(KEY, JSON.stringify({ items: items.slice(0, MAX_ITEMS) }))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Chỉ lịch sử tab/phiên hiện tại — không đọc server, không chia máy. */
+export function loadLocalHistory(sessionId) {
+  const items = readItems()
+  if (!sessionId) return items
+  return items.filter((i) => i.sessionId === sessionId)
+}
+
 export function saveLocalTurn({ sessionId, conversationId, question, answer, sources = [], id }) {
   try {
-    const raw = JSON.parse(localStorage.getItem(KEY) || '{"items":[]}')
-    const items = Array.isArray(raw.items) ? raw.items : []
+    const items = readItems()
     const entry = {
       id: id || crypto.randomUUID(),
       sessionId: sessionId || 'anonymous',
@@ -33,32 +52,39 @@ export function saveLocalTurn({ sessionId, conversationId, question, answer, sou
       marked_knowledge: false,
     }
     items.unshift(entry)
-    localStorage.setItem(KEY, JSON.stringify({ items: items.slice(0, 200) }))
+    writeItems(items)
     return entry
   } catch {
     return null
   }
 }
 
-export function markLocalKnowledge(id, marked = true) {
+export function clearSessionHistory() {
   try {
-    const raw = JSON.parse(localStorage.getItem(KEY) || '{"items":[]}')
-    const items = Array.isArray(raw.items) ? raw.items : []
-    const next = items.map((i) =>
-      i.id === id ? { ...i, marked_knowledge: marked } : i
-    )
-    localStorage.setItem(KEY, JSON.stringify({ items: next }))
+    store()?.removeItem(KEY)
+    purgeLegacyDeviceHistory()
     return true
   } catch {
     return false
   }
 }
 
+export function markLocalKnowledge(id, marked = true) {
+  try {
+    const next = readItems().map((i) => (i.id === id ? { ...i, marked_knowledge: marked } : i))
+    writeItems(next)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Chỉ quản trị — UI hỏi đáp công khai không gọi. */
 export async function fetchServerHistory(sessionId) {
   try {
     const qs = new URLSearchParams({ limit: '40' })
     if (sessionId) qs.set('sessionId', sessionId)
-    const res = await fetch(apiUrl(`/api/history?${qs}`))
+    const res = await adminFetch(`/api/history?${qs}`)
     if (!res.ok) return []
     const data = await res.json()
     return data.items || []

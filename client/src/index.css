@@ -35,8 +35,8 @@
   --shadow-gold: 0 6px 20px rgba(232, 185, 35, 0.35);
   --font-sans: 'Be Vietnam Pro', system-ui, sans-serif;
   --radius-lg: 1.25rem;
-  --nav-h: 3.75rem;
-  --bottom-nav-h: 3.75rem;
+  --nav-h: 3.25rem;
+  --bottom-nav-h: 4rem;
   --workbench-w: 0px;
 }
 
@@ -48,6 +48,7 @@
 
 html {
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 body {

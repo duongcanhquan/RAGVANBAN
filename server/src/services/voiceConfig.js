@@ -1,6 +1,6 @@
 /**
- * Giọng AI / prompt soạn câu trả lời.
- * Luật cứng (zero-hallucination) luôn gắn sau cùng — admin không tắt được.
+ * Giọng AI / prompt soạn câu trả lời cho nhà trường.
+ * Luật cứng luôn gắn đầu prompt — super-admin mở khóa mới sửa được.
  */
 
 const { getSetting, setSetting } = require('./appSettings');
@@ -8,94 +8,97 @@ const { getSetting, setSetting } = require('./appSettings');
 const VOICE_KEY = 'ai_voice';
 
 const HARD_RULES = `
-NGUYÊN TẮC BẮT BUỘC (không được bỏ, không được mâu thuẫn):
-1) Chỉ dựa vào context văn bản được cung cấp — tuyệt đối không bịa số hiệu, điều khoản, thời hạn, hồ sơ.
-2) Nếu thiếu thông tin: nói rõ "Không tìm thấy trong kho văn bản còn hiệu lực" và gợi ý cách hỏi lại.
-3) Ưu tiên văn bản còn hiệu lực. Nếu có văn bản sửa đổi/bổ sung/thay thế: nêu rõ bản nào còn hiệu lực, điểm nào đã bị sửa — không trộn thành một quy định duy nhất.
-4) Mỗi kết luận pháp lý phải có Điều/Khoản (nếu có trong context) · số hiệu · cơ quan.
-5) Cuối câu trả lời LUÔN có mục "Nguồn:" dạng markdown [Tên VB](URL). Mỗi văn bản đúng 1 dòng / 1 URL — không tách nguồn theo từng Điều. Không có URL thì dùng (#).
-6) Câu trong ngoặc kép phải là nguyên văn đoạn context. Không bịa trích lục.
-7) Không thay thế tư vấn pháp lý cá nhân hóa khi hồ sơ đặc thù — ghi chú khi cần.
-8) Trả lời đúng trọng tâm: câu đầu là kết luận cụ thể. Cấm mở đầu chung chung ("theo quy định hiện hành…", "văn bản có một số nội dung liên quan").
-9) Chỉ dùng điều khoản cần để trả lời câu hỏi. Không liệt kê hết các đoạn đã truy xuất.
-10) Không lặp link cùng một văn bản; không lặp mục Kiểm chứng / Nguồn.
-11) Nếu có ngữ cảnh đoạn chat: giữ tình huống, đối tượng, văn bản đang nói. Câu hỏi tiếp (cụ thể hơn, nếu tôi, giấy tờ nào, trường hợp này…) là hỏi sâu cùng việc — không trả lời như câu độc lập, không hỏi lại từ đầu. Câu hiện tại là trọng tâm; lượt trước chỉ dùng khi câu hiện tại phụ thuộc.
+NGUYÊN TẮC (bắt buộc, tuyệt đối không bịa):
+- Chỉ dùng context. Không bịa số hiệu, điều, thời hạn, hồ sơ, hình thức xử lý.
+- Thiếu thì nói thiếu. Ưu tiên văn bản còn hiệu lực; chồng chéo thì tách bản còn hiệu lực / điểm đã sửa — không gộp một quy định.
+- Câu đầu = kết luận đúng hỏi. Cấm mở đầu kiểu "theo quy định hiện hành". Chỉ điều/khoản cần cho câu hỏi.
+- Căn cứ: Điều/khoản · số hiệu · cơ quan (hoặc cấp ban hành). Nguồn: 1 dòng/VB [Tên](URL). Ngoặc kép = nguyên văn.
+- Giữ tình huống đoạn chat; câu hiện tại là trọng tâm. Không lặp link / Nguồn / Kiểm chứng.
 `.trim();
 
-const DEFAULT_LOOKUP_TEMPLATE = `CẤU TRÚC TRẢ LỜI (Tra cứu):
-**Kết luận:** 1–2 câu trả lời trực tiếp đúng câu hỏi (không mở đầu chung chung)
-**Căn cứ:** chỉ Điều/khoản cần dùng · số hiệu · cơ quan
-**Điểm đã sửa / bổ sung:** chỉ khi context có VB chồng chéo; không có thì bỏ
-**Hiệu lực:** một dòng
-**Phần kho chưa có:** nếu thiếu
-**Nguồn:** mỗi văn bản 1 dòng, không nhân theo Điều
-- [Loại VB số hiệu](URL)`;
-
-const DEFAULT_ADVISE_TEMPLATE = `CẤU TRÚC TRẢ LỜI (Tư vấn tình huống):
-**Tình huống:** 1 câu nắm việc đang hỏi (đối tượng, hoàn cảnh)
-**Cách áp dụng:** quy định trong kho áp vào tình huống đó như thế nào (câu đầu vẫn là kết luận)
+const DEFAULT_LOOKUP_TEMPLATE = `Mẫu tra cứu:
+**Kết luận:** 1–2 câu đúng hỏi
 **Căn cứ:** Điều/khoản · số hiệu · cơ quan
-**Hồ sơ / bước / nơi nộp:** chỉ khi câu hỏi cần thủ tục VÀ có trong context; không có thì bỏ mục này
-**Lưu ý:** điểm dễ sai, điều đã bị sửa, phần kho chưa có
-**Nguồn:** mỗi văn bản 1 dòng
-- [Loại VB số hiệu](URL)`;
+**Hiệu lực:** 1 dòng (chồng chéo thì thêm điểm đã sửa)
+**Nguồn:** 1 dòng/VB`;
 
-const DEFAULT_COMPARE_TEMPLATE = `CẤU TRÚC TRẢ LỜI (So sánh / sửa đổi):
-**Việc đang hỏi:** 1 câu
-**Văn bản còn hiệu lực:** số hiệu · ngày · trạng thái
-**Điểm giữ nguyên / đã sửa / đã bãi:** chỉ ý đang hỏi, có Điều/Khoản
-**Không suy diễn** phần context không nêu
-**Nguồn:** mỗi văn bản 1 dòng`;
+const DEFAULT_ADVISE_TEMPLATE = `Mẫu tư vấn:
+**Kết luận:** áp quy định vào việc đang hỏi
+**Căn cứ:** Điều/khoản · số hiệu · cơ quan
+**Hồ sơ/bước:** chỉ khi được hỏi và có trong context
+**Nguồn:** 1 dòng/VB`;
+
+const DEFAULT_COMPARE_TEMPLATE = `Mẫu so sánh:
+**Còn hiệu lực:** số hiệu · ngày
+**Giữ / sửa / bãi:** chỉ ý đang hỏi + Điều/khoản
+**Nguồn:** 1 dòng/VB`;
 
 const TONE_HINT = {
   formal:
-    'Giọng trang trọng, rõ ràng, đúng thuật ngữ hành chính. Câu ngắn, không hoa mỹ.',
+    'Giọng trang trọng với cán bộ, nhân viên: rõ ràng, đúng thuật ngữ nội quy / quy chế nhà trường. Câu ngắn, không hoa mỹ.',
   citizen:
-    'Giọng gần dân, dễ hiểu; giải thích thuật ngữ ngắn trong ngoặc. Vẫn phải đúng căn cứ.',
+    'Giọng gần gũi với học sinh: dễ hiểu, lịch sự; giải thích thuật ngữ ngắn trong ngoặc. Vẫn phải đúng căn cứ văn bản.',
   detailed:
-    'Giọng pháp chế chi tiết: nêu đủ điều khoản, ngày, quan hệ sửa đổi. Không dài dòng ngoài context.',
+    'Giọng giảng viên: nêu đủ điều khoản, ngày ban hành, quan hệ sửa đổi. Không dài dòng ngoài context.',
 };
 
 const LENGTH_HINT = {
-  short: 'Tối đa khoảng 180 từ, chỉ phần bắt buộc.',
-  medium: 'Đủ ý cho đúng câu hỏi, khoảng 180–320 từ. Không kể lể các điều không liên quan.',
-  detailed: 'Đầy đủ các mục trong mẫu; không bịa thêm để cho dài.',
+  short: 'Tối đa ~120 từ. Chỉ kết luận + căn cứ + hiệu lực + nguồn.',
+  medium: 'Tối đa ~200 từ. Đúng câu hỏi, không liệt kê điều thừa.',
+  detailed: 'Đủ mục mẫu; không bịa để cho dài. Tối đa ~320 từ.',
 };
 
 const PRESETS = {
-  can_bo: {
-    id: 'can_bo',
-    label: 'Cán bộ một cửa',
-    role: 'Bạn là chuyên viên tra cứu văn bản hành chính tại bộ phận một cửa.',
-    tone: 'formal',
-    length: 'medium',
-  },
-  nguoi_dan: {
-    id: 'nguoi_dan',
-    label: 'Người dân',
-    role: 'Bạn giải thích quy định hành chính cho người dân, rõ ràng, không hù dọa.',
-    tone: 'citizen',
-    length: 'medium',
-  },
-  phap_che: {
-    id: 'phap_che',
-    label: 'Pháp chế chi tiết',
-    role: 'Bạn là chuyên viên pháp chế: đối chiếu hiệu lực, sửa đổi, bổ sung trước khi kết luận.',
+  giang_vien: {
+    id: 'giang_vien',
+    label: 'Giảng viên',
+    role:
+      'Bạn hỗ trợ giảng viên tra cứu và giảng giải văn bản, quy chế, nội quy nhà trường: chặt chẽ, đủ căn cứ, nêu rõ hiệu lực.',
     tone: 'detailed',
     length: 'detailed',
   },
+  hoc_sinh: {
+    id: 'hoc_sinh',
+    label: 'Học sinh',
+    role:
+      'Bạn giải thích quy định nhà trường cho học sinh: dễ hiểu, lịch sự, không hù dọa, vẫn đúng căn cứ văn bản.',
+    tone: 'citizen',
+    length: 'short',
+  },
+  can_bo_nv: {
+    id: 'can_bo_nv',
+    label: 'Cán bộ nhân viên',
+    role:
+      'Bạn là trợ lý tra cứu văn bản cho cán bộ, nhân viên nhà trường: nội quy, quy chế, quy trình chuyên môn — ngắn, đúng nguồn.',
+    tone: 'formal',
+    length: 'short',
+  },
 };
+
+/** Preset cũ (hành chính công) → preset nhà trường. */
+const PRESET_ALIASES = {
+  can_bo: 'can_bo_nv',
+  nguoi_dan: 'hoc_sinh',
+  phap_che: 'giang_vien',
+};
+
+function resolvePresetId(id) {
+  if (PRESETS[id]) return id;
+  if (PRESET_ALIASES[id]) return PRESET_ALIASES[id];
+  return 'can_bo_nv';
+}
 
 function defaultVoice() {
   return {
-    preset: 'can_bo',
-    role: PRESETS.can_bo.role,
+    preset: 'can_bo_nv',
+    role: PRESETS.can_bo_nv.role,
     tone: 'formal',
-    length: 'medium',
+    length: 'short',
     lookupTemplate: DEFAULT_LOOKUP_TEMPLATE,
     adviseTemplate: DEFAULT_ADVISE_TEMPLATE,
     compareTemplate: DEFAULT_COMPARE_TEMPLATE,
     extraInstructions: '',
+    hardRules: HARD_RULES,
     temperature: 0,
   };
 }
@@ -108,26 +111,32 @@ function clampTemp(n) {
 
 function normalizeVoice(input = {}) {
   const base = defaultVoice();
-  const tone = ['formal', 'citizen', 'detailed'].includes(input.tone) ? input.tone : base.tone;
-  const length = ['short', 'medium', 'detailed'].includes(input.length)
-    ? input.length
-    : base.length;
-  const preset = PRESETS[input.preset] ? input.preset : base.preset;
+  const fromLegacy = Boolean(PRESET_ALIASES[input.preset]);
+  const preset = resolvePresetId(input.preset);
+  const p = PRESETS[preset];
+  const toneSrc = fromLegacy ? p.tone : input.tone;
+  const lengthSrc = fromLegacy ? p.length : input.length;
+  const tone = ['formal', 'citizen', 'detailed'].includes(toneSrc) ? toneSrc : base.tone;
+  const length = ['short', 'medium', 'detailed'].includes(lengthSrc) ? lengthSrc : base.length;
+  const hardRules = String(input.hardRules || '').trim().slice(0, 6000) || HARD_RULES;
   return {
     preset,
-    role: String(input.role || base.role).trim().slice(0, 400) || base.role,
+    role: String(fromLegacy ? p.role : input.role || p.role)
+      .trim()
+      .slice(0, 400) || p.role,
     tone,
     length,
     lookupTemplate: String(input.lookupTemplate || base.lookupTemplate).slice(0, 4000),
     adviseTemplate: String(input.adviseTemplate || base.adviseTemplate).slice(0, 4000),
     compareTemplate: String(input.compareTemplate || base.compareTemplate).slice(0, 4000),
     extraInstructions: String(input.extraInstructions || '').slice(0, 2000),
+    hardRules,
     temperature: clampTemp(input.temperature ?? base.temperature),
   };
 }
 
 function applyPreset(presetId, current = {}) {
-  const p = PRESETS[presetId] || PRESETS.can_bo;
+  const p = PRESETS[resolvePresetId(presetId)];
   return normalizeVoice({
     ...current,
     preset: p.id,
@@ -151,15 +160,21 @@ function composeSystemPrompt(mode = 'lookup', voice = defaultVoice(), extras = {
     : '';
   const skills = extras.skillContext ? `\n${extras.skillContext}\n` : '';
 
-  return `${HARD_RULES}
+  return `${v.hardRules}
 
 Vai trò: ${v.role}
 Giọng: ${TONE_HINT[v.tone] || TONE_HINT.formal}
-Độ dài: ${LENGTH_HINT[v.length] || LENGTH_HINT.medium}
+Độ dài: ${LENGTH_HINT[v.length] || LENGTH_HINT.short}
 ${extra}${skills}
-${template}
+${template}`;
+}
 
-Nhắc lại: tuyệt đối không bịa; thiếu thì nói thiếu; văn bản chồng chéo thì tách rõ còn hiệu lực / đã sửa.`;
+function answerMaxTokens(voice, { mode = 'lookup', spoken = false } = {}) {
+  const v = normalizeVoice(voice);
+  let n = v.length === 'short' ? 520 : v.length === 'detailed' ? 1100 : 720;
+  if (mode === 'advise' || mode === 'compare') n += 140;
+  if (spoken) n = Math.min(n, 480);
+  return n;
 }
 
 async function getVoice() {
@@ -175,9 +190,11 @@ async function setVoice(input) {
 }
 
 function publicVoicePayload(voice) {
+  const v = normalizeVoice(voice);
   return {
-    voice: normalizeVoice(voice),
-    hardRules: HARD_RULES,
+    voice: v,
+    hardRules: v.hardRules,
+    defaultHardRules: HARD_RULES,
     presets: Object.values(PRESETS).map((p) => ({
       id: p.id,
       label: p.label,
@@ -192,6 +209,7 @@ module.exports = {
   VOICE_KEY,
   HARD_RULES,
   PRESETS,
+  PRESET_ALIASES,
   DEFAULT_LOOKUP_TEMPLATE,
   DEFAULT_ADVISE_TEMPLATE,
   DEFAULT_COMPARE_TEMPLATE,
@@ -199,6 +217,7 @@ module.exports = {
   normalizeVoice,
   applyPreset,
   composeSystemPrompt,
+  answerMaxTokens,
   getVoice,
   setVoice,
   publicVoicePayload,

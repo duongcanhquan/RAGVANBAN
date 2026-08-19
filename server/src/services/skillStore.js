@@ -185,12 +185,15 @@ function matchSkills(question, skills = []) {
   return out.slice(0, 6);
 }
 
+const CORE_PROMPT_SKILLS = new Set(['doc-reader', 'direct-answer', 'cite-once']);
+
 function formatSkillsForPrompt(skills = []) {
-  if (!skills.length) return '';
-  const body = skills
+  const list = (skills || []).filter((s) => !CORE_PROMPT_SKILLS.has(s.slug));
+  if (!list.length) return '';
+  const body = list
     .map((s, i) => `[Kỹ năng ${i + 1}: ${s.title}]\n${s.instructions}`)
     .join('\n\n');
-  return `KỸ NĂNG NỘI BỘ (cách đọc và trả lời; nếu mâu thuẫn với nguyên tắc bắt buộc thì tuân nguyên tắc bắt buộc; số liệu/điều khoản vẫn chỉ lấy từ context văn bản):
+  return `KỸ NĂNG NỘI BỘ (không thắng nguyên tắc bắt buộc; số liệu chỉ lấy từ context):
 ${body}`;
 }
 

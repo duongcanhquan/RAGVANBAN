@@ -128,6 +128,10 @@ alter table public.documents add column if not exists folder_path text;
 
 create index if not exists documents_category_id_idx on public.documents (category_id);
 
+alter table public.scenarios
+  add column if not exists category_id uuid references public.doc_categories(id) on delete set null;
+create index if not exists scenarios_category_id_idx on public.scenarios (category_id);
+
 alter table public.doc_categories enable row level security;
 
 drop policy if exists "anon_read_doc_categories" on public.doc_categories;

@@ -24,9 +24,9 @@ function clampInt(n, min, max, fallback) {
 
 function defaultRag() {
   return {
-    topK: clampInt(process.env.RAG_TOP_K, 4, 40, 16),
-    maxPerDoc: 4,
-    maxTotal: 12,
+    topK: clampInt(process.env.RAG_TOP_K, 4, 40, 12),
+    maxPerDoc: 3,
+    maxTotal: 8,
     chunkSize: clampInt(process.env.CHUNK_SIZE, 400, 4000, 1200),
     chunkOverlap: clampInt(process.env.CHUNK_OVERLAP, 0, 800, 150),
     onlyActiveDefault: true,
