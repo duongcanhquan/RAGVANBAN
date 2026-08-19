@@ -37,7 +37,8 @@
   --radius-lg: 1.25rem;
   --nav-h: 3.25rem;
   --bottom-nav-h: calc(3.75rem + env(safe-area-inset-bottom, 0px));
-  --chat-composer-h: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+  /* Composer có thể cao lên khi textarea nhiều dòng; tăng để tránh che mất phần chat phía dưới */
+  --chat-composer-h: calc(8.5rem + env(safe-area-inset-bottom, 0px));
   --workbench-w: 0px;
 }
 

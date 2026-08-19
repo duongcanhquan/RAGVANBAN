@@ -28,7 +28,8 @@ export default function ChatInput({
     const el = ref.current
     if (!el) return
     el.style.height = 'auto'
-    const next = Math.min(el.scrollHeight, 160)
+    // Giới hạn chiều cao composer để không che mất phần chat phía dưới
+    const next = Math.min(el.scrollHeight, 128)
     el.style.height = `${Math.max(next, 48)}px`
   }, [value])
 
@@ -80,7 +81,7 @@ export default function ChatInput({
           onKeyDown={handleKeyDown}
           placeholder={placeholder || 'Nhập câu hỏi…'}
           enterKeyHint="send"
-          className="field-glass min-h-12 max-h-40 flex-1 resize-none overflow-y-auto rounded-2xl border px-4 py-3 text-base leading-normal transition disabled:opacity-50"
+          className="field-glass min-h-12 max-h-32 flex-1 resize-none overflow-y-auto rounded-2xl border px-4 py-3 text-base leading-normal transition disabled:opacity-50"
         />
         {voiceEnabled && !listening ? (
           <button
