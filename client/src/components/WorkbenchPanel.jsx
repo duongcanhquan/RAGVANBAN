@@ -48,7 +48,8 @@ export default function WorkbenchPanel({
         const d = await libRes.json()
         setTree(d.tree || [])
         const init = {}
-        for (const n of d.tree || []) init[n.id] = true
+        // Mặc định tự thu gọn cây thư mục
+        for (const n of d.tree || []) init[n.id] = false
         setOpenNodes((prev) => ({ ...init, ...prev }))
       }
       if (scRes.ok) {
@@ -82,9 +83,6 @@ export default function WorkbenchPanel({
       <div className="border-b border-white/10 px-4 py-3">
         <p className="m-0 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--hcc-gold-bright)]">
           Bàn làm việc
-        </p>
-        <p className="m-0 mt-0.5 text-sm text-[var(--hcc-muted)]">
-          Thao tác nhanh cho chuyên viên
         </p>
       </div>
 

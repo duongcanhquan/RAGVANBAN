@@ -7,7 +7,7 @@ export const MODES = {
     id: 'lookup',
     label: 'Tra cứu',
     short: 'Chỉ dẫn văn bản cần đọc',
-    hint: 'Chỉ ra văn bản liên quan trực tiếp (gần nhất) và mục/điều/khoản cần đọc ngay; nếu còn liên quan gián tiếp thì liệt kê thêm “tham khảo thêm”. Không phân tích sâu.',
+    hint: '',
     placeholder: 'Hỏi về vấn đề/vướng mắc… để tìm: văn bản nào + điều/khoản/mục nào cần đọc?',
     examples: [],
   },
