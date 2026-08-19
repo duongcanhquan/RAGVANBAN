@@ -235,8 +235,9 @@ export default function QuantriShell() {
           { to: '/quantri/giong-ai', end: false, label: 'Giọng AI', Icon: PenLine },
         ]
       : []),
+    { to: '/quantri/cai-dat', end: false, label: 'Cài đặt', Icon: Settings },
     ...(me.role === 'super_admin'
-      ? []
+      ? [{ to: '/quantri/nhan-su', end: false, label: 'Nhân sự', Icon: Users }]
       : []),
     { to: '/quantri/tai-khoan', end: false, label: 'Đổi mật khẩu', Icon: KeyRound },
   ]
