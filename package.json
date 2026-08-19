@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "Hệ thống RAG tra cứu văn bản hành chính",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev:client": "npm --prefix client run dev",
     "dev:server": "npm --prefix server run dev",

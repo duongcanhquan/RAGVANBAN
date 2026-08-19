@@ -247,6 +247,14 @@ create policy "public_read_documents_bucket"
 
 ---
 
+## ☁️ Deploy Vercel (GitHub)
+
+Một project: frontend Vite + API Express cùng domain (`/api/...`).
+
+Checklist đầy đủ (env, Supabase, Pinecone, giới hạn Hobby): [`docs/vercel-deploy.md`](docs/vercel-deploy.md)
+
+---
+
 ## 🚀 Hướng dẫn khởi chạy
 
 ### Bước 1 — Cài dependencies

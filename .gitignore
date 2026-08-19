@@ -21,6 +21,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+.vercel
 
 # Local runtime catalogs (generated)
 server/data/documents.json

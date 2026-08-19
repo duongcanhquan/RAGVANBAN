@@ -24,11 +24,42 @@ const { isDriveConfigured } = require('./services/googleDrive');
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 
+function allowedOrigins() {
+  const fromEnv = String(process.env.CLIENT_ORIGIN || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const vercelHosts = [
+    process.env.VERCEL_URL,
+    process.env.VERCEL_BRANCH_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL,
+  ]
+    .filter(Boolean)
+    .map((h) => (String(h).startsWith('http') ? String(h) : `https://${h}`));
+  return [
+    ...new Set([
+      ...fromEnv,
+      ...vercelHosts,
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+    ]),
+  ];
+}
+
+app.set('trust proxy', true);
 app.use(
   cors({
-    origin: [CLIENT_ORIGIN, 'http://localhost:5173', 'http://127.0.0.1:5173'],
+    origin(origin, cb) {
+      if (!origin) return cb(null, true);
+      if (allowedOrigins().includes(origin)) return cb(null, true);
+      try {
+        if (new URL(origin).hostname.endsWith('.vercel.app')) return cb(null, true);
+      } catch {
+        /* ignore */
+      }
+      cb(null, false);
+    },
     credentials: true,
   })
 );
@@ -44,6 +75,7 @@ app.get('/api/health', (_req, res) => {
     n8nWebhook: Boolean(
       process.env.N8N_WEBHOOK_SECRET && !String(process.env.N8N_WEBHOOK_SECRET).includes('your-')
     ),
+    vercel: Boolean(process.env.VERCEL),
     providers: listAvailableProviders(),
     port: PORT,
     host: HOST,
