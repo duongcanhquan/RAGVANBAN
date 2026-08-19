@@ -10,6 +10,8 @@ const {
   ensureBrain,
   providerCreds,
   pineconeCreds,
+  GEMINI_CHAT_CURRENT,
+  normalizeGeminiChatModel,
 } = require('./llmConfig');
 const { FAST_CHAT_ORDER } = require('./voiceTalk');
 const { isAbortError } = require('./abortControl');
@@ -100,7 +102,7 @@ function getLLM(provider, options = {}) {
     const { ChatGoogleGenerativeAI } = require('@langchain/google-genai');
     return new ChatGoogleGenerativeAI({
       apiKey: creds.apiKey,
-      model: options.model || creds.chatModel || 'gemini-2.0-flash',
+      model: normalizeGeminiChatModel(options.model || creds.chatModel || GEMINI_CHAT_CURRENT),
       temperature,
       streaming,
     });

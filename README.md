@@ -153,7 +153,7 @@ EMBEDDING_FALLBACK_PROVIDERS=openai,gemini
 OPENAI_CHAT_MODEL=gpt-4o-mini
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 DEEPSEEK_CHAT_MODEL=deepseek-chat
-GEMINI_CHAT_MODEL=gemini-2.0-flash
+GEMINI_CHAT_MODEL=gemini-3.6-flash
 GEMINI_EMBEDDING_MODEL=text-embedding-004
 
 # -------- Ingestion --------

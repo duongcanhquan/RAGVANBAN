@@ -35,13 +35,27 @@ test('mergeBrain ưu tiên key trong DB, giữ env nếu DB trống', () => {
     chatPrimary: 'openrouter',
     providers: {
       openai: { chatModel: 'gpt-4o', apiKey: '' },
-      openrouter: { enabled: true, apiKey: 'sk-or-v1-secretkey99', chatModel: 'google/gemini-2.0-flash-exp:free' },
+      openrouter: { enabled: true, apiKey: 'sk-or-v1-secretkey99', chatModel: 'google/gemma-3-27b-it:free' },
     },
   });
   assert.equal(merged.chatPrimary, 'openrouter');
   assert.equal(merged.providers.openai.apiKey, 'sk-env-openai-keyxx');
   assert.equal(merged.providers.openai.chatModel, 'gpt-4o');
   assert.equal(merged.providers.openrouter.apiKey, 'sk-or-v1-secretkey99');
+});
+
+test('Gemini chat mặc định 3.6-flash và đổi model đã gỡ', () => {
+  const { normalizeGeminiChatModel, GEMINI_CHAT_CURRENT } = require('../src/services/llmConfig');
+  assert.equal(GEMINI_CHAT_CURRENT, 'gemini-3.6-flash');
+  assert.equal(PROVIDER_CATALOG.find((p) => p.id === 'gemini').defaultChat, 'gemini-3.6-flash');
+  assert.equal(normalizeGeminiChatModel('gemini-2.0-flash'), 'gemini-3.6-flash');
+  assert.equal(normalizeGeminiChatModel('models/gemini-2.0-flash'), 'gemini-3.6-flash');
+  assert.equal(normalizeGeminiChatModel('gemini-3.1-pro'), 'gemini-3.1-pro');
+  const base = defaultsFromEnv();
+  const merged = mergeBrain(base, {
+    providers: { gemini: { chatModel: 'gemini-2.0-flash', apiKey: 'AIza-test-keyxxxx' } },
+  });
+  assert.equal(merged.providers.gemini.chatModel, 'gemini-3.6-flash');
 });
 
 test('applySavedKeys giữ key cũ khi client gửi rỗng', () => {

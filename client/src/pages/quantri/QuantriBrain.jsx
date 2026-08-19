@@ -914,7 +914,7 @@ export default function QuantriBrain() {
               </li>
               <li>
                 Google Antigravity dùng cùng key Gemini nhưng là agent code/web — app này chỉ gọi Gemini
-                Flash/Pro để trả lời văn bản.
+                Flash (`gemini-3.6-flash`) để trả lời văn bản.
               </li>
               <li>
                 Đổi <strong className="text-white">embedding</strong> (model/vector) lệch kho cũ — phải số

@@ -21,6 +21,31 @@ function envTrim(name) {
   return String(process.env[name] || '').trim();
 }
 
+const GEMINI_CHAT_CURRENT = 'gemini-3.6-flash';
+const GEMINI_CHAT_RETIRED = new Set([
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-001',
+  'gemini-2.0-flash-lite',
+  'gemini-2.0-flash-lite-001',
+  'gemini-2.0-flash-exp',
+  'gemini-2.0-flash-thinking-exp',
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-latest',
+  'gemini-1.5-flash-001',
+  'gemini-1.5-pro',
+  'gemini-1.5-pro-latest',
+  'gemini-1.5-pro-001',
+]);
+
+function normalizeGeminiChatModel(model) {
+  const raw = String(model || '')
+    .trim()
+    .replace(/^models\//i, '');
+  if (!raw) return GEMINI_CHAT_CURRENT;
+  if (GEMINI_CHAT_RETIRED.has(raw.toLowerCase())) return GEMINI_CHAT_CURRENT;
+  return raw;
+}
+
 /** Catalog — UI + factory dùng chung. kind: gemini | openai-compat */
 const PROVIDER_CATALOG = [
   {
@@ -45,9 +70,9 @@ const PROVIDER_CATALOG = [
     signup: 'https://aistudio.google.com/apikey',
     docs: 'https://ai.google.dev/gemini-api/docs',
     envKey: 'GEMINI_API_KEY',
-    defaultChat: 'gemini-2.0-flash',
+    defaultChat: 'gemini-3.6-flash',
     defaultEmbed: 'text-embedding-004',
-    note: 'Key Google AI Studio. Embedding mặc định text-embedding-004 = 768 chiều — khớp chip 768 trên Pinecone. Chat dùng Flash/Pro. Antigravity không dùng để trả lời văn bản.',
+    note: 'Key Google AI Studio. Chat mặc định gemini-3.6-flash (2.0-flash đã gỡ). Embedding text-embedding-004 = 768 chiều — khớp chip 768 trên Pinecone. Antigravity không dùng để trả lời văn bản.',
   },
   {
     id: 'deepseek',
@@ -73,11 +98,10 @@ const PROVIDER_CATALOG = [
     docs: 'https://openrouter.ai/models',
     envKey: 'OPENROUTER_API_KEY',
     defaultBase: 'https://openrouter.ai/api/v1',
-    defaultChat: 'google/gemini-2.0-flash-exp:free',
+    defaultChat: 'google/gemma-3-27b-it:free',
     defaultEmbed: 'openai/text-embedding-3-small',
     note: 'Một key gọi được nhiều model (OpenAI, Gemini, Claude, Llama…). Model có hậu tố :free là tầng miễn phí — dễ hết quota, nên xếp fallback.',
     freeModels: [
-      'google/gemini-2.0-flash-exp:free',
       'google/gemma-3-27b-it:free',
       'meta-llama/llama-3.3-70b-instruct:free',
       'qwen/qwen3-4b:free',
@@ -186,13 +210,16 @@ function defaultProviderState(spec) {
     enabled: spec.id !== 'custom',
     apiKey: isPlaceholder(envKey, spec.id) ? '' : envKey,
     baseUrl: envBase || spec.defaultBase || '',
-    chatModel:
-      envTrim(`${idUpper}_CHAT_MODEL`) ||
-      (spec.id === 'openai' ? envTrim('OPENAI_CHAT_MODEL') : '') ||
-      (spec.id === 'gemini' ? envTrim('GEMINI_CHAT_MODEL') : '') ||
-      (spec.id === 'deepseek' ? envTrim('DEEPSEEK_CHAT_MODEL') : '') ||
-      spec.defaultChat ||
-      '',
+    chatModel: (() => {
+      const picked =
+        envTrim(`${idUpper}_CHAT_MODEL`) ||
+        (spec.id === 'openai' ? envTrim('OPENAI_CHAT_MODEL') : '') ||
+        (spec.id === 'gemini' ? envTrim('GEMINI_CHAT_MODEL') : '') ||
+        (spec.id === 'deepseek' ? envTrim('DEEPSEEK_CHAT_MODEL') : '') ||
+        spec.defaultChat ||
+        '';
+      return spec.id === 'gemini' ? normalizeGeminiChatModel(picked) : picked;
+    })(),
     embeddingModel:
       envTrim(`${idUpper}_EMBEDDING_MODEL`) ||
       (spec.id === 'openai' ? envTrim('OPENAI_EMBEDDING_MODEL') : '') ||
@@ -264,6 +291,11 @@ function mergeBrain(base, stored) {
       ...patch,
       apiKey,
     };
+    if (spec.id === 'gemini') {
+      out.providers[spec.id].chatModel = normalizeGeminiChatModel(
+        out.providers[spec.id].chatModel
+      );
+    }
   }
   return out;
 }
@@ -311,7 +343,10 @@ function providerCreds(id) {
     hasKey,
     apiKey: hasKey ? apiKey : '',
     baseUrl,
-    chatModel: state.chatModel || spec.defaultChat || '',
+    chatModel:
+      spec.id === 'gemini'
+        ? normalizeGeminiChatModel(state.chatModel || spec.defaultChat)
+        : state.chatModel || spec.defaultChat || '',
     embeddingModel: state.embeddingModel || spec.defaultEmbed || '',
     siteUrl: state.siteUrl || '',
     siteName: state.siteName || 'RAGVANBAN',
@@ -342,7 +377,10 @@ function sanitizeBrain(brain) {
       hasKey,
       apiKeyHint: hasKey ? hintKey(key) : '',
       baseUrl: st.baseUrl || spec.defaultBase || '',
-      chatModel: st.chatModel || spec.defaultChat || '',
+      chatModel:
+        spec.id === 'gemini'
+          ? normalizeGeminiChatModel(st.chatModel || spec.defaultChat)
+          : st.chatModel || spec.defaultChat || '',
       embeddingModel: st.embeddingModel || spec.defaultEmbed || '',
       siteUrl: st.siteUrl || '',
       siteName: st.siteName || '',
@@ -435,4 +473,6 @@ module.exports = {
   sanitizeBrain,
   saveBrain,
   publicBrainPayload,
+  normalizeGeminiChatModel,
+  GEMINI_CHAT_CURRENT,
 };
