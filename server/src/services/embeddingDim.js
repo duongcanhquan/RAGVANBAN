@@ -160,10 +160,17 @@ function assertExpectedFitsIndex({ model, indexDim } = {}) {
   return { ok: true, expected, indexDim: iDim };
 }
 
-let dimCache = { name: '', dim: null, at: 0 };
+let dimCache = { name: '', dim: null, host: '', at: 0 };
 
 function resetIndexDimCache() {
-  dimCache = { name: '', dim: null, at: 0 };
+  dimCache = { name: '', dim: null, host: '', at: 0 };
+}
+
+function normalizeIndexHost(host) {
+  return String(host || '')
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/$/, '');
 }
 
 function peekPineconeIndexDimension(indexName) {
@@ -173,10 +180,17 @@ function peekPineconeIndexDimension(indexName) {
   return null;
 }
 
-async function getPineconeIndexDimension(pinecone, indexName) {
+function peekPineconeIndexHost(indexName) {
+  const name = String(indexName || '').trim();
+  if (!name) return '';
+  if (dimCache.name === name && Date.now() - dimCache.at < 60_000) return dimCache.host || '';
+  return '';
+}
+
+async function getPineconeIndexDimension(pinecone, indexName, { refresh } = {}) {
   const name = String(indexName || '').trim();
   if (!pinecone || !name) return null;
-  if (dimCache.name === name && Date.now() - dimCache.at < 60_000) return dimCache.dim;
+  if (!refresh && dimCache.name === name && Date.now() - dimCache.at < 60_000) return dimCache.dim;
   if (typeof pinecone.describeIndex !== 'function') return null;
   try {
     const info = await pinecone.describeIndex(name);
@@ -184,6 +198,7 @@ async function getPineconeIndexDimension(pinecone, indexName) {
     dimCache = {
       name,
       dim: Number.isFinite(dim) && dim > 0 ? dim : null,
+      host: normalizeIndexHost(info?.host),
       at: Date.now(),
     };
     return dimCache.dim;
@@ -244,6 +259,7 @@ module.exports = {
   assertExpectedFitsIndex,
   getPineconeIndexDimension,
   peekPineconeIndexDimension,
+  peekPineconeIndexHost,
   resetIndexDimCache,
   embeddingAlignmentReport,
 };

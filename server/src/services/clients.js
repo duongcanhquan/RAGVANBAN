@@ -37,6 +37,16 @@ function getPinecone() {
   return pineconeCached;
 }
 
+function resetPineconeClient() {
+  pineconeCached = null;
+  pineconeKeyUsed = '';
+  try {
+    require('./embeddingDim').resetIndexDimCache();
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * Lấy bộ clients runtime cho chat/ingest.
  * Chat/extract dùng factory + fallback; embeddings theo DEFAULT_EMBEDDING_PROVIDER.
@@ -88,6 +98,7 @@ async function getExtractLLM() {
 module.exports = {
   getClients,
   getPinecone,
+  resetPineconeClient,
   pineconeIndexTarget,
   getExtractLLM,
   hasLiveKeys,

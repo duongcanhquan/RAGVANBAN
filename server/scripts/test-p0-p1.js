@@ -137,6 +137,42 @@ Bãi bỏ Nghị định số 99/2015/NĐ-CP.
     assert.deepStrictEqual(idDelete, ['doc-old.pdf-0', 'doc-old.pdf-1']);
   });
 
+  await testAsync('xóa vector 404 (index mới / host cũ) không chặn upsert', async () => {
+    const calls = { upsert: [] };
+    const err404 = new Error(
+      'A call to https://ragvectorvanban-2esklaz.svc.aped-4627-b74a.pinecone.io/vectors/delete returned HTTP status 404.'
+    );
+    err404.name = 'PineconeNotFoundError';
+    err404.status = 404;
+    const client = {
+      Index: () => ({
+        deleteMany: async () => {
+          throw err404;
+        },
+        upsert: async (batch) => {
+          calls.upsert.push(batch);
+        },
+      }),
+      describeIndex: async () => ({ dimension: 2, host: 'fresh-host.svc.aped.pinecone.io' }),
+    };
+    const r = await upsertChunksToPinecone(
+      [
+        {
+          pageContent: 'Điều 1',
+          metadata: { ten_file: 'vb.pdf', chunk_index: 0, so_hieu: '01/2024/NĐ-CP' },
+        },
+      ],
+      {
+        embeddings: { embedDocuments: async (t) => t.map(() => [0.1, 0.2]) },
+        pinecone: client,
+        indexName: 'ragvectorvanban',
+        replaceFileName: 'vb.pdf',
+      }
+    );
+    assert.ok(r.upserted >= 1, 'phải upsert sau 404');
+    assert.ok(calls.upsert.length >= 1);
+  });
+
   await testAsync('updateVectorsMetadataByFileName compact so_hieu trên id đã biết', async () => {
     const { client, calls } = mockPinecone();
     const r = await updateVectorsMetadataByFileName(

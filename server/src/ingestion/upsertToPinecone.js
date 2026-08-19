@@ -6,6 +6,8 @@ const { compactSoHieu } = require('./legalChunker');
 const {
   assertEmbeddingFitsIndex,
   getPineconeIndexDimension,
+  peekPineconeIndexHost,
+  resetIndexDimCache,
 } = require('../services/embeddingDim');
 
 function asList(v) {
@@ -14,9 +16,34 @@ function asList(v) {
   return [];
 }
 
-function pineconeHandle(pinecone, indexName, namespace = '') {
-  const index = pinecone.Index(indexName);
+function pineconeHandle(pinecone, indexName, namespace = '', host = '') {
+  const index =
+    host && typeof pinecone.Index === 'function'
+      ? pinecone.Index(indexName, host)
+      : pinecone.Index(indexName);
   return namespace ? index.namespace(namespace) : index;
+}
+
+function isPineconeNotFound(err) {
+  const msg = String(err?.message || err || '');
+  const name = String(err?.name || '');
+  const status = Number(err?.status || err?.statusCode || 0);
+  return (
+    status === 404 ||
+    /PineconeNotFoundError/i.test(name) ||
+    /HTTP status 404/i.test(msg) ||
+    /\/vectors\/delete[^\n]*404/i.test(msg) ||
+    /not found/i.test(msg)
+  );
+}
+
+function refreshPineconeLookups() {
+  resetIndexDimCache();
+  try {
+    require('../services/clients').resetPineconeClient();
+  } catch {
+    /* circular / tests without clients */
+  }
 }
 
 function vectorIdFor(tenFile, chunkIndex, documentId) {
@@ -117,12 +144,15 @@ async function upsertChunksToPinecone(chunks, deps) {
       namespace,
       ids: previousIds,
     });
-    if (deleted && deleted.ok === false && !deleted.skipped) {
+    if (deleted && deleted.missing) {
+      await getPineconeIndexDimension(pinecone, indexName, { refresh: true });
+    } else if (deleted && deleted.ok === false && !deleted.skipped) {
       throw new Error(deleted.error || 'Không xóa được vector cũ trước khi ghi đè');
     }
   }
 
-  const target = pineconeHandle(pinecone, indexName, namespace);
+  const host = peekPineconeIndexHost(indexName);
+  const target = pineconeHandle(pinecone, indexName, namespace, host);
 
   let upserted = 0;
   for (let i = 0; i < records.length; i += batchSize) {
@@ -141,7 +171,8 @@ async function deleteVectorsByFileName(fileName, deps = {}) {
   if (!pinecone || !indexName) return { ok: false, skipped: true };
   if (!name && !(Array.isArray(knownIds) && knownIds.length)) return { ok: false, skipped: true };
 
-  const target = pineconeHandle(pinecone, indexName, namespace);
+  const host = peekPineconeIndexHost(indexName);
+  const target = pineconeHandle(pinecone, indexName, namespace, host);
   try {
     const idList = Array.isArray(knownIds) ? knownIds.filter(Boolean) : [];
     if (idList.length) {
@@ -163,6 +194,10 @@ async function deleteVectorsByFileName(fileName, deps = {}) {
     return { ok: true };
   } catch (err) {
     console.warn('[pinecone] delete:', err.message);
+    if (isPineconeNotFound(err)) {
+      refreshPineconeLookups();
+      return { ok: true, skipped: true, missing: true, error: err.message };
+    }
     return { ok: false, error: err.message };
   }
 }
@@ -197,7 +232,7 @@ async function updateVectorsMetadataByFileName(fileName, patch, deps = {}) {
   if (patch.linh_vuc !== undefined) metaPatch.linh_vuc = String(patch.linh_vuc || '');
   if (!Object.keys(metaPatch).length) return { ok: true, updated: 0 };
 
-  const target = pineconeHandle(pinecone, indexName, namespace);
+  const target = pineconeHandle(pinecone, indexName, namespace, peekPineconeIndexHost(indexName));
   let ids = Array.isArray(knownIds) ? knownIds.filter(Boolean) : [];
   if (!ids.length) {
     try {
@@ -227,4 +262,5 @@ module.exports = {
   updateVectorsMetadataByFileName,
   vectorIdFor,
   fileNamePrefix,
+  isPineconeNotFound,
 };
