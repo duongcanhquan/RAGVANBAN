@@ -341,6 +341,42 @@ async function updateDocumentCategory(id, { categoryId, folderPath, chuyenMon })
   return { ok: true, id: data?.id || id };
 }
 
+async function listIngestedDriveFileIds() {
+  const ids = new Set();
+  const { listLocalDocuments } = require('./localDocuments');
+  for (const d of listLocalDocuments({ limit: 5000 }).items || []) {
+    const id = d.drive_file_id || d.metadata?.drive_file_id;
+    if (id) ids.add(String(id));
+  }
+  const sb = getSupabase();
+  if (!sb) return [...ids];
+  let from = 0;
+  const page = 1000;
+  for (;;) {
+    let data;
+    let error;
+    ({ data, error } = await sb
+      .from('documents')
+      .select('drive_file_id, metadata')
+      .range(from, from + page - 1));
+    if (error && /drive_file_id/i.test(error.message || '')) {
+      ({ data, error } = await sb.from('documents').select('metadata').range(from, from + page - 1));
+    }
+    if (error) {
+      console.warn('[supabase] listIngestedDriveFileIds:', error.message);
+      break;
+    }
+    const rows = data || [];
+    for (const row of rows) {
+      const id = row.drive_file_id || row.metadata?.drive_file_id;
+      if (id) ids.add(String(id));
+    }
+    if (rows.length < page) break;
+    from += page;
+  }
+  return [...ids];
+}
+
 async function getDocumentByFileName(fileName) {
   const name = String(fileName || '').trim();
   if (!name) return { ok: false };
@@ -448,6 +484,7 @@ module.exports = {
   updateDocumentCategory,
   getDocument,
   getDocumentByFileName,
+  listIngestedDriveFileIds,
   updateDocument,
   deleteDocumentRow,
   STORAGE_BUCKET,

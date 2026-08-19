@@ -96,9 +96,10 @@ async function listDocsInFolder(folderId = process.env.GOOGLE_DRIVE_FOLDER_ID) {
   do {
     const res = await drive.files.list({
       q,
-      fields: 'nextPageToken,files(id,name,mimeType,webViewLink,modifiedTime,size)',
+      fields: 'nextPageToken,files(id,name,mimeType,webViewLink,modifiedTime,createdTime,size,parents)',
       pageSize: 100,
       pageToken,
+      orderBy: 'modifiedTime desc',
       supportsAllDrives: true,
       includeItemsFromAllDrives: true,
     });

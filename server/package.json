@@ -20,7 +20,7 @@
     "test:voice": "node scripts/test-voice-talk.js",
     "test:taxonomy": "node scripts/test-taxonomy-unit.js",
     "test:admin": "node scripts/test-admin-access.js",
-    "test:drive": "node scripts/test-drive-link.js",
+    "test:drive": "node scripts/test-drive-link.js && node scripts/test-drive-sync-new.js",
     "test:integrations": "node scripts/test-integrations.js",
     "test:r2": "node scripts/test-r2-url.js",
     "kill:5000": "node -e \"const {execSync}=require('child_process'); try{const o=execSync('netstat -ano | findstr :5000',{encoding:'utf8'}); const ids=[...new Set(o.split(/\\r?\\n/).map(l=>l.trim().split(/\\s+/).pop()).filter(x=>/^\\d+$/.test(x)&&x!=='0'))]; ids.forEach(id=>{try{execSync('taskkill /PID '+id+' /F'); console.log('killed',id)}catch{}}); if(!ids.length) console.log('Port 5000 free')}catch{console.log('Port 5000 free')}\""

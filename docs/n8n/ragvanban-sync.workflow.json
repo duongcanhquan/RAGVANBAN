@@ -12,7 +12,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Production (Vercel)\n\nApp **không chạy n8n**. Bật webhook chỉ mở cổng nhận.\n\nCách chắc: /quantri → Cài đặt → **Đồng bộ Drive ngay** (không cần n8n).\nCron Vercel `/api/cron/drive-sync` mỗi 4 giờ nếu đặt CRON_SECRET.\n\nn8n Cloud (tuỳ chọn):\n1. Copy URL webhook + X-N8N-Secret\n2. Dán vào node HTTP (không localhost)\n3. Drive trigger: Folder ID + OAuth\n4. Bật **Active** (file import mặc định tắt)\n\nHealth: `…/api/webhooks/n8n/health` · thử `{ \"action\": \"ping\" }`",
+        "content": "## Production (Vercel)\n\nApp **không chạy n8n**. Bật webhook chỉ mở cổng nhận.\n\nCách chắc: /quantri → Cài đặt → **Đồng bộ Drive ngay** (không cần n8n).\nCron Vercel `/api/cron/drive-sync` mỗi 15 phút — chỉ số hóa file chưa có trong kho.\n\nn8n Cloud (tuỳ chọn):\n1. Copy URL webhook + X-N8N-Secret\n2. Dán vào node HTTP (không localhost)\n3. Drive trigger: Folder ID + OAuth\n4. Bật **Active** (file import mặc định tắt)\n\nHealth: `…/api/webhooks/n8n/health` · thử `{ \"action\": \"ping\" }`",
         "height": 420,
         "width": 380,
         "color": 7
@@ -75,7 +75,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const item = $input.first().json || {};\nconst mime = String(item.mimeType || '');\nif (mime === 'application/vnd.google-apps.folder') {\n  return [];\n}\nif (item.id && (item.name || mime)) {\n  const folderId = Array.isArray(item.parents) ? item.parents[0] : '';\n  return [{ json: { fileId: String(item.id), fileName: item.name || '', folderId } }];\n}\nreturn [{ json: { action: 'sync_folder', limit: 8 } }];"
+        "jsCode": "const item = $input.first().json || {};\nconst mime = String(item.mimeType || item.mime_type || '');\nif (mime === 'application/vnd.google-apps.folder') return [];\nconst fileId = String(item.fileId || item.id || item.file_id || '').trim();\nif (fileId) {\n  const parents = item.parents;\n  const folderId = Array.isArray(parents) ? String(parents[0] || '') : String(item.folderId || '');\n  return [{ json: { fileId, fileName: item.name || item.fileName || '', folderId } }];\n}\nreturn [{ json: { action: 'sync_folder', limit: 8 } }];"
       },
       "id": "normalize-body",
       "name": "Gói body",

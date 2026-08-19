@@ -349,13 +349,13 @@ export default function QuantriIntegrations() {
 
       <section className="rounded-3xl border border-white/10 bg-white/5 p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="m-0 text-lg font-semibold">n8n</h2>
-          <StatusPill on={data.n8n.on} reason={data.n8n.reason} missingLabel="CHƯA SECRET" />
+          <h2 className="m-0 text-lg font-semibold">Tự số hóa file Drive mới</h2>
+          <StatusPill on={data.drive.on} reason={data.drive.reason} missingLabel="CHƯA KEY" />
         </div>
         <p className="m-0 mb-4 text-sm text-white/65">
-          n8n <strong>không chạy trong app này</strong>. Bật công tắc chỉ mở cổng nhận webhook. Workflow
-          trên n8n Cloud phải <strong>Active</strong> và dán đúng URL + secret. Không cần n8n: bấm{' '}
-          <strong>Đồng bộ Drive ngay</strong> (và cron 4 giờ trên Vercel nếu có CRON_SECRET).
+          App tự quét thư mục đã thêm ở trên, chỉ số hóa <strong>file chưa có trong kho</strong>. Vercel cron
+          mỗi 15 phút (gói Pro). Công tắc n8n <strong>không</strong> tự tìm file — n8n chỉ là webhook tùy
+          chọn bên ngoài.
         </p>
 
         {isLocalWebhook ? (
@@ -408,14 +408,16 @@ export default function QuantriIntegrations() {
             <CopyBtn text={healthUrl} />
           </div>
           <ol className="m-0 list-decimal space-y-1 pl-5 text-xs text-white/70">
-            <li>Bật webhook + Tạo secret. Bấm «Thử cổng webhook» — phải hiện sẵn sàng.</li>
+            <li>Thêm thư mục Drive ở khối trên (đã share cho service account).</li>
+            <li>Bấm «Đồng bộ Drive ngay» — phải ra file mới, không phải 8 file cũ lặp lại.</li>
             <li>
-              Muốn số hóa file trên Drive <em>ngay</em>: thêm thư mục ở trên, rồi bấm «Đồng bộ Drive
-              ngay» (không chờ n8n).
+              Cron Vercel <code className="text-white/90">/api/cron/drive-sync</code> mỗi 15 phút. Đặt{' '}
+              <code className="text-white/90">CRON_SECRET</code> trên Vercel nếu muốn gọi tay.
             </li>
             <li>
-              n8n (tuỳ chọn): Import <code className="text-white/90">docs/n8n/ragvanban-sync.workflow.json</code>
-              → dán URL + secret → Folder ID → bật <strong>Active</strong> (file JSON mặc định tắt).
+              n8n Cloud (không bắt buộc): bật webhook + secret, import{' '}
+              <code className="text-white/90">docs/n8n/ragvanban-sync.workflow.json</code>, dán URL production,
+              Folder ID, bật <strong>Active</strong>. File JSON mặc định tắt nên import xong chưa chạy.
             </li>
           </ol>
           {isSuper ? (
@@ -459,9 +461,12 @@ export default function QuantriIntegrations() {
                     if (!res.ok) throw new Error(body.error || 'Đồng bộ thất bại')
                     const okN = (body.results || []).filter((r) => r.ok).length
                     const failN = body.failed || 0
+                    const skipped = body.skipped || 0
+                    const pending = body.pending || 0
                     setSyncOut(
-                      `Đã xử lý ${body.processed || 0}/${body.totalListed || 0} file · thành công ${okN} · lỗi ${failN}` +
-                        (body.error ? ` · ${body.error}` : '')
+                      pending === 0 && okN === 0 && !failN
+                        ? `Không có file mới. Đã bỏ qua ${skipped} file đã số hóa (tổng ${body.totalListed || 0} trong thư mục).`
+                        : `File mới: thành công ${okN} · lỗi ${failN} · còn chờ ${Math.max(0, pending - okN - failN)} · đã có trong kho ${skipped}`
                     )
                     if (failN && !okN) setError(body.error || 'Không số hóa được file nào')
                   } catch (e) {

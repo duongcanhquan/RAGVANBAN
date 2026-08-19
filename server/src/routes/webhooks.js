@@ -8,7 +8,7 @@
 
 const express = require('express');
 const crypto = require('crypto');
-const { ingestDriveFile, syncDriveFolder } = require('../services/driveIngest');
+const { ingestDriveFile, syncDriveFolder, driveFileIdFromWebhookBody } = require('../services/driveIngest');
 const { ingestSingleFile } = require('../services/ingestFile');
 const { storeUploadedOriginal } = require('../services/originalStore');
 const { parseDriveResource, getFileParentIds } = require('../services/googleDrive');
@@ -100,15 +100,15 @@ router.post('/n8n', async (req, res) => {
       return;
     }
 
-    if (req.body?.fileId) {
+    const driveFileId = driveFileIdFromWebhookBody(req.body);
+    if (driveFileId) {
       if (!flags.driveEnabled) {
         res.status(403).json({ error: 'Google Drive đang tắt trong Cài đặt' });
         return;
       }
-      const fileId = String(req.body.fileId);
       const categoryId =
-        req.body?.categoryId || (await categoryForFile(fileId, req.body?.folderId));
-      const result = await ingestDriveFile(fileId, { categoryId });
+        req.body?.categoryId || (await categoryForFile(driveFileId, req.body?.folderId));
+      const result = await ingestDriveFile(driveFileId, { categoryId });
       if (!result?.id) {
         throw new Error('Số hóa Drive xong nhưng không ghi được danh mục tài liệu.');
       }

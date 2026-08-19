@@ -1,17 +1,17 @@
-# n8n → RAGVANBAN trên Vercel (production)
+# n8n → RAGVANBAN trên Vercel (tùy chọn)
 
-n8n **không** gọi `localhost`. App đang chạy trên Vercel thì webhook phải là:
+**Không cần n8n để tự số hóa file Drive mới.** App quét thư mục đã khai mỗi 15 phút (`/api/cron/drive-sync`) và bỏ qua file đã có `drive_file_id`. Bấm **Đồng bộ Drive ngay** trên `/quantri` để chạy ngay.
+
+n8n chỉ dùng nếu muốn webhook từ tool ngoài. n8n **không** gọi `localhost`. App trên Vercel thì webhook phải là:
 
 `https://<app-của-bạn>.vercel.app/api/webhooks/n8n`
 
-(hoặc custom domain). n8n Cloud / n8n VPS chỉ gọi được URL public.
-
-## Việc n8n làm
+## Việc n8n làm (nếu bật Active)
 
 | Khi nào | Node | Body gửi Vercel |
 |---------|------|-----------------|
-| **Tải file lên thư mục Drive** | Google Drive Trigger | `{ "fileId": "…" }` |
-| Mỗi **4 giờ** (quét file sót) | Schedule | `{ "action": "sync_folder", "limit": 8 }` |
+| **Tải file lên thư mục Drive** | Google Drive Trigger | `{ "fileId": "…" }` hoặc `{ "id", "name", "mimeType" }` |
+| Mỗi **4 giờ** (quét sót, giống cron) | Schedule | `{ "action": "sync_folder", "limit": 8 }` |
 | Bấm thử 1 lần | Manual | `sync_folder` |
 
 File import: [`ragvanban-sync.workflow.json`](./ragvanban-sync.workflow.json)
@@ -78,9 +78,11 @@ n8n Cloud poll Drive khoảng 1 phút/lần, nên file mới có thể trễ ~1 
 
 ---
 
-## D. Lịch 4 giờ
+## D. Lịch quét sót
 
-Node **Mỗi 4 giờ** gọi `sync_folder` (tối đa 8 file/lần cho vừa timeout Vercel). Không cần Google credential trên n8n cho nhánh này — Vercel dùng service account + thư mục đã khai trong Cài đặt.
+App (không cần n8n): Vercel cron `/api/cron/drive-sync` mỗi **15 phút**, chỉ lấy file chưa có `drive_file_id`.
+
+Node n8n **Mỗi 4 giờ** (nếu workflow Active) cũng gọi `sync_folder` — cùng logic, tối đa 8 file mới/lần.
 
 ---
 

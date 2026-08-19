@@ -1,6 +1,6 @@
 /**
- * Cron nội bộ — đồng bộ Drive định kỳ, không phụ thuộc n8n đang Active.
- * GET /api/cron/drive-sync
+ * Cron nội bộ — đồng bộ file Drive *mới*, không phụ thuộc n8n.
+ * GET /api/cron/drive-sync mỗi 15 phút (vercel.json).
  * Header: Authorization: Bearer CRON_SECRET  (hoặc Vercel Cron)
  */
 

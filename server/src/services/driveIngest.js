@@ -10,6 +10,36 @@ function shouldMirrorToSupabase() {
   return String(process.env.DRIVE_MIRROR_TO_SUPABASE || '').toLowerCase() === 'true';
 }
 
+function pickNewDriveFiles(files, ingestedIds, limit = 8) {
+  const seen = new Set(
+    [...(ingestedIds || [])]
+      .map((id) => String(id || '').trim())
+      .filter(Boolean)
+  );
+  const listed = Array.isArray(files) ? files : [];
+  const fresh = listed
+    .filter((f) => f?.id && !seen.has(String(f.id)))
+    .sort((a, b) => String(b.modifiedTime || '').localeCompare(String(a.modifiedTime || '')));
+  const n = Math.min(20, Math.max(1, Number(limit) || 8));
+  return {
+    listed: listed.length,
+    skipped: listed.length - fresh.length,
+    pending: fresh.length,
+    queued: fresh.slice(0, n),
+  };
+}
+
+function driveFileIdFromWebhookBody(body) {
+  const b = body && typeof body === 'object' && !Array.isArray(body) ? body : {};
+  const direct = String(b.fileId || b.file_id || '').trim();
+  if (direct) return direct;
+  const id = String(b.id || '').trim();
+  if (!id) return '';
+  if (b.name || b.fileName || b.mimeType || Array.isArray(b.parents)) return id;
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(id) && !b.action) return id;
+  return '';
+}
+
 async function ingestDriveFile(fileId, options = {}) {
   const { onProgress, categoryId = null } = options;
 
@@ -77,24 +107,32 @@ async function syncDriveFolder(options = {}) {
     throw new Error('Chưa có Google service account. Super-admin dán JSON trong Cài đặt.');
   }
 
+  const { listIngestedDriveFileIds } = require('./supabase');
+  const ingestedIds = await listIngestedDriveFileIds();
   const allResults = [];
   let totalListed = 0;
+  let skipped = 0;
+  let pending = 0;
   for (const t of targets) {
     const files = await listPdfInFolder(t.folderId);
     totalListed += files.length;
-    const slice = files.slice(0, limit);
+    const picked = pickNewDriveFiles(files, ingestedIds, limit);
+    skipped += picked.skipped;
+    pending += picked.pending;
+    const slice = picked.queued;
     for (let i = 0; i < slice.length; i += 1) {
       const f = slice[i];
       if (typeof onProgress === 'function') {
         onProgress({
           stage: 'sync',
           percent: Math.round((i / Math.max(slice.length, 1)) * 100),
-          message: `Đồng bộ ${i + 1}/${slice.length}: ${f.name}`,
+          message: `Số hóa file mới ${i + 1}/${slice.length}: ${f.name}`,
         });
       }
       try {
         const r = await ingestDriveFile(f.id, { onProgress, categoryId: t.categoryId });
         allResults.push({ ok: true, fileId: f.id, name: f.name, ...r });
+        ingestedIds.push(f.id);
       } catch (err) {
         allResults.push({ ok: false, fileId: f.id, name: f.name, error: err.message });
       }
@@ -103,9 +141,17 @@ async function syncDriveFolder(options = {}) {
 
   return {
     totalListed,
+    skipped,
+    pending,
     processed: allResults.length,
     results: allResults,
   };
 }
 
-module.exports = { ingestDriveFile, syncDriveFolder, shouldMirrorToSupabase };
+module.exports = {
+  ingestDriveFile,
+  syncDriveFolder,
+  shouldMirrorToSupabase,
+  pickNewDriveFiles,
+  driveFileIdFromWebhookBody,
+};
