@@ -97,15 +97,36 @@ RAG_TOP_K=6
 UPLOAD_MAX_BYTES=4500000
 ```
 
-`UPLOAD_MAX_BYTES=4500000` — Vercel giới hạn body **~4.5 MB**. PDF lớn hơn: chia nhỏ, hoặc ingest local / Google Drive.
+`UPLOAD_MAX_BYTES=4500000` — Vercel giới hạn body **~4.5 MB**. File lớn hơn: dán **link Google Drive** (không upload tay).
+
+### Cloudflare R2 — bắt buộc nếu upload file tay
+
+File tải lên `/quantri` lưu R2. File Drive **không** copy sang R2.
+
+1. Cloudflare Dashboard → **R2** → Create bucket (ví dụ `van-ban-goc`)
+2. **Manage R2 API Tokens** → Create API token (Object Read & Write) → copy Access Key + Secret
+3. Bucket → **Settings** → **Public development URL** → Enable → copy `https://pub-….r2.dev`  
+   (hoặc gắn custom domain)
+4. Dán biến:
+
+| Tên | Ghi chú |
+|---|---|
+| `R2_ACCOUNT_ID` | Cloudflare → Overview → Account ID |
+| `R2_ACCESS_KEY_ID` | R2 API token |
+| `R2_SECRET_ACCESS_KEY` | R2 API token |
+| `R2_BUCKET` | Tên bucket, ví dụ `van-ban-goc` |
+| `R2_PUBLIC_BASE_URL` | `https://pub-….r2.dev` hoặc `https://files.yourdomain.com` (không slash cuối) |
+
+`/api/health` có `"r2": true` khi 4 biến account/key/bucket đã đúng.
 
 ### Tùy chọn
 
 | Tên | Ghi chú |
 |---|---|
 | `N8N_WEBHOOK_SECRET` | Chuỗi dài; n8n gửi header `X-N8N-Secret` |
-| `GOOGLE_DRIVE_FOLDER_ID` | ID thư mục Drive |
+| `GOOGLE_DRIVE_FOLDER_ID` | ID thư mục Drive (chỉ cần nếu sync folder, không bắt buộc khi chỉ dán link) |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | **Dán nguyên JSON** (1 dòng), không dùng đường dẫn file Windows |
+| `DRIVE_MIRROR_TO_SUPABASE` | Để `false` — không copy Drive sang kho khác |
 
 Sau khi lưu biến: **Deployments → … trên bản mới nhất → Redeploy**.
 
@@ -124,7 +145,7 @@ Dashboard Supabase → **SQL Editor** → chạy lần lượt (hoặc dán từ
 Kiểm tra:
 
 - Table Editor: `chat_logs`, `documents`, `scenarios`, `doc_categories`, `admin_profiles`, `admin_category_grants`
-- Storage: bucket `documents` **Public = ON** (citation cần URL công khai)
+- File gốc: **R2** (upload) hoặc **Drive** (link). Bucket Supabase `documents` không còn là kho chính.
 
 ---
 
@@ -153,10 +174,12 @@ Kỳ vọng:
   "status": "ok",
   "ragReady": true,
   "supabase": true,
-  "vercel": true
+  "r2": true,
+  "googleDrive": true
 }
 ```
 
+- `r2: false` → thiếu `R2_*` (upload tay sẽ không có file tải về)
 - `ragReady: false` → thiếu LLM hoặc Pinecone
 - `supabase: false` → sai `SUPABASE_URL` / `SERVICE_ROLE`
 - Trang trắng / 404 `/quantri` → chưa có rewrite SPA (cần `vercel.json` trên `main`)

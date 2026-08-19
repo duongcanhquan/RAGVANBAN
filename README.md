@@ -16,24 +16,25 @@
             ▼                             ▼                             ▼
    ┌────────────────┐          ┌────────────────┐            ┌────────────────┐
    │    Supabase    │          │    Pinecone    │            │  Multi-LLM     │
-   │ DB + Storage   │          │ Vector Index   │            │ OpenAI/DeepSeek│
+   │ Auth + Postgres│          │ Vector Index   │            │ OpenAI/DeepSeek│
    │ chat_logs,     │          │ Embeddings     │            │ / Gemini       │
-   │ documents, PDF │          │                │            │                │
-   └───────▲────────┘          └────────────────┘            └────────────────┘
-           │ optional
-   ┌───────┴────────┐     ┌─────────────┐
-   │ Google Drive   │◄────│    n8n      │  (cá nhân / nhiều nơi, webhook secret)
-   │ Service Account│     │ automation  │
-   └────────────────┘     └─────────────┘
+   │ documents      │          │                │            │                │
+   └────────────────┘          └────────────────┘            └────────────────┘
+            ▲
+   ┌────────┴────────┐     ┌─────────────┐     ┌────────────────┐
+   │ Cloudflare R2   │     │ Google Drive│◄────│    n8n         │
+   │ file upload tay │     │ link có sẵn │     │ automation     │
+   └─────────────────┘     └─────────────┘     └────────────────┘
 ```
 
 | Thành phần | Công nghệ | Vai trò |
 |---|---|---|
 | **Frontend** | React + Vite + Tailwind | Chat công dân + Admin glassmorphism |
 | **Backend** | Node.js + Express | API `/api/chat`, `/api/upload`, SSE stream |
-| **Database** | Supabase (PostgreSQL) | `chat_logs`, `documents` |
-| **Storage** | Supabase Storage | Bucket `documents` — PDF gốc |
-| **Google Drive** *(tùy chọn)* | Service Account | PDF cá nhân / team — sync Admin hoặc n8n |
+| **Database** | Supabase (PostgreSQL + Auth) | `chat_logs`, `documents`, `/quantri` |
+| **File gốc (upload)** | Cloudflare R2 | PDF/Word tải lên `/quantri` — tải về từ URL R2 |
+| **File gốc (có sẵn)** | Google Drive | Dán link — hệ thống đọc + vector; file ở lại Drive |
+| **Google Drive** *(tùy chọn)* | Service Account | Share Viewer với SA, hoặc “Anyone with the link” |
 | **Automation** *(tùy chọn)* | n8n webhook | `POST /api/webhooks/n8n` + `X-N8N-Secret` |
 | **Vector DB** | Pinecone | Embeddings + metadata filter |
 | **LLM** | OpenAI / DeepSeek / Gemini | Chat, extract metadata, embeddings |
@@ -43,16 +44,17 @@
 ## ✅ Yêu cầu trước khi bắt đầu
 
 - [ ] Node.js **18+** (khuyến nghị 20+)
-- [ ] Tài khoản [Supabase](https://supabase.com)
+- [ ] Tài khoản [Supabase](https://supabase.com) (Auth + Postgres, không dùng làm kho file chính)
+- [ ] Tài khoản [Cloudflare](https://dash.cloudflare.com) + bucket **R2** (file upload tay)
 - [ ] Tài khoản [Pinecone](https://www.pinecone.io)
-- [ ] *(Tùy chọn)* Google Cloud Service Account + thư mục Drive
+- [ ] *(Tùy chọn)* Google Cloud Service Account — file đã có trên Drive
 - [ ] *(Tùy chọn)* n8n (self-host hoặc cloud) để tự động ingest
 
 ---
 
 ## 🔑 Hướng dẫn lấy API Keys (từng bước)
 
-### 1) Supabase (Database + Storage)
+### 1) Supabase (Auth + Database)
 
 1. Vào [https://supabase.com/dashboard](https://supabase.com/dashboard) → **New project**
 2. Vào **Project Settings → API**
@@ -62,6 +64,15 @@
    - **service_role** → `SUPABASE_SERVICE_ROLE_KEY` ⚠️ **bí mật**, chỉ dùng trên server
 
 > 💡 `service_role` bypass RLS — **không bao giờ** đưa vào frontend / commit git.
+
+### 1b) Cloudflare R2 (file upload tay)
+
+1. [Cloudflare Dashboard](https://dash.cloudflare.com) → **R2** → Create bucket (ví dụ `van-ban-goc`)
+2. **Manage R2 API Tokens** → Object Read & Write → copy Access Key + Secret
+3. Bucket → Settings → **Public development URL** (hoặc custom domain)
+4. Trong `.env` / Vercel: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`
+
+File đã có trên Drive: **không** đưa vào R2 — dán link ở `/quantri` tab Link / Drive.
 
 ### 2) Pinecone (Vector)
 
@@ -90,15 +101,14 @@
 2. Create API key → `GEMINI_API_KEY`
 3. Có thể dùng cho chat / extract / embeddings (`text-embedding-004`)
 
-### 6) Google Drive *(tùy chọn — cá nhân / nhiều nơi)*
+### 6) Google Drive *(file có sẵn — dán link)*
 
 1. [Google Cloud Console](https://console.cloud.google.com/) → tạo project → bật **Google Drive API**
 2. **IAM → Service Accounts** → Create → Key JSON → lưu **ngoài** repo
-3. Share thư mục PDF trên Drive cho **email service account** (Viewer)
-4. Folder ID từ URL `.../folders/<GOOGLE_DRIVE_FOLDER_ID>`
-5. Trong `.env`:
-   - `GOOGLE_SERVICE_ACCOUNT_JSON` = đường dẫn tuyệt đối tới file JSON
-   - `GOOGLE_DRIVE_FOLDER_ID` = ID thư mục
+3. Share **file hoặc thư mục** cho **email service account** (Viewer), hoặc bật “Anyone with the link”
+4. Dán URL Drive trong `/quantri` → hệ thống đọc và vectorize; file gốc **ở lại Drive**
+5. `GOOGLE_DRIVE_FOLDER_ID` chỉ cần nếu dùng nút đồng bộ cả thư mục
+6. `DRIVE_MIRROR_TO_SUPABASE=false` (không copy Drive sang kho khác)
 
 ### 7) n8n webhook *(tùy chọn — tự động hóa an toàn)*
 
@@ -163,9 +173,17 @@ SUPABASE_STORAGE_BUCKET=documents
 VITE_SUPABASE_URL=https://xxxx.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
 
-# -------- Google Drive (tùy chọn) --------
+# -------- Cloudflare R2 (upload tay) --------
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET=van-ban-goc
+R2_PUBLIC_BASE_URL=https://pub-xxxxxxxx.r2.dev
+
+# -------- Google Drive (file có sẵn — dán link) --------
 GOOGLE_SERVICE_ACCOUNT_JSON=C:/secrets/rag-drive-sa.json
 GOOGLE_DRIVE_FOLDER_ID=1abcYourFolderId
+DRIVE_MIRROR_TO_SUPABASE=false
 
 # -------- n8n (tùy chọn) --------
 N8N_WEBHOOK_SECRET=change-me-to-a-long-random-string
@@ -311,22 +329,23 @@ npm run dev:client
 
 ## 📤 Luồng Admin Upload (tóm tắt)
 
-1. Đăng nhập `/quantri` → kéo thả PDF
+1. Đăng nhập `/quantri` → kéo thả file
 2. `POST /api/upload` (multipart + SSE progress)
-3. PDF → **Supabase Storage** (`documents/`)
+3. Bản gốc → **Cloudflare R2** (không dùng Supabase Storage làm kho chính)
 4. LLM extract metadata → chunk → **Pinecone**
-5. Ghi dòng vào bảng `documents`
-6. Chat dùng `link_goc` = URL Storage công khai để trích dẫn
+5. Ghi dòng vào bảng `documents` (`storage_url` = URL R2 công khai)
+6. Chat / thư viện tải về từ `storage_url` (R2) hoặc `drive_web_view_link` (Drive)
 
-### Google Drive / n8n (song song, không bắt buộc)
+### Google Drive / n8n (file đã có sẵn)
+
+Dán link Drive ở tab **Link / Drive**. Hệ thống đọc file rồi đưa vào vector; **không copy sang R2**. Trích dẫn và nút Đọc dùng link Drive.
 
 | Cách | Endpoint |
 |---|---|
+| Admin dán link | `POST /api/upload/url` `{ "url": "https://drive.google.com/..." }` |
 | Admin liệt kê / sync folder | `GET /api/drive/list`, `POST /api/drive/sync` |
 | Số hóa 1 file Drive | `POST /api/drive/ingest` `{ "fileId" }` |
 | n8n tự động | `POST /api/webhooks/n8n` + `X-N8N-Secret` |
-
-PDF từ Drive có thể mirror lên Supabase Storage; citation ưu tiên URL Storage (hoặc link Drive nếu chưa có Supabase).
 
 ---
 
@@ -375,9 +394,10 @@ PDF từ Drive có thể mirror lên Supabase Storage; citation ưu tiên URL St
 | Hiện tượng | Cách xử lý |
 |---|---|
 | `supabase: false` trên `/api/health` | Kiểm tra `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` |
-| `googleDrive: false` | JSON service account + `GOOGLE_DRIVE_FOLDER_ID`; đã share folder cho SA chưa |
+| `r2: false` trên `/api/health` | Thiếu `R2_*` trên Vercel / `.env` |
+| `googleDrive: false` | JSON service account; share file/folder cho SA hoặc “Anyone with the link” |
 | n8n `401 Unauthorized` | Sai / thiếu header `X-N8N-Secret` so với `N8N_WEBHOOK_SECRET` |
-| Upload lỗi Storage | Chạy SQL tạo bucket `documents`; bucket phải **public** để lấy URL |
+| Upload không có nút Đọc | R2 chưa bật Public Development URL / thiếu `R2_PUBLIC_BASE_URL` |
 | Chat demo / không retrieve | Thiếu Pinecone/LLM key hoặc chưa ingest PDF |
 | CORS / API fail từ Vite | Backend phải chạy **port 5000**; Vite proxy dùng `127.0.0.1:5000` (không dùng `localhost` trên Windows) |
 | Server start xong rồi mất / không vào được | Port bị chiếm: `cd server && npm run kill:5000` rồi `npm run start`. Giữ cửa sổ terminal mở. Mở thử `http://127.0.0.1:5000/api/health` |

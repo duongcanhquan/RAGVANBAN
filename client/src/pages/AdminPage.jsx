@@ -43,6 +43,7 @@ export default function AdminPage() {
     configured: false,
     folderId: null,
     n8n: false,
+    r2: false,
   })
   const [driveFiles, setDriveFiles] = useState([])
   const [ingestTab, setIngestTab] = useState('file')
@@ -110,6 +111,7 @@ export default function AdminPage() {
         configured: Boolean(d.configured),
         folderId: d.folderId || null,
         n8n: Boolean(h.n8nWebhook),
+        r2: Boolean(h.r2),
       })
     } catch (e) {
       console.warn(e)
@@ -463,7 +465,7 @@ export default function AdminPage() {
         <section className="glass-panel mb-6 rounded-3xl p-5 sm:p-8">
           <h2 className="m-0 mb-1 text-lg font-semibold text-white">Nạp dữ liệu & Số hóa</h2>
           <p className="m-0 mb-4 text-sm text-white/70">
-            PDF · Word · Drive link · Website · Text dán
+            Upload tay lưu R2 · Link Drive giữ nguyên · Tải về từ R2 hoặc Drive
           </p>
 
           <div className="mb-4 flex flex-wrap gap-1 rounded-full border border-white/15 bg-white/5 p-1">
@@ -547,7 +549,9 @@ export default function AdminPage() {
                 <p className="m-0 mt-1 text-sm text-white/50">
                   {file
                     ? `${(file.size / 1024 / 1024).toFixed(2)} MB`
-                    : 'PDF, DOC/DOCX, PPTX, PNG/JPG… · tối đa ~40MB'}
+                    : drive.r2
+                      ? 'Bản gốc lưu Cloudflare R2 · PDF, Word, PPTX, ảnh…'
+                      : 'Bản gốc lưu R2 khi đã cấu hình · PDF, Word, PPTX, ảnh…'}
                 </p>
                 <input
                   ref={inputRef}
@@ -613,8 +617,9 @@ export default function AdminPage() {
           {ingestTab === 'url' && (
             <div className="space-y-3">
               <p className="m-0 text-xs text-white/50">
-                Dán link Google Drive (file hoặc thư mục PDF) — file gốc ở lại Drive, hệ thống chỉ đọc để
-                đưa vào chat. Có thể dán nhiều link, mỗi dòng một cái. Trang .gov.vn vẫn dùng được.
+                Dán link Google Drive (file hoặc thư mục) — hệ thống đọc rồi đưa vào vector, file gốc
+                không copy sang R2. Tải về sau này dùng link Drive. Có thể dán nhiều dòng. Trang .gov.vn
+                vẫn dùng được.
               </p>
               <textarea
                 rows={4}
@@ -649,6 +654,13 @@ export default function AdminPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2 text-xs">
+              <span
+                className={`rounded-full px-3 py-1 ${
+                  drive.r2 ? 'bg-emerald-400/20 text-emerald-200' : 'bg-white/10 text-white/50'
+                }`}
+              >
+                R2: {drive.r2 ? 'ON' : 'OFF'}
+              </span>
               <span
                 className={`rounded-full px-3 py-1 ${
                   drive.configured
@@ -764,6 +776,16 @@ export default function AdminPage() {
               {result.metadata?.loai_van_ban} {result.metadata?.so_hieu} · {result.chunks} chunks ·
               upsert {result.upserted}
             </p>
+            {(result.publicUrl || result.downloadUrl || result.storageUrl) && (
+              <a
+                href={result.publicUrl || result.downloadUrl || result.storageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-block text-xs text-[var(--hcc-gold-bright)] underline"
+              >
+                Mở file gốc (R2 / Drive)
+              </a>
+            )}
           </div>
         )}
       </div>

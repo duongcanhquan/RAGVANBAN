@@ -14,7 +14,8 @@
 const express = require('express');
 const { ingestDriveFile, syncDriveFolder } = require('../services/driveIngest');
 const { ingestSingleFile } = require('../services/ingestFile');
-const { uploadPdfToStorage, isConfigured: isSupabaseConfigured } = require('../services/supabase');
+const { storeUploadedOriginal } = require('../services/originalStore');
+const { parseDriveResource } = require('../services/googleDrive');
 
 const router = express.Router();
 
@@ -53,6 +54,21 @@ router.post('/n8n', async (req, res) => {
 
     if (req.body?.fileUrl) {
       const url = String(req.body.fileUrl);
+      const driveParsed = parseDriveResource(url);
+      if (driveParsed?.type === 'folder') {
+        const result = await syncDriveFolder({
+          folderId: driveParsed.id,
+          limit: Number(req.body?.limit) || 10,
+        });
+        res.json({ ok: true, action: 'ingest_drive_folder', ...result });
+        return;
+      }
+      if (driveParsed?.id) {
+        const result = await ingestDriveFile(driveParsed.id);
+        res.json({ ok: true, action: 'ingest_drive', ...result });
+        return;
+      }
+
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`Không tải được fileUrl: HTTP ${resp.status}`);
       const ab = await resp.arrayBuffer();
@@ -61,18 +77,21 @@ router.post('/n8n', async (req, res) => {
 
       let publicUrl = url;
       let storagePath = '';
-      if (isSupabaseConfigured()) {
-        const stored = await uploadPdfToStorage(buffer, fileName);
-        if (stored.ok) {
-          publicUrl = stored.publicUrl || publicUrl;
-          storagePath = stored.path || '';
-        }
+      const stored = await storeUploadedOriginal(
+        buffer,
+        fileName,
+        resp.headers.get('content-type') || 'application/pdf'
+      );
+      if (stored.ok) {
+        publicUrl = stored.publicUrl || publicUrl;
+        storagePath = stored.path || '';
       }
 
       const result = await ingestSingleFile(buffer, {
         fileName,
         publicUrl,
         storagePath,
+        source: stored.source || 'upload',
       });
       res.json({ ok: true, action: 'ingest_url', ...result });
       return;

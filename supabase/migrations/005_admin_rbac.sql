@@ -1,6 +1,8 @@
 -- ============================================================
 -- Quản trị /quantri — hồ sơ cán bộ + quyền theo chuyên mục
--- Chạy SAU 004_doc_categories.sql
+-- KHÔNG chạy file này trước. Cần bảng public.doc_categories.
+-- Cách đúng: chạy 001 → 002 → 003 → 004 → 005
+-- hoặc dán một lần: supabase/setup-all.sql
 -- ============================================================
 
 create table if not exists public.admin_profiles (

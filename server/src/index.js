@@ -22,6 +22,7 @@ const { requireAdmin } = require('./middleware/requireAdmin');
 const { hasLiveKeys, listAvailableProviders } = require('./services/clients');
 const { isConfigured: isSupabaseConfigured } = require('./services/supabase');
 const { isDriveConfigured } = require('./services/googleDrive');
+const { isR2Configured } = require('./services/r2');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
@@ -73,6 +74,7 @@ app.get('/api/health', (_req, res) => {
     service: 'rag-van-ban-hanh-chinh',
     ragReady: hasLiveKeys(),
     supabase: isSupabaseConfigured(),
+    r2: isR2Configured(),
     googleDrive: isDriveConfigured(),
     n8nWebhook: Boolean(
       process.env.N8N_WEBHOOK_SECRET && !String(process.env.N8N_WEBHOOK_SECRET).includes('your-')

@@ -8,7 +8,7 @@
 const express = require('express');
 const multer = require('multer');
 const { ingestSingleFile, ingestTextContent } = require('../services/ingestFile');
-const { uploadPdfToStorage, isConfigured } = require('../services/supabase');
+const { storeUploadedOriginal } = require('../services/originalStore');
 const {
   isAllowedUpload,
   guessContentType,
@@ -107,41 +107,55 @@ router.post('/', (req, res) => {
         message: `Đã nhận ${fileName} (${Math.round(req.file.size / 1024)} KB)`,
       });
 
-      let publicUrl = '';
-      let storagePath = '';
-
-      if (isConfigured()) {
-        progress({
-          stage: 'storage',
-          percent: 12,
-          message: 'Đang lưu bản gốc lên Storage…',
-        });
-        const stored = await uploadPdfToStorage(req.file.buffer, fileName, mimeType);
-        if (!stored.ok && !stored.skipped) {
-          throw new Error(stored.error || 'Upload Storage thất bại');
-        }
-        if (stored.ok) {
-          publicUrl = stored.publicUrl;
-          storagePath = stored.path;
-        }
-      }
-
       const categoryId = String(req.body?.categoryId || '').trim() || null;
       assertCanUseCategory(req.admin, categoryId);
+
+      let publicUrl = '';
+      let storagePath = '';
+      let source = 'upload';
+
+      progress({
+        stage: 'storage',
+        percent: 12,
+        message: 'Đang lưu bản gốc (R2 ưu tiên)…',
+      });
+      const stored = await storeUploadedOriginal(req.file.buffer, fileName, mimeType);
+      if (!stored.ok && !stored.skipped) {
+        throw new Error(stored.error || 'Lưu file gốc thất bại');
+      }
+      if (stored.ok) {
+        publicUrl = stored.publicUrl;
+        storagePath = stored.path;
+        source = stored.source || 'r2';
+        progress({
+          stage: 'storage',
+          percent: 18,
+          message:
+            stored.backend === 'r2'
+              ? 'Đã lưu bản gốc trên Cloudflare R2'
+              : 'Đã lưu bản gốc trên Supabase Storage',
+        });
+      } else {
+        progress({
+          stage: 'storage',
+          percent: 18,
+          message: 'Chưa cấu hình R2 — số hóa không kèm file tải về',
+        });
+      }
 
       const result = await ingestSingleFile(req.file.buffer, {
         fileName,
         mimeType,
         publicUrl,
         storagePath,
-        source: 'upload',
+        source,
         categoryId,
         onProgress: (p) => {
           if (!closed()) progress(p);
         },
       });
 
-      done({ ...result, publicUrl, storagePath });
+      done({ ...result, publicUrl, storagePath, storageBackend: stored.backend || null });
     });
   });
 });

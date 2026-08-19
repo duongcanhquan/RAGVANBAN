@@ -1,6 +1,6 @@
 /**
  * Ingest file từ Google Drive — file gốc ở lại Drive, chỉ đưa text vào Pinecone.
- * Tải về = link Drive. Không copy sang Supabase trừ khi DRIVE_MIRROR_TO_SUPABASE=true.
+ * Tải về = link Drive. Không copy sang R2. Không copy sang Supabase trừ khi DRIVE_MIRROR_TO_SUPABASE=true.
  */
 const { downloadPdf, listPdfInFolder, isDriveConfigured, hasDriveCredentials } = require('./googleDrive');
 const { ingestSingleFile } = require('./ingestFile');
