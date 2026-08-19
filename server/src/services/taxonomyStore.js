@@ -213,7 +213,13 @@ async function listCategories() {
   const local = ensureLocal();
   if (!local.categories?.length) {
     local.categories = flattenSeed(DEFAULT_TREE);
-    writeLocal(local);
+    // Ở môi trường Vercel/AWS mà không thể ghi file, vẫn cần trả về cây mặc định
+    // để hệ thống không bị crash khi Supabase chưa cấu hình.
+    try {
+      writeLocal(local);
+    } catch {
+      /* ignore: read-only filesystem */
+    }
   }
   return rememberList({
     ok: true,
