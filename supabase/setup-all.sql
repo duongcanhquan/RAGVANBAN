@@ -196,3 +196,16 @@ alter table public.documents add column if not exists sort_order integer;
 
 create index if not exists documents_category_sort_idx
   on public.documents (category_id, sort_order, created_at desc);
+
+-- ---------- 008: display_name / mo_ta ----------
+alter table public.documents add column if not exists display_name text;
+alter table public.documents add column if not exists mo_ta text;
+
+-- ---------- 009: chống trùng nội dung file ----------
+alter table public.documents add column if not exists content_sha256 text;
+alter table public.documents add column if not exists byte_size bigint;
+
+create unique index if not exists documents_content_sha256_uidx
+  on public.documents (content_sha256)
+  where content_sha256 is not null and length(content_sha256) = 64;
+

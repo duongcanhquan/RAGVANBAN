@@ -8,10 +8,10 @@
 const express = require('express');
 const multer = require('multer');
 const { ingestSingleFile, ingestTextContent } = require('../services/ingestFile');
+const { updateDocument, getDocumentByFileName, getDocumentByContentHash } = require('../services/supabase');
 const { storeUploadedOriginal } = require('../services/originalStore');
-const { updateDocument } = require('../services/supabase');
 const { listCategories, pathForCategory } = require('../services/taxonomyStore');
-const { moveR2Object } = require('../services/r2');
+const { moveR2Object, deleteFromR2 } = require('../services/r2');
 const {
   isAllowedUpload,
   guessContentType,
@@ -26,6 +26,11 @@ const { getFlags } = require('../services/integrations');
 const { listenSseAbort } = require('../services/sseAbort');
 const { publicErrorMessage } = require('../services/publicError');
 const { assertOriginalStored } = require('../services/documentCatalog');
+const {
+  fileFingerprint,
+  decideDuplicate,
+  duplicateMessage,
+} = require('../services/documentDedup');
 
 const router = express.Router();
 
@@ -146,6 +151,43 @@ router.post('/', async (req, res) => {
       const description = String(req.body?.description || req.body?.moTa || '').trim();
       assertCanUseCategory(req.admin, categoryId);
 
+      const fp = fileFingerprint(req.file.buffer);
+      const [byHash, byName] = await Promise.all([
+        getDocumentByContentHash(fp.sha256),
+        getDocumentByFileName(fileName),
+      ]);
+      const decision = decideDuplicate(fp, {
+        byHash: byHash.item || null,
+        byName: byName.item || null,
+      });
+
+      if (decision.action === 'reuse' && decision.document) {
+        const doc = decision.document;
+        progress({
+          stage: 'dedup',
+          percent: 100,
+          message: duplicateMessage(doc),
+        });
+        done({
+          duplicate: true,
+          skipped: true,
+          id: doc.id,
+          fileName: doc.file_name,
+          displayName: doc.display_name || doc.file_name,
+          moTa: doc.mo_ta || '',
+          metadata: doc.metadata || {},
+          chunks: doc.chunk_count || 0,
+          storagePath: doc.storage_path || '',
+          publicUrl: doc.storage_url || doc.drive_web_view_link || '',
+          storageUrl: doc.storage_url || '',
+          categoryId: doc.category_id || '',
+          folderPath: doc.folder_path || '',
+          source: doc.source || 'upload',
+          message: duplicateMessage(doc),
+        });
+        return;
+      }
+
       let publicUrl = '';
       let storagePath = '';
       let source = 'upload';
@@ -164,6 +206,7 @@ router.post('/', async (req, res) => {
       });
       const stored = await storeUploadedOriginal(req.file.buffer, fileName, mimeType, {
         folderPath,
+        contentHash: fp.sha256,
       });
       assertOriginalStored(stored);
       publicUrl = stored.publicUrl;
@@ -172,12 +215,14 @@ router.post('/', async (req, res) => {
       progress({
         stage: 'storage',
         percent: 18,
-        message:
-          stored.backend === 'r2'
+        message: stored.reused
+          ? 'R2 đã có object cùng nội dung — không upload thêm'
+          : stored.backend === 'r2'
             ? 'Đã lưu bản gốc trên Cloudflare R2'
             : 'Đã lưu bản gốc trên Supabase Storage',
       });
 
+      const oldPath = decision.document?.storage_path || '';
       const result = await ingestSingleFile(req.file.buffer, {
         fileName,
         mimeType,
@@ -187,10 +232,17 @@ router.post('/', async (req, res) => {
         categoryId,
         displayName: displayName || undefined,
         description: description || undefined,
+        contentSha256: fp.sha256,
+        byteSize: fp.byteSize,
+        replaceDocumentId: decision.action === 'replace' ? decision.document?.id : undefined,
         onProgress: (p) => {
           if (!closed()) progress(p);
         },
       });
+
+      if (decision.action === 'replace' && oldPath && storagePath && oldPath !== storagePath) {
+        await deleteFromR2(oldPath);
+      }
 
       if (stored.ok && stored.path && result.folderPath && result.folderPath !== folderPath) {
         const moved = await moveR2Object(stored.path, result.folderPath);
@@ -213,6 +265,7 @@ router.post('/', async (req, res) => {
         storageBackend: stored.backend || null,
         catalogId: result.id,
         stored: true,
+        r2Reused: Boolean(stored.reused),
       });
     });
   });

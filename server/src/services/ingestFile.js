@@ -178,6 +178,10 @@ async function ingestTextContent(text, options = {}) {
     metadata.category_id = categoryId;
     metadata.folder_path = folderPath;
     metadata.chuyen_mon = cat?.name || metadata.chuyen_mon || null;
+    if (options.contentSha256) {
+      metadata.content_sha256 = options.contentSha256;
+      metadata.byte_size = options.byteSize != null ? Number(options.byteSize) : undefined;
+    }
 
     const catalogPayload = {
       fileName,
@@ -196,6 +200,8 @@ async function ingestTextContent(text, options = {}) {
       categoryId,
       folderPath,
       chuyenMon: cat?.name || null,
+      contentSha256: options.contentSha256 || null,
+      byteSize: options.byteSize,
       metadata,
     };
 
@@ -211,6 +217,8 @@ async function ingestTextContent(text, options = {}) {
         trang_thai: metadata.trang_thai,
         storage_path: storagePath || undefined,
         storage_url: publicUrl || metadata.link_goc || undefined,
+        content_sha256: options.contentSha256 || undefined,
+        byte_size: options.byteSize,
         metadata,
         chunk_count: chunks.length,
       });

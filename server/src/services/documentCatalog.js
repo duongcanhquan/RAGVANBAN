@@ -36,11 +36,13 @@ function hydrateDocument(d = {}) {
     meta.url_file_goc ||
     null;
   const so_hieu = d.so_hieu || meta.so_hieu || null;
+  const content_sha256 = d.content_sha256 || meta.content_sha256 || null;
   return {
     ...d,
     display_name,
     mo_ta,
     storage_url,
+    content_sha256,
     label: [so_hieu, display_name].filter(Boolean).join(' · ') || display_name,
   };
 }

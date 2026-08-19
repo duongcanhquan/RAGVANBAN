@@ -76,8 +76,15 @@ function r2FolderPrefix(folderPath) {
   return ['van-ban', ...(parts.length ? parts : ['chua-gan'])].join('/');
 }
 
-function objectKeyForFile(originalName, { folderPath } = {}) {
+function objectKeyForFile(originalName, { folderPath, contentHash } = {}) {
   const safe = String(originalName || 'document.bin').replace(/[^a-zA-Z0-9._\-\u00C0-\u024F]/g, '_');
+  const hash = String(contentHash || '')
+    .replace(/[^a-f0-9]/gi, '')
+    .toLowerCase()
+    .slice(0, 32);
+  if (hash) {
+    return `${r2FolderPrefix(folderPath)}/by-hash/${hash}-${safe}`;
+  }
   const day = new Date().toISOString().slice(0, 10);
   return `${r2FolderPrefix(folderPath)}/${day}/${Date.now()}-${safe}`;
 }
@@ -112,6 +119,28 @@ function formatR2Error(err) {
   return `R2 upload thất bại: ${msg}`;
 }
 
+async function headR2Object(objectKey) {
+  const key = String(objectKey || '').replace(/^\//, '');
+  if (!hasR2Credentials() || !key) return { ok: false, skipped: true };
+  const { HeadObjectCommand } = require('@aws-sdk/client-s3');
+  const client = s3Client();
+  try {
+    await client.send(
+      new HeadObjectCommand({
+        Bucket: envTrim('R2_BUCKET'),
+        Key: key,
+      })
+    );
+    return { ok: true, path: key, publicUrl: publicUrlForKey(key) };
+  } catch (err) {
+    const status = Number(err?.$metadata?.httpStatusCode || err?.statusCode || 0);
+    if (status === 404 || /NotFound|NoSuchKey/i.test(String(err?.name || err?.Code || err?.message || ''))) {
+      return { ok: false, missing: true };
+    }
+    return { ok: false, error: formatR2Error(err) };
+  }
+}
+
 async function uploadToR2(buffer, originalName, contentType = 'application/octet-stream', opts = {}) {
   if (!hasR2Credentials()) {
     return { ok: false, skipped: true, reason: 'R2 chưa cấu hình' };
@@ -123,9 +152,24 @@ async function uploadToR2(buffer, originalName, contentType = 'application/octet
     };
   }
 
+  const { sha256Buffer } = require('./documentDedup');
+  const contentHash = opts.contentHash || sha256Buffer(buffer);
+  const key = objectKeyForFile(originalName, { folderPath: opts.folderPath, contentHash });
+  const existed = await headR2Object(key);
+  if (existed.ok) {
+    return {
+      ok: true,
+      backend: 'r2',
+      path: key,
+      publicUrl: existed.publicUrl || publicUrlForKey(key),
+      bucket: envTrim('R2_BUCKET'),
+      reused: true,
+      contentHash,
+    };
+  }
+
   const { PutObjectCommand } = require('@aws-sdk/client-s3');
   const client = s3Client();
-  const key = objectKeyForFile(originalName, { folderPath: opts.folderPath });
   try {
     await client.send(
       new PutObjectCommand({
@@ -133,6 +177,7 @@ async function uploadToR2(buffer, originalName, contentType = 'application/octet
         Key: key,
         Body: buffer,
         ContentType: contentType || 'application/octet-stream',
+        Metadata: { sha256: contentHash },
       })
     );
   } catch (err) {
@@ -145,6 +190,8 @@ async function uploadToR2(buffer, originalName, contentType = 'application/octet
     path: key,
     publicUrl: publicUrlForKey(key),
     bucket: envTrim('R2_BUCKET'),
+    reused: false,
+    contentHash,
   };
 }
 
@@ -153,6 +200,9 @@ function relocateKey(oldKey, folderPath) {
   const parts = from.split('/').filter(Boolean);
   const filePart = parts[parts.length - 1] || 'file.bin';
   const maybeDate = parts[parts.length - 2] || '';
+  if (maybeDate === 'by-hash') {
+    return `${r2FolderPrefix(folderPath)}/by-hash/${filePart}`;
+  }
   const day = /^\d{4}-\d{2}-\d{2}$/.test(maybeDate)
     ? maybeDate
     : new Date().toISOString().slice(0, 10);
@@ -282,6 +332,7 @@ module.exports = {
   r2FolderPrefix,
   relocateKey,
   uploadToR2,
+  headR2Object,
   moveR2Object,
   deleteFromR2,
   downloadFromR2,

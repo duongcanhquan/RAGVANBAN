@@ -693,7 +693,8 @@ export default function AdminPage() {
           <section className="glass-panel rounded-3xl p-4 sm:p-5">
             <h2 className="m-0 mb-1 text-base font-semibold text-white">Tải tài liệu</h2>
             <p className="m-0 mb-3 text-xs text-white/65">
-              File trên {formatBytes(httpUploadMaxBytes)}: đưa Drive rồi dán link.
+              File trên {formatBytes(httpUploadMaxBytes)}: đưa Drive rồi dán link. File trùng nội dung
+              không lưu thêm R2.
             </p>
 
             <div className="mb-3 flex flex-wrap gap-1 rounded-full border border-white/15 bg-white/5 p-0.5">
@@ -992,12 +993,24 @@ export default function AdminPage() {
             ) : null}
 
             {result ? (
-              <div className="mt-3 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
+              <div
+                className={`mt-3 rounded-2xl border p-4 text-sm ${
+                  result.duplicate
+                    ? 'border-amber-400/30 bg-amber-400/10 text-amber-50'
+                    : 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100'
+                }`}
+              >
                 <p className="m-0 font-medium">
-                  Số hóa thành công: {result.displayName || result.fileName}
+                  {result.duplicate
+                    ? result.message || 'File trùng — không lưu thêm R2/vector'
+                    : `Số hóa thành công: ${result.displayName || result.fileName}`}
                   {result.count > 1 ? ` · ${result.count} link` : ''}
                 </p>
-                {result.skipped || result.processed ? (
+                {result.duplicate ? (
+                  <p className="m-0 mt-1 text-xs text-amber-50/80">
+                    Dùng «Số hóa lại» trên danh mục nếu cần OCR/vector lại — không tốn thêm R2.
+                  </p>
+                ) : result.skipped || result.processed ? (
                   <p className="m-0 mt-1 text-xs text-emerald-100/75">
                     File mới xử lý {result.processed || 0}
                     {result.skipped ? ` · đã có trong kho ${result.skipped}` : ''}

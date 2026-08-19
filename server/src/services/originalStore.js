@@ -10,6 +10,7 @@ async function storeUploadedOriginal(buffer, fileName, contentType, opts = {}) {
   if (hasR2Credentials()) {
     const stored = await uploadToR2(buffer, fileName, contentType, {
       folderPath: opts.folderPath || '',
+      contentHash: opts.contentHash || '',
     });
     if (stored.ok) return { ...stored, source: 'r2', backend: 'r2' };
     console.warn('[originalStore] R2 thất bại, thử Supabase:', stored.error || stored.reason);

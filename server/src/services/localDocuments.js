@@ -91,6 +91,8 @@ function upsertLocalDocument(row) {
       chuyen_mon: row.chuyenMon || null,
       folder_path: row.folderPath || null,
       metadata: row.metadata || {},
+      content_sha256: row.contentSha256 || row.metadata?.content_sha256 || null,
+      byte_size: row.byteSize != null ? Number(row.byteSize) : null,
       created_at: row.created_at || new Date().toISOString(),
     };
     const idx = data.items.findIndex((d) => d.id === id);
@@ -153,6 +155,18 @@ function getLocalDocument(id) {
   return ensure().items.find((d) => d.id === id) || null;
 }
 
+function getLocalDocumentByContentHash(hash) {
+  const sha = String(hash || '')
+    .replace(/[^a-f0-9]/gi, '')
+    .toLowerCase();
+  if (!sha) return null;
+  return (
+    ensure().items.find(
+      (d) => String(d.content_sha256 || d.metadata?.content_sha256 || '').toLowerCase() === sha
+    ) || null
+  );
+}
+
 function getLocalDocumentByFileName(fileName) {
   const name = String(fileName || '').trim();
   if (!name) return null;
@@ -178,6 +192,8 @@ function updateLocalDocument(id, patch) {
       chuyen_mon: patch.chuyen_mon !== undefined ? patch.chuyen_mon : cur.chuyen_mon,
       storage_path: patch.storage_path !== undefined ? patch.storage_path : cur.storage_path,
       storage_url: patch.storage_url !== undefined ? patch.storage_url : cur.storage_url,
+      content_sha256: patch.content_sha256 !== undefined ? patch.content_sha256 : cur.content_sha256,
+      byte_size: patch.byte_size !== undefined ? patch.byte_size : cur.byte_size,
       chunk_count: patch.chunk_count !== undefined ? Number(patch.chunk_count) || 0 : cur.chunk_count,
       metadata: {
         ...(cur.metadata || {}),
@@ -202,6 +218,7 @@ module.exports = {
   deleteLocalDocument,
   getLocalDocument,
   getLocalDocumentByFileName,
+  getLocalDocumentByContentHash,
   updateLocalDocument,
   isServerlessReadOnly,
   LOCAL_PATH,

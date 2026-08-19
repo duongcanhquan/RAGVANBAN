@@ -259,6 +259,8 @@ async function insertDocument(row) {
       category_id: row.categoryId || null,
       folder_path: row.folderPath || null,
       chuyen_mon: row.chuyenMon || null,
+      content_sha256: row.contentSha256 || null,
+      byte_size: row.byteSize != null ? Number(row.byteSize) : null,
     },
   };
 
@@ -270,10 +272,16 @@ async function insertDocument(row) {
     category_id: row.categoryId || null,
     chuyen_mon: row.chuyenMon || null,
     folder_path: row.folderPath || null,
+    content_sha256: row.contentSha256 || row.metadata?.content_sha256 || null,
+    byte_size: row.byteSize != null ? Number(row.byteSize) : null,
   };
 
   let { data, error } = await sb.from('documents').insert(withCats).select('id').single();
 
+  if (error && /content_sha256|byte_size/i.test(error.message || '')) {
+    const { content_sha256: _h, byte_size: _b, ...noHash } = withCats;
+    ({ data, error } = await sb.from('documents').insert(noHash).select('id').single());
+  }
   if (error && /display_name|mo_ta/i.test(error.message || '')) {
     const { display_name: _n, mo_ta: _m, ...noDisplay } = withCats;
     ({ data, error } = await sb.from('documents').insert(noDisplay).select('id').single());
@@ -379,6 +387,29 @@ async function listIngestedDriveFileIds() {
   return [...ids];
 }
 
+async function getDocumentByContentHash(hash) {
+  const sha = String(hash || '')
+    .replace(/[^a-f0-9]/gi, '')
+    .toLowerCase();
+  if (!sha) return { ok: false };
+  const sb = getSupabase();
+  if (sb) {
+    let { data, error } = await sb.from('documents').select('*').eq('content_sha256', sha).limit(1).maybeSingle();
+    if (error && /content_sha256/i.test(error.message || '')) {
+      ({ data, error } = await sb
+        .from('documents')
+        .select('*')
+        .filter('metadata->>content_sha256', 'eq', sha)
+        .limit(1)
+        .maybeSingle());
+    }
+    if (!error && data) return { ok: true, source: 'supabase', id: data.id, item: hydrateDocument(data) };
+  }
+  const local = require('./localDocuments').getLocalDocumentByContentHash(sha);
+  if (local) return { ok: true, source: 'local', id: local.id, item: local };
+  return { ok: false };
+}
+
 async function getDocumentByFileName(fileName) {
   const name = String(fileName || '').trim();
   if (!name) return { ok: false };
@@ -417,6 +448,8 @@ async function updateDocument(id, patch) {
   if (patch.chuyen_mon !== undefined) payload.chuyen_mon = patch.chuyen_mon || null;
   if (patch.storage_path !== undefined) payload.storage_path = patch.storage_path || null;
   if (patch.storage_url !== undefined) payload.storage_url = patch.storage_url || null;
+  if (patch.content_sha256 !== undefined) payload.content_sha256 = patch.content_sha256 || null;
+  if (patch.byte_size !== undefined) payload.byte_size = patch.byte_size != null ? Number(patch.byte_size) : null;
   if (patch.chunk_count !== undefined) payload.chunk_count = Number(patch.chunk_count) || 0;
   if (patch.metadata !== undefined) payload.metadata = patch.metadata;
   if (patch.sort_order !== undefined && patch.sort_order !== null && patch.sort_order !== '') {
@@ -433,6 +466,17 @@ async function updateDocument(id, patch) {
         ...(payload.metadata || {}),
         ...(n !== undefined ? { display_name: n } : {}),
         ...(m !== undefined ? { mo_ta: m } : {}),
+      };
+      ({ data, error } = await sb.from('documents').update(rest).eq('id', id).select('*').maybeSingle());
+    }
+    if (error && /content_sha256|byte_size/i.test(error.message || '')) {
+      const { content_sha256: h, byte_size: sz, ...rest } = payload;
+      const cur = await sb.from('documents').select('metadata').eq('id', id).maybeSingle();
+      rest.metadata = {
+        ...(cur.data?.metadata || {}),
+        ...(payload.metadata || {}),
+        ...(h !== undefined ? { content_sha256: h } : {}),
+        ...(sz !== undefined ? { byte_size: sz } : {}),
       };
       ({ data, error } = await sb.from('documents').update(rest).eq('id', id).select('*').maybeSingle());
     }
@@ -486,6 +530,7 @@ module.exports = {
   updateDocumentCategory,
   getDocument,
   getDocumentByFileName,
+  getDocumentByContentHash,
   listIngestedDriveFileIds,
   updateDocument,
   deleteDocumentRow,

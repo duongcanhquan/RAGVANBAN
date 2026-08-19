@@ -49,6 +49,35 @@ async function ingestDriveFile(fileId, options = {}) {
 
   notify('drive', 5, `Đang đọc file Drive: ${fileId}`);
   const file = await downloadPdf(fileId);
+  const { fileFingerprint, decideDuplicate, duplicateMessage } = require('./documentDedup');
+  const { getDocumentByContentHash, getDocumentByFileName } = require('./supabase');
+  const fp = fileFingerprint(file.buffer);
+  const [byHash, byName] = await Promise.all([
+    getDocumentByContentHash(fp.sha256),
+    getDocumentByFileName(file.fileName),
+  ]);
+  const decision = decideDuplicate(fp, {
+    byHash: byHash.item || null,
+    byName: byName.item || null,
+  });
+  if (decision.action === 'reuse' && decision.document) {
+    notify('dedup', 100, duplicateMessage(decision.document));
+    const doc = decision.document;
+    return {
+      duplicate: true,
+      skipped: true,
+      id: doc.id,
+      fileName: doc.file_name,
+      displayName: doc.display_name || doc.file_name,
+      chunks: doc.chunk_count || 0,
+      source: 'google_drive',
+      driveFileId: file.driveFileId,
+      driveWebViewLink: file.driveWebViewLink,
+      storageUrl: doc.storage_url || file.driveWebViewLink,
+      downloadUrl: file.driveWebViewLink,
+      message: duplicateMessage(doc),
+    };
+  }
 
   let publicUrl = file.driveWebViewLink;
   let storagePath = '';
@@ -73,6 +102,9 @@ async function ingestDriveFile(fileId, options = {}) {
     categoryId,
     displayName: options.displayName,
     description: options.description,
+    contentSha256: fp.sha256,
+    byteSize: fp.byteSize,
+    replaceDocumentId: decision.action === 'replace' ? decision.document?.id : undefined,
     onProgress,
   });
 
