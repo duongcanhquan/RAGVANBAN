@@ -263,11 +263,6 @@ export default function QuantriIntegrations() {
 
         {driveTab === 'sa' ? (
           <>
-            <p className="m-0 mb-4 text-sm text-white/65">
-              Một tài khoản máy (service account) dùng chung cho cả trường. Mỗi cán bộ tạo thư mục Drive của
-              phần mình, chia sẻ Viewer cho email bên dưới, rồi dán link thư mục + chọn chuyên mục.
-            </p>
-
             {isSuper ? (
               <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
                 <span className="text-sm">Bật đọc Drive (file riêng / thư mục đã share)</span>
