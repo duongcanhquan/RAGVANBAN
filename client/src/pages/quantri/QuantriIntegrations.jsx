@@ -347,6 +347,12 @@ export default function QuantriIntegrations() {
                 placeholder="https://drive.google.com/drive/folders/...."
                 className="rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm sm:col-span-2"
               />
+              <input
+                value={draft.label}
+                onChange={(e) => setDraft({ ...draft, label: e.target.value })}
+                placeholder="Tên gợi nhớ (tuỳ chọn) — vd: Phòng Tài chính"
+                className="rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm"
+              />
               <select
                 value={draft.categoryId}
                 onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}
