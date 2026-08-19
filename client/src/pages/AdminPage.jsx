@@ -275,7 +275,7 @@ export default function AdminPage() {
     setUploading(true)
     setError('')
     setResult(null)
-    setProgress({ percent: 1, message: 'Đang tải website…' })
+    setProgress({ percent: 1, message: 'Đang đọc link Drive / website…' })
     try {
       const res = await adminFetch('/api/upload/url', {
         method: 'POST',
@@ -463,14 +463,14 @@ export default function AdminPage() {
         <section className="glass-panel mb-6 rounded-3xl p-5 sm:p-8">
           <h2 className="m-0 mb-1 text-lg font-semibold text-white">Nạp dữ liệu & Số hóa</h2>
           <p className="m-0 mb-4 text-sm text-white/70">
-            PDF · Word · PowerPoint · Ảnh (OCR) · Text dán · Link website chính thống
+            PDF · Word · Drive link · Website · Text dán
           </p>
 
           <div className="mb-4 flex flex-wrap gap-1 rounded-full border border-white/15 bg-white/5 p-1">
             {[
               { id: 'file', label: 'File', Icon: UploadCloud },
               { id: 'text', label: 'Dán text', Icon: Type },
-              { id: 'url', label: 'Website', Icon: Globe },
+              { id: 'url', label: 'Link / Drive', Icon: Globe },
             ].map(({ id, label, Icon }) => (
               <button
                 key={id}
@@ -613,13 +613,15 @@ export default function AdminPage() {
           {ingestTab === 'url' && (
             <div className="space-y-3">
               <p className="m-0 text-xs text-white/50">
-                Ưu tiên trang chính thống (.gov.vn, chinhphu.vn…). Hệ thống chặn URL nội bộ vì an toàn.
+                Dán link Google Drive (file hoặc thư mục PDF) — file gốc ở lại Drive, hệ thống chỉ đọc để
+                đưa vào chat. Có thể dán nhiều link, mỗi dòng một cái. Trang .gov.vn vẫn dùng được.
               </p>
-              <input
+              <textarea
+                rows={4}
                 value={webUrl}
                 onChange={(e) => setWebUrl(e.target.value)}
-                placeholder="https://vanban.chinhphu.vn/..."
-                className="w-full rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-white/40 focus:border-[var(--hcc-gold)]"
+                placeholder="https://drive.google.com/file/d/xxxxx/view?usp=sharing"
+                className="w-full resize-y rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-white/40 focus:border-[var(--hcc-gold)]"
               />
               <button
                 type="button"
@@ -628,7 +630,7 @@ export default function AdminPage() {
                 className="btn-gold inline-flex cursor-pointer items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold disabled:opacity-40"
               >
                 <Globe className="h-4 w-4" />
-                {uploading ? 'Đang lấy & số hóa…' : 'Lấy nội dung website'}
+                {uploading ? 'Đang lấy & số hóa…' : 'Số hóa từ link Drive / web'}
               </button>
             </div>
           )}

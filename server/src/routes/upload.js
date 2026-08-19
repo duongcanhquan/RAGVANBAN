@@ -16,6 +16,8 @@ const {
 const { extractWebPage } = require('../ingestion/extractWebPage');
 const { hasLiveKeys } = require('../services/clients');
 const { assertCanUseCategory } = require('../services/adminAccess');
+const { parseDriveResource } = require('../services/googleDrive');
+const { ingestDriveFile, syncDriveFolder } = require('../services/driveIngest');
 
 const router = express.Router();
 
@@ -181,9 +183,9 @@ router.post('/text', async (req, res) => {
 });
 
 router.post('/url', async (req, res) => {
-  const url = String(req.body?.url || '').trim();
+  const raw = String(req.body?.url || '').trim();
   const categoryId = String(req.body?.categoryId || '').trim() || null;
-  if (!url) {
+  if (!raw) {
     res.status(400).json({ error: 'Thiếu url' });
     return;
   }
@@ -195,7 +197,51 @@ router.post('/url', async (req, res) => {
     return;
   }
 
+  const parts = raw.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
+  const driveParts = parts.map((p) => ({ raw: p, parsed: parseDriveResource(p) }));
+  const allDrive = driveParts.every((p) => p.parsed);
+
   await runWithSse(req, res, async ({ closed, progress, done }) => {
+    if (allDrive) {
+      const items = [];
+      for (let i = 0; i < driveParts.length; i += 1) {
+        const { raw: link, parsed } = driveParts[i];
+        progress({
+          stage: 'drive',
+          percent: Math.round((i / driveParts.length) * 90),
+          message: `Drive ${i + 1}/${driveParts.length}: ${link}`,
+        });
+        if (parsed.type === 'folder') {
+          const folderResult = await syncDriveFolder({
+            folderId: parsed.id,
+            limit: Number(req.body?.limit) || 40,
+            categoryId,
+            onProgress: (p) => {
+              if (!closed()) progress(p);
+            },
+          });
+          items.push({ type: 'folder', link, ...folderResult });
+        } else {
+          const one = await ingestDriveFile(parsed.id, {
+            categoryId,
+            onProgress: (p) => {
+              if (!closed()) progress(p);
+            },
+          });
+          items.push({ type: 'file', link, ...one });
+        }
+      }
+      done({
+        source: 'google_drive',
+        count: items.length,
+        items,
+        fileName: items[0]?.fileName || `drive-${items.length}-files`,
+        downloadUrl: items[0]?.driveWebViewLink,
+      });
+      return;
+    }
+
+    const url = parts[0];
     progress({ stage: 'fetch', percent: 8, message: 'Đang tải trang web…' });
     const page = await extractWebPage(url);
     progress({

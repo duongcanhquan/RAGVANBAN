@@ -1,46 +1,46 @@
 /**
- * Ingest PDF từ Google Drive (+ mirror lên Supabase Storage nếu có).
+ * Ingest file từ Google Drive — file gốc ở lại Drive, chỉ đưa text vào Pinecone.
+ * Tải về = link Drive. Không copy sang Supabase trừ khi DRIVE_MIRROR_TO_SUPABASE=true.
  */
-const { downloadPdf, listPdfInFolder, isDriveConfigured } = require('./googleDrive');
+const { downloadPdf, listPdfInFolder, isDriveConfigured, hasDriveCredentials } = require('./googleDrive');
 const { ingestSingleFile } = require('./ingestFile');
 const { uploadPdfToStorage, isConfigured: isSupabaseConfigured } = require('./supabase');
 
-/**
- * Số hóa 1 file Drive theo fileId.
- */
+function shouldMirrorToSupabase() {
+  return String(process.env.DRIVE_MIRROR_TO_SUPABASE || '').toLowerCase() === 'true';
+}
+
 async function ingestDriveFile(fileId, options = {}) {
-  const { onProgress } = options;
-  if (!isDriveConfigured()) {
-    throw new Error('Google Drive chưa cấu hình');
-  }
+  const { onProgress, categoryId = null } = options;
 
   const notify = (stage, percent, message) => {
     if (typeof onProgress === 'function') onProgress({ stage, percent, message });
   };
 
-  notify('drive', 5, `Đang tải từ Google Drive: ${fileId}`);
+  notify('drive', 5, `Đang đọc file Drive: ${fileId}`);
   const file = await downloadPdf(fileId);
 
   let publicUrl = file.driveWebViewLink;
   let storagePath = '';
 
-  if (isSupabaseConfigured()) {
+  if (shouldMirrorToSupabase() && isSupabaseConfigured()) {
     notify('storage', 15, 'Mirror PDF lên Supabase Storage…');
-    const stored = await uploadPdfToStorage(file.buffer, file.fileName);
+    const stored = await uploadPdfToStorage(file.buffer, file.fileName, file.mimeType);
     if (stored.ok) {
       publicUrl = stored.publicUrl || publicUrl;
       storagePath = stored.path || '';
     }
   }
 
-  // Ưu tiên link Drive làm citation nếu không có Supabase public URL
   const result = await ingestSingleFile(file.buffer, {
     fileName: file.fileName,
+    mimeType: file.mimeType,
     publicUrl,
     storagePath,
     driveFileId: file.driveFileId,
     driveWebViewLink: file.driveWebViewLink,
     source: 'google_drive',
+    categoryId,
     onProgress,
   });
 
@@ -50,15 +50,19 @@ async function ingestDriveFile(fileId, options = {}) {
     driveFileId: file.driveFileId,
     driveWebViewLink: file.driveWebViewLink,
     storageUrl: publicUrl,
+    downloadUrl: file.driveWebViewLink,
   };
 }
 
-/**
- * Đồng bộ toàn bộ PDF trong folder Drive (tuần tự).
- */
 async function syncDriveFolder(options = {}) {
-  const { onProgress, limit = 20 } = options;
-  const files = await listPdfInFolder();
+  const { onProgress, limit = 20, folderId, categoryId } = options;
+  if (!folderId && !isDriveConfigured()) {
+    throw new Error('Thiếu link thư mục Drive hoặc GOOGLE_DRIVE_FOLDER_ID');
+  }
+  if (!hasDriveCredentials() && !folderId) {
+    throw new Error('Google Drive chưa cấu hình');
+  }
+  const files = await listPdfInFolder(folderId || process.env.GOOGLE_DRIVE_FOLDER_ID);
   const slice = files.slice(0, limit);
   const results = [];
 
@@ -72,7 +76,7 @@ async function syncDriveFolder(options = {}) {
       });
     }
     try {
-      const r = await ingestDriveFile(f.id, { onProgress });
+      const r = await ingestDriveFile(f.id, { onProgress, categoryId });
       results.push({ ok: true, fileId: f.id, name: f.name, ...r });
     } catch (err) {
       results.push({ ok: false, fileId: f.id, name: f.name, error: err.message });
@@ -86,4 +90,4 @@ async function syncDriveFolder(options = {}) {
   };
 }
 
-module.exports = { ingestDriveFile, syncDriveFolder };
+module.exports = { ingestDriveFile, syncDriveFolder, shouldMirrorToSupabase };
