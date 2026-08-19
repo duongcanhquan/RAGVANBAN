@@ -11,8 +11,12 @@ const {
   providerCreds,
   pineconeCreds,
   GEMINI_CHAT_CURRENT,
+  GEMINI_EMBED_CURRENT,
   normalizeGeminiChatModel,
+  normalizeGeminiEmbedModel,
+  geminiEmbedOutputDim,
 } = require('./llmConfig');
+const { createGeminiEmbeddings } = require('./geminiEmbeddings');
 const { FAST_CHAT_ORDER } = require('./voiceTalk');
 const { isAbortError } = require('./abortControl');
 
@@ -127,10 +131,10 @@ function getEmbeddings(provider) {
   if (!creds.hasKey) throw new Error(`Thiếu API key embedding cho ${creds.name || p}`);
 
   if (creds.kind === 'gemini') {
-    const { GoogleGenerativeAIEmbeddings } = require('@langchain/google-genai');
-    return new GoogleGenerativeAIEmbeddings({
+    return createGeminiEmbeddings({
       apiKey: creds.apiKey,
-      model: creds.embeddingModel || 'text-embedding-004',
+      model: normalizeGeminiEmbedModel(creds.embeddingModel || GEMINI_EMBED_CURRENT),
+      outputDimensionality: geminiEmbedOutputDim(),
     });
   }
 

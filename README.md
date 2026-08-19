@@ -79,7 +79,7 @@ File đã có trên Drive: **không** đưa vào R2 — dán link ở `/quantri`
 1. Vào [https://app.pinecone.io](https://app.pinecone.io)
 2. **API Keys** → tạo / copy key → `PINECONE_API_KEY`
 3. **Create Index** (dense, cosine — đừng chọn index “kèm model” của Pinecone):
-   - **768** nếu embedding Gemini `text-embedding-004` (chip có sẵn)
+   - **768** nếu embedding Gemini `gemini-embedding-001` (chip có sẵn)
    - **1536** nếu OpenAI `text-embedding-3-small`: console thường không hiện 1536 → **Custom settings**, gõ `1536`
 
 ### 3) OpenAI
@@ -98,7 +98,7 @@ File đã có trên Drive: **không** đưa vào R2 — dán link ở `/quantri`
 
 1. [https://aistudio.google.com/apikey](https://aistudio.google.com/apikey)
 2. Create API key → `GEMINI_API_KEY`
-3. Có thể dùng cho chat / extract / embeddings (`text-embedding-004`)
+3. Có thể dùng cho chat / extract / embeddings (`gemini-embedding-001`, 768 chiều)
 
 ### 6) Google Drive *(file có sẵn — dán link)*
 
@@ -154,7 +154,7 @@ OPENAI_CHAT_MODEL=gpt-4o-mini
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 DEEPSEEK_CHAT_MODEL=deepseek-chat
 GEMINI_CHAT_MODEL=gemini-3.6-flash
-GEMINI_EMBEDDING_MODEL=text-embedding-004
+GEMINI_EMBEDDING_MODEL=gemini-embedding-001
 
 # -------- Ingestion --------
 DATA_DIR=./data
@@ -404,7 +404,7 @@ Dán link Drive ở tab **Link / Drive**. Hệ thống đọc file rồi đưa v
 | Chat demo / không retrieve | Thiếu Pinecone/LLM key hoặc chưa ingest PDF |
 | CORS / API fail từ Vite | Backend phải chạy **port 5000**; Vite proxy dùng `127.0.0.1:5000` (không dùng `localhost` trên Windows) |
 | Server start xong rồi mất / không vào được | Port bị chiếm: `cd server && npm run kill:5000` rồi `npm run start`. Giữ cửa sổ terminal mở. Mở thử `http://127.0.0.1:5000/api/health` |
-| Embedding dimension mismatch | Index phải khớp model: **768** = Gemini `text-embedding-004`; **1536** = OpenAI 3-small (Custom settings nếu không thấy chip 1536) |
+| Embedding dimension mismatch | Index phải khớp model: **768** = Gemini `gemini-embedding-001`; **1536** = OpenAI 3-small (Custom settings nếu không thấy chip 1536) |
 
 ---
 

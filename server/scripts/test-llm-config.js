@@ -56,6 +56,10 @@ test('Gemini chat mặc định 3.6-flash và đổi model đã gỡ', () => {
     providers: { gemini: { chatModel: 'gemini-2.0-flash', apiKey: 'AIza-test-keyxxxx' } },
   });
   assert.equal(merged.providers.gemini.chatModel, 'gemini-3.6-flash');
+  const mergedEmbed = mergeBrain(base, {
+    providers: { gemini: { embeddingModel: 'text-embedding-004', apiKey: 'AIza-test-keyxxxx' } },
+  });
+  assert.equal(mergedEmbed.providers.gemini.embeddingModel, 'gemini-embedding-001');
 });
 
 test('applySavedKeys giữ key cũ khi client gửi rỗng', () => {

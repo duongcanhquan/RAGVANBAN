@@ -12,7 +12,7 @@ Cần sẵn:
 
 - [ ] Repo GitHub đã nối với Vercel
 - [ ] Project [Supabase](https://supabase.com/dashboard) + đã chạy SQL (mục 3)
-- [ ] Index [Pinecone](https://app.pinecone.io): dense, **cosine**. Dễ: dimension **768** + Gemini `text-embedding-004`. OpenAI: **Custom settings**, gõ **1536** (console thường không hiện chip 1536).
+- [ ] Index [Pinecone](https://app.pinecone.io): dense, **cosine**. Dễ: dimension **768** + Gemini `gemini-embedding-001`. OpenAI: **Custom settings**, gõ **1536** (console thường không hiện chip 1536).
 - [ ] Ít nhất một LLM key: OpenAI / DeepSeek / Gemini
 - [ ] OpenAI hoặc Gemini cho **embedding** (DeepSeek không có embedding)
 
@@ -89,7 +89,7 @@ OPENAI_CHAT_MODEL=gpt-4o-mini
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 DEEPSEEK_CHAT_MODEL=deepseek-chat
 GEMINI_CHAT_MODEL=gemini-3.6-flash
-GEMINI_EMBEDDING_MODEL=text-embedding-004
+GEMINI_EMBEDDING_MODEL=gemini-embedding-001
 CHUNK_SIZE=900
 CHUNK_OVERLAP=150
 UPSERT_BATCH_SIZE=64
@@ -155,7 +155,7 @@ Create Index (dense, **không** gắn model sẵn của Pinecone):
 
 - Name: `van-ban-hanh-chinh`
 - Metric: **cosine**
-- Dimensions: **768** nếu embedding Gemini `text-embedding-004` (chip có sẵn trên console)
+- Dimensions: **768** nếu embedding Gemini `gemini-embedding-001` (chip có sẵn trên console; `text-embedding-004` đã gỡ)
 - Hoặc **1536** nếu OpenAI `text-embedding-3-small` — console không có chip 1536: **Custom settings**, gõ `1536`
 
 Chip 384 / 512 / 1024 / 2048 là preset model của Pinecone, không dùng với bộ não RAGVANBAN trừ khi model embedding ra đúng số chiều đó.

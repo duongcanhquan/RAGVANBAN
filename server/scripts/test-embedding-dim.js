@@ -17,9 +17,10 @@ test('OpenAI text-embedding-3-small = 1536', () => {
   assert.equal(expectedEmbeddingDim('openai/text-embedding-3-small'), 1536);
 });
 
-test('Gemini text-embedding-004 = 768', () => {
+test('Gemini text-embedding-004 / gemini-embedding-001 = 768', () => {
   assert.equal(expectedEmbeddingDim('text-embedding-004'), 768);
   assert.equal(expectedEmbeddingDim('models/text-embedding-004'), 768);
+  assert.equal(expectedEmbeddingDim('gemini-embedding-001'), 768);
 });
 
 test('model lạ → null (không đoán bừa)', () => {
@@ -107,7 +108,7 @@ test('768 là cặp Gemini — không bắt buộc chip 1536 trên Pinecone', ()
     pineconeCreateHint,
     recommendEmbeddingForIndex,
   } = require('../src/services/embeddingDim');
-  assert.ok(modelsForIndexDim(768).some((m) => /Gemini|004/.test(m)));
+  assert.ok(modelsForIndexDim(768).some((m) => /Gemini|embedding-001/i.test(m)));
   assert.equal(recommendEmbeddingForIndex(768).provider, 'gemini');
   assert.match(pineconeCreateHint(), /768/);
   assert.match(pineconeCreateHint(), /Custom|gõ 1536/i);

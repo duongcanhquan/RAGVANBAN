@@ -233,7 +233,8 @@ function ProviderFields({
               className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white"
             />
             <span className="mt-1 block text-[11px] text-white/45">
-              Gemini text-embedding-004 = 768 (chip Pinecone 768). OpenAI text-embedding-3-small = 1536.
+              Gemini gemini-embedding-001 = 768 (chip Pinecone 768; text-embedding-004 đã gỡ). OpenAI
+              text-embedding-3-small = 1536.
               Phải trùng chiều index.
             </span>
           </label>
@@ -598,7 +599,7 @@ export default function QuantriBrain() {
                       dim: 768,
                       recommended: true,
                       pineconeUi: 'Chip 768 có sẵn',
-                      models: ['Gemini text-embedding-004'],
+                      models: ['Gemini gemini-embedding-001'],
                     },
                     {
                       dim: 1536,

@@ -9,7 +9,8 @@ const MODEL_DIMS = {
   'text-embedding-ada-002': 1536,
   'text-embedding-004': 768,
   'embedding-001': 768,
-  'gemini-embedding-001': 3072,
+  'gemini-embedding-001': 768,
+  'gemini-embedding-2': 768,
   'mistral-embed': 1024,
 };
 
@@ -20,7 +21,7 @@ const INDEX_PAIRINGS = [
     recommended: true,
     provider: 'gemini',
     pineconeUi: 'Chọn 768 trên console (chip có sẵn)',
-    models: ['Gemini text-embedding-004'],
+    models: ['Gemini gemini-embedding-001 (768 chiều)'],
   },
   {
     dim: 1024,
@@ -51,7 +52,7 @@ function pineconeCreateHint() {
   return (
     'Console Pinecone thường hiện chip 384 / 512 / 768 / 1024 / 2048 (index gắn model sẵn của họ). ' +
     'App này tự tạo vector rồi gửi lên — tạo index dense, metric cosine. ' +
-    'Cách dễ: chọn chip 768 rồi embedding Gemini text-embedding-004. ' +
+    'Cách dễ: chọn chip 768 rồi embedding Gemini gemini-embedding-001 (text-embedding-004 đã gỡ). ' +
     'Muốn OpenAI: bấm Custom settings, gõ 1536, cosine — không cần chip 1536.'
   );
 }
@@ -81,7 +82,7 @@ function vectorDim(vec) {
 function embeddingDimHint(model) {
   const dim = expectedEmbeddingDim(model);
   if (dim === 768) {
-    return 'Gemini text-embedding-004 → trên Pinecone chọn chip 768, cosine (khớp sẵn, không cần 1536).';
+    return 'Gemini gemini-embedding-001 → Pinecone chip 768, cosine (text-embedding-004 đã gỡ).';
   }
   if (dim === 1536) {
     return 'OpenAI text-embedding-3-small = 1536. Console không có chip 1536: Custom settings, gõ 1536, cosine.';
@@ -96,7 +97,7 @@ function embeddingDimHint(model) {
 function dimensionMismatchMessage({ vectorDim: vDim, indexDim, model }) {
   return (
     `Embedding ra ${vDim} chiều (model ${model || '?'}) nhưng index Pinecone là ${indexDim} chiều. ` +
-    `Hai số phải giống nhau — không ghép được Gemini text-embedding-004 (768) với index 1536 của OpenAI text-embedding-3-small. ` +
+    `Hai số phải giống nhau — không ghép được Gemini gemini-embedding-001 (768) với index 1536 của OpenAI text-embedding-3-small. ` +
     `Cách xử lý: (1) dùng embedding khớp index hiện tại, hoặc (2) tạo index mới đúng chiều rồi số hóa lại toàn bộ tài liệu.`
   );
 }

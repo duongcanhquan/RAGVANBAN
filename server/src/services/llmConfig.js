@@ -46,6 +46,33 @@ function normalizeGeminiChatModel(model) {
   return raw;
 }
 
+const GEMINI_EMBED_CURRENT = 'gemini-embedding-001';
+/** Pin 768 — khớp chip Pinecone khuyến nghị; model gốc mặc định 3072. */
+const GEMINI_EMBED_DIM_ALLOWED = new Set([768, 1536, 3072]);
+const GEMINI_EMBED_RETIRED = new Set([
+  'text-embedding-004',
+  'embedding-001',
+  'text-embedding-005',
+  'textembedding-gecko',
+  'textembedding-gecko-001',
+  'textembedding-gecko@001',
+]);
+
+function normalizeGeminiEmbedModel(model) {
+  const raw = String(model || '')
+    .trim()
+    .replace(/^models\//i, '');
+  if (!raw) return GEMINI_EMBED_CURRENT;
+  if (GEMINI_EMBED_RETIRED.has(raw.toLowerCase())) return GEMINI_EMBED_CURRENT;
+  return raw;
+}
+
+function geminiEmbedOutputDim() {
+  const n = Number(process.env.GEMINI_EMBEDDING_DIM);
+  if (GEMINI_EMBED_DIM_ALLOWED.has(n)) return n;
+  return 768;
+}
+
 /** Catalog — UI + factory dùng chung. kind: gemini | openai-compat */
 const PROVIDER_CATALOG = [
   {
@@ -71,8 +98,8 @@ const PROVIDER_CATALOG = [
     docs: 'https://ai.google.dev/gemini-api/docs',
     envKey: 'GEMINI_API_KEY',
     defaultChat: 'gemini-3.6-flash',
-    defaultEmbed: 'text-embedding-004',
-    note: 'Key Google AI Studio. Chat mặc định gemini-3.6-flash (2.0-flash đã gỡ). Embedding text-embedding-004 = 768 chiều — khớp chip 768 trên Pinecone. Antigravity không dùng để trả lời văn bản.',
+    defaultEmbed: 'gemini-embedding-001',
+    note: 'Key Google AI Studio. Chat: gemini-3.6-flash. Embedding: gemini-embedding-001 (text-embedding-004 đã gỡ), xuất 768 chiều — khớp chip Pinecone 768. Đổi model embed phải số hóa lại tài liệu.',
   },
   {
     id: 'deepseek',
@@ -220,12 +247,15 @@ function defaultProviderState(spec) {
         '';
       return spec.id === 'gemini' ? normalizeGeminiChatModel(picked) : picked;
     })(),
-    embeddingModel:
-      envTrim(`${idUpper}_EMBEDDING_MODEL`) ||
-      (spec.id === 'openai' ? envTrim('OPENAI_EMBEDDING_MODEL') : '') ||
-      (spec.id === 'gemini' ? envTrim('GEMINI_EMBEDDING_MODEL') : '') ||
-      spec.defaultEmbed ||
-      '',
+    embeddingModel: (() => {
+      const picked =
+        envTrim(`${idUpper}_EMBEDDING_MODEL`) ||
+        (spec.id === 'openai' ? envTrim('OPENAI_EMBEDDING_MODEL') : '') ||
+        (spec.id === 'gemini' ? envTrim('GEMINI_EMBEDDING_MODEL') : '') ||
+        spec.defaultEmbed ||
+        '';
+      return spec.id === 'gemini' ? normalizeGeminiEmbedModel(picked) : picked;
+    })(),
     siteUrl: spec.id === 'openrouter' ? envTrim('OPENROUTER_SITE_URL') : '',
     siteName: spec.id === 'openrouter' ? envTrim('OPENROUTER_SITE_NAME') || 'RAGVANBAN' : '',
   };
@@ -295,6 +325,9 @@ function mergeBrain(base, stored) {
       out.providers[spec.id].chatModel = normalizeGeminiChatModel(
         out.providers[spec.id].chatModel
       );
+      out.providers[spec.id].embeddingModel = normalizeGeminiEmbedModel(
+        out.providers[spec.id].embeddingModel
+      );
     }
   }
   return out;
@@ -347,7 +380,10 @@ function providerCreds(id) {
       spec.id === 'gemini'
         ? normalizeGeminiChatModel(state.chatModel || spec.defaultChat)
         : state.chatModel || spec.defaultChat || '',
-    embeddingModel: state.embeddingModel || spec.defaultEmbed || '',
+    embeddingModel:
+      spec.id === 'gemini'
+        ? normalizeGeminiEmbedModel(state.embeddingModel || spec.defaultEmbed)
+        : state.embeddingModel || spec.defaultEmbed || '',
     siteUrl: state.siteUrl || '',
     siteName: state.siteName || 'RAGVANBAN',
   };
@@ -381,7 +417,10 @@ function sanitizeBrain(brain) {
         spec.id === 'gemini'
           ? normalizeGeminiChatModel(st.chatModel || spec.defaultChat)
           : st.chatModel || spec.defaultChat || '',
-      embeddingModel: st.embeddingModel || spec.defaultEmbed || '',
+      embeddingModel:
+        spec.id === 'gemini'
+          ? normalizeGeminiEmbedModel(st.embeddingModel || spec.defaultEmbed)
+          : st.embeddingModel || spec.defaultEmbed || '',
       siteUrl: st.siteUrl || '',
       siteName: st.siteName || '',
     };
@@ -474,5 +513,8 @@ module.exports = {
   saveBrain,
   publicBrainPayload,
   normalizeGeminiChatModel,
+  normalizeGeminiEmbedModel,
+  geminiEmbedOutputDim,
   GEMINI_CHAT_CURRENT,
+  GEMINI_EMBED_CURRENT,
 };
