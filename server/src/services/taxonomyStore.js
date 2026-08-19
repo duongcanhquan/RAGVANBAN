@@ -123,25 +123,32 @@ function flattenSeed(nodes, parentId = null, acc = [], sortBase = 0) {
 }
 
 function ensureLocal() {
-  const dir = path.dirname(LOCAL_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  if (!fs.existsSync(LOCAL_PATH)) {
-    const categories = flattenSeed(DEFAULT_TREE);
-    const data = { categories, docCategoryMap: {} };
-    fs.writeFileSync(LOCAL_PATH, JSON.stringify(data, null, 2), 'utf8');
-    return data;
-  }
   try {
-    return JSON.parse(fs.readFileSync(LOCAL_PATH, 'utf8'));
+    if (fs.existsSync(LOCAL_PATH)) {
+      return JSON.parse(fs.readFileSync(LOCAL_PATH, 'utf8'));
+    }
   } catch {
-    const categories = flattenSeed(DEFAULT_TREE);
-    const data = { categories, docCategoryMap: {} };
-    writeLocal(data);
-    return data;
+    /* missing / unreadable */
   }
+  const categories = flattenSeed(DEFAULT_TREE);
+  const data = { categories, docCategoryMap: {} };
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) return data;
+  try {
+    const dir = path.dirname(LOCAL_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    writeLocal(data);
+  } catch (err) {
+    if (err && (err.code === 'EROFS' || err.code === 'EACCES')) return data;
+  }
+  return data;
 }
 
 function writeLocal(data) {
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    const err = new Error('Vercel không ghi được taxonomy.json. Cần Supabase.');
+    err.code = 'LOCAL_FS_READONLY';
+    throw err;
+  }
   fs.writeFileSync(LOCAL_PATH, JSON.stringify(data, null, 2), 'utf8');
 }
 
@@ -378,11 +385,20 @@ async function deleteCategory(id) {
 }
 
 function setLocalDocCategory(docId, categoryId) {
-  const local = ensureLocal();
-  if (!local.docCategoryMap) local.docCategoryMap = {};
-  if (categoryId) local.docCategoryMap[docId] = categoryId;
-  else delete local.docCategoryMap[docId];
-  writeLocal(local);
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) return { ok: true, skipped: true };
+  try {
+    const local = ensureLocal();
+    if (!local.docCategoryMap) local.docCategoryMap = {};
+    if (categoryId) local.docCategoryMap[docId] = categoryId;
+    else delete local.docCategoryMap[docId];
+    writeLocal(local);
+    return { ok: true, source: 'local' };
+  } catch (err) {
+    if (err && (err.code === 'EROFS' || err.code === 'EACCES')) {
+      return { ok: false, skipped: true, error: err.message };
+    }
+    throw err;
+  }
 }
 
 function getLocalDocCategory(docId) {

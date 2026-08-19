@@ -67,7 +67,12 @@ export default function QuantriIntegrations() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [saJson, setSaJson] = useState('')
-  const [draft, setDraft] = useState({ folderUrl: '', categoryId: '', label: '', isShared: false })
+  const [draft, setDraft] = useState({
+    folderUrls: [''],
+    categoryId: '',
+    label: '',
+    isShared: false,
+  })
   const [categories, setCategories] = useState([])
   const [syncOut, setSyncOut] = useState('')
 
@@ -148,23 +153,32 @@ export default function QuantriIntegrations() {
 
   async function addFolder(e) {
     e.preventDefault()
+    const urls = (draft.folderUrls || []).map((s) => s.trim()).filter(Boolean)
+    if (!urls.length) {
+      setError('Dán ít nhất một link thư mục Drive')
+      return
+    }
     setBusy(true)
     setError('')
     try {
-      const res = await adminFetch('/api/quantri/integrations/drive-sources', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          folderUrl: draft.folderUrl,
-          categoryId: draft.categoryId || null,
-          label: draft.label,
-          isShared: draft.isShared,
-        }),
-      })
-      const j = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(j.error || 'Không thêm thư mục')
-      setDraft({ folderUrl: '', categoryId: '', label: '', isShared: false })
+      const errors = []
+      for (const folderUrl of urls) {
+        const res = await adminFetch('/api/quantri/integrations/drive-sources', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            folderUrl,
+            categoryId: draft.categoryId || null,
+            label: draft.label,
+            isShared: draft.isShared,
+          }),
+        })
+        const j = await res.json().catch(() => ({}))
+        if (!res.ok) errors.push(j.error || folderUrl)
+      }
+      setDraft({ folderUrls: [''], categoryId: '', label: '', isShared: false })
       await load()
+      if (errors.length) throw new Error(errors.join(' · '))
     } catch (e) {
       setError(e.message)
     } finally {
@@ -284,12 +298,51 @@ export default function QuantriIntegrations() {
             className="rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm"
           />
           <input
-            required
-            value={draft.folderUrl}
-            onChange={(e) => setDraft({ ...draft, folderUrl: e.target.value })}
+            value={draft.folderUrls[0] || ''}
+            onChange={(e) =>
+              setDraft({
+                ...draft,
+                folderUrls: [e.target.value, ...(draft.folderUrls || []).slice(1)],
+              })
+            }
             placeholder="https://drive.google.com/drive/folders/...."
             className="rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm sm:col-span-2"
           />
+          {(draft.folderUrls || []).slice(1).map((url, i) => (
+            <div key={i + 1} className="flex gap-2 sm:col-span-2">
+              <input
+                value={url}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    folderUrls: draft.folderUrls.map((x, idx) => (idx === i + 1 ? e.target.value : x)),
+                  })
+                }
+                placeholder="Link thư mục Drive thêm"
+                className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  setDraft({
+                    ...draft,
+                    folderUrls: draft.folderUrls.filter((_, idx) => idx !== i + 1),
+                  })
+                }
+                className="rounded-xl bg-white/10 px-3 text-xs text-white/70"
+              >
+                Bỏ
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setDraft({ ...draft, folderUrls: [...(draft.folderUrls || ['']), ''] })}
+            className="inline-flex items-center justify-center gap-1 rounded-xl bg-white/10 px-3 py-2 text-xs sm:col-span-2"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Thêm link thư mục
+          </button>
           <select
             value={draft.categoryId}
             onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}

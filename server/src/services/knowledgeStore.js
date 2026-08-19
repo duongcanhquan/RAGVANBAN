@@ -10,21 +10,19 @@ const { getSupabase, isConfigured } = require('./supabase');
 const LOCAL_PATH = path.resolve(__dirname, '../../data/scenarios.json');
 
 function ensureLocalFile() {
+  try {
+    if (fs.existsSync(LOCAL_PATH)) return;
+  } catch {
+    return;
+  }
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) return;
   const dir = path.dirname(LOCAL_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  if (!fs.existsSync(LOCAL_PATH)) {
-    fs.writeFileSync(
-      LOCAL_PATH,
-      JSON.stringify(
-        {
-          scenarios: [],
-        },
-        null,
-        2
-      ),
-      'utf8'
-    );
-  }
+  fs.writeFileSync(
+    LOCAL_PATH,
+    JSON.stringify({ scenarios: [] }, null, 2),
+    'utf8'
+  );
 }
 
 function isDemoScenario(s = {}) {
@@ -37,8 +35,8 @@ function withoutDemoScenarios(items) {
 }
 
 function readLocal() {
-  ensureLocalFile();
   try {
+    if (!fs.existsSync(LOCAL_PATH)) return { scenarios: [] };
     return JSON.parse(fs.readFileSync(LOCAL_PATH, 'utf8'));
   } catch {
     return { scenarios: [] };
@@ -46,6 +44,11 @@ function readLocal() {
 }
 
 function writeLocal(data) {
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    const err = new Error('Vercel không ghi được scenarios.json. Cần Supabase.');
+    err.code = 'LOCAL_FS_READONLY';
+    throw err;
+  }
   ensureLocalFile();
   fs.writeFileSync(LOCAL_PATH, JSON.stringify(data, null, 2), 'utf8');
 }

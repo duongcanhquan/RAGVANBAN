@@ -71,6 +71,22 @@ test('ghi catalog thật thì không lỗi', () => {
   );
 });
 
+test('Vercel: đọc catalog local không tạo documents.json; ghi phải fail rõ', () => {
+  const prev = process.env.VERCEL;
+  process.env.VERCEL = '1';
+  try {
+    const { listLocalDocuments, upsertLocalDocument, isServerlessReadOnly } = require('../src/services/localDocuments');
+    assert.equal(isServerlessReadOnly({ VERCEL: '1' }), true);
+    assert.doesNotThrow(() => listLocalDocuments());
+    const saved = upsertLocalDocument({ fileName: 'vercel-erofs.pdf' });
+    assert.equal(saved.ok, false);
+    assert.match(String(saved.error || ''), /Supabase|chỉ đọc|Vercel/i);
+  } finally {
+    if (prev == null) delete process.env.VERCEL;
+    else process.env.VERCEL = prev;
+  }
+});
+
 test('chưa lưu file gốc thì không được báo số hóa thành công', () => {
   const { originalStoreError } = require('../src/services/documentCatalog');
   assert.match(originalStoreError({ ok: false, skipped: true }), /file gốc|R2|Storage/i);

@@ -318,7 +318,14 @@ router.post('/url', async (req, res) => {
         source: 'google_drive',
         count: items.length,
         items,
-        fileName: items[0]?.fileName || `drive-${items.length}-files`,
+        skipped: items.reduce((n, it) => n + Number(it.skipped || 0), 0),
+        pending: items.reduce((n, it) => n + Number(it.pending || 0), 0),
+        processed: items.reduce((n, it) => n + Number(it.processed || (it.id ? 1 : 0)), 0),
+        fileName: items[0]?.fileName || `drive-${items.length}-link`,
+        displayName:
+          items.length === 1
+            ? items[0]?.displayName || items[0]?.fileName || 'Drive'
+            : `${items.length} link Drive`,
         downloadUrl: items[0]?.driveWebViewLink,
       });
       return;

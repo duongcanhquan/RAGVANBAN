@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useOutletContext } from 'react-router-dom'
-import { Globe, GripVertical, Pencil, RefreshCw, Sparkles, Trash2, Type, UploadCloud } from 'lucide-react'
+import { Globe, GripVertical, Pencil, Plus, RefreshCw, Sparkles, Trash2, Type, UploadCloud } from 'lucide-react'
 import { adminFetch } from '../lib/adminApi'
 import { apiUrl } from '../lib/apiBase'
 import { DIRECT_UPLOAD_MAX_BYTES, formatBytes, splitUploadFiles } from '../lib/uploadLimits'
@@ -122,7 +122,7 @@ export default function AdminPage() {
   const [pasteText, setPasteText] = useState('')
   const [docTitle, setDocTitle] = useState('')
   const [docDescription, setDocDescription] = useState('')
-  const [webUrl, setWebUrl] = useState('')
+  const [driveLinks, setDriveLinks] = useState([''])
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState({ percent: 0, message: '' })
   const [result, setResult] = useState(null)
@@ -452,7 +452,8 @@ export default function AdminPage() {
   }
 
   async function handleWebUrl() {
-    if (!webUrl.trim() || uploading) return
+    const links = driveLinks.map((s) => s.trim()).filter(Boolean)
+    if (!links.length || uploading) return
     if (!isSuper && !categoryId) {
       setError('Chọn ngành / hạng mục / chủ đề trước khi nạp')
       return
@@ -466,7 +467,7 @@ export default function AdminPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
         body: JSON.stringify({
-          url: webUrl.trim(),
+          url: links.join('\n'),
           categoryId: categoryId || undefined,
           title: docTitle.trim() || undefined,
           description: docDescription.trim() || undefined,
@@ -477,8 +478,13 @@ export default function AdminPage() {
         onProgress: (data) =>
           setProgress({ percent: data.percent || 0, message: data.message || '' }),
         onDone: (data) => {
-          const first = data?.id ? data : data?.items?.find((it) => it.id)
-          if (!first?.id && !data?.items?.length) {
+          const nested = (data?.items || []).flatMap((it) => it.results || [])
+          const first =
+            data?.id
+              ? data
+              : data?.items?.find((it) => it.id) || nested.find((it) => it.ok && it.id)
+          const hadWork = Boolean(first?.id || data?.items?.length || data?.processed)
+          if (!hadWork) {
             throw new Error(
               data?.error ||
                 'Số hóa xong nhưng chưa ghi được vào danh mục tài liệu. Kiểm tra Supabase rồi thử lại.'
@@ -486,7 +492,7 @@ export default function AdminPage() {
           }
           setResult(data)
           setProgress({ percent: 100, message: 'Hoàn tất' })
-          setWebUrl('')
+          setDriveLinks([''])
           setDriveHint(null)
           if (first?.id) showIngested(first)
           else {
@@ -910,19 +916,44 @@ export default function AdminPage() {
                   </div>
                 ) : (
                   <p className="m-0 text-sm text-white/65">
-                    Dán link Google Drive. File gốc ở lại Drive — phù hợp tài liệu lớn.
+                    File tải tay lưu bản gốc trên Cloudflare R2. Link Drive thì file ở lại Drive — bấm
+                    Thêm link để gán nhiều link rồi số hóa một lúc.
                   </p>
                 )}
-                <textarea
-                  rows={4}
-                  value={webUrl}
-                  onChange={(e) => setWebUrl(e.target.value)}
-                  placeholder="Dán link Google Drive vào đây"
-                  className="w-full resize-y rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-white/40"
-                />
+                <div className="space-y-2">
+                  {driveLinks.map((link, i) => (
+                    <div key={i} className="flex gap-2">
+                      <input
+                        value={link}
+                        onChange={(e) =>
+                          setDriveLinks((prev) => prev.map((x, idx) => (idx === i ? e.target.value : x)))
+                        }
+                        placeholder="https://drive.google.com/file/d/… hoặc /folders/…"
+                        className="min-w-0 flex-1 rounded-2xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/40"
+                      />
+                      {driveLinks.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => setDriveLinks((prev) => prev.filter((_, idx) => idx !== i))}
+                          className="shrink-0 rounded-xl bg-white/10 px-3 text-xs text-white/70"
+                        >
+                          Bỏ
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setDriveLinks((prev) => [...prev, ''])}
+                    className="inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 text-xs text-white/80"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Thêm link
+                  </button>
+                </div>
                 <button
                   type="button"
-                  disabled={!webUrl.trim() || uploading}
+                  disabled={!driveLinks.some((s) => s.trim()) || uploading}
                   onClick={handleWebUrl}
                   className="btn-gold inline-flex cursor-pointer items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold disabled:opacity-40"
                 >
@@ -957,7 +988,14 @@ export default function AdminPage() {
               <div className="mt-3 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
                 <p className="m-0 font-medium">
                   Số hóa thành công: {result.displayName || result.fileName}
+                  {result.count > 1 ? ` · ${result.count} link` : ''}
                 </p>
+                {result.skipped || result.processed ? (
+                  <p className="m-0 mt-1 text-xs text-emerald-100/75">
+                    File mới xử lý {result.processed || 0}
+                    {result.skipped ? ` · đã có trong kho ${result.skipped}` : ''}
+                  </p>
+                ) : null}
                 {result.moTa ? (
                   <p className="m-0 mt-1 text-emerald-100/80">{result.moTa}</p>
                 ) : null}

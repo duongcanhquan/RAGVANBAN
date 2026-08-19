@@ -93,16 +93,29 @@ async function listDocsInFolder(folderId = process.env.GOOGLE_DRIVE_FOLDER_ID) {
 
   const files = [];
   let pageToken;
+  let useOrder = true;
   do {
-    const res = await drive.files.list({
+    const params = {
       q,
       fields: 'nextPageToken,files(id,name,mimeType,webViewLink,modifiedTime,createdTime,size,parents)',
       pageSize: 100,
       pageToken,
-      orderBy: 'modifiedTime desc',
       supportsAllDrives: true,
       includeItemsFromAllDrives: true,
-    });
+    };
+    if (useOrder) params.orderBy = 'modifiedTime desc';
+    let res;
+    try {
+      res = await drive.files.list(params);
+    } catch (err) {
+      if (useOrder) {
+        useOrder = false;
+        pageToken = undefined;
+        files.length = 0;
+        continue;
+      }
+      throw err;
+    }
     files.push(...(res.data.files || []));
     pageToken = res.data.nextPageToken;
   } while (pageToken);

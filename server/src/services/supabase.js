@@ -343,13 +343,15 @@ async function updateDocumentCategory(id, { categoryId, folderPath, chuyenMon })
 
 async function listIngestedDriveFileIds() {
   const ids = new Set();
-  const { listLocalDocuments } = require('./localDocuments');
-  for (const d of listLocalDocuments({ limit: 5000 }).items || []) {
-    const id = d.drive_file_id || d.metadata?.drive_file_id;
-    if (id) ids.add(String(id));
-  }
   const sb = getSupabase();
-  if (!sb) return [...ids];
+  if (!sb) {
+    const { listLocalDocuments } = require('./localDocuments');
+    for (const d of listLocalDocuments({ limit: 5000 }).items || []) {
+      const id = d.drive_file_id || d.metadata?.drive_file_id;
+      if (id) ids.add(String(id));
+    }
+    return [...ids];
+  }
   let from = 0;
   const page = 1000;
   for (;;) {
