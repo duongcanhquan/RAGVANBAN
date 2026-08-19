@@ -127,41 +127,8 @@ async function ingestTextContent(text, options = {}) {
     if (!hasLiveKeys()) {
       throw new Error(brainNotReadyMessage());
     }
-    progress(onProgress, 'embed', 65, 'Đang embed & đẩy lên Pinecone…');
-    const pinecone = getPinecone();
-    const pc = pineconeIndexTarget();
-    const indexDim = await getPineconeIndexDimension(pinecone, pc.indexName);
-    const emb = await withProviderFallback('embedding', async (p) => {
-      const creds = providerCreds(p);
-      assertExpectedFitsIndex({ model: creds.embeddingModel, indexDim });
-      return getEmbeddings(p);
-    });
-    embeddingProvider = emb.provider;
 
-    const existing =
-      options.replaceDocumentId
-        ? { ok: true, id: options.replaceDocumentId }
-        : await getDocumentByFileName(fileName);
-    const documentId = existing?.id || existing?.item?.id || options.replaceDocumentId || '';
-    if (documentId) {
-      chunks.forEach((c) => {
-        c.metadata = { ...(c.metadata || {}), document_id: documentId };
-      });
-    }
-
-    const result = await upsertChunksToPinecone(chunks, {
-      embeddings: emb.result,
-      pinecone,
-      indexName: pc.indexName,
-      namespace: pc.namespace,
-      batchSize: Number(process.env.UPSERT_BATCH_SIZE) || 64,
-      replaceFileName: fileName,
-      previousIds: existing?.item?.metadata?.pinecone_ids || existing?.metadata?.pinecone_ids,
-    });
-    upserted = result.upserted;
-    metadata.pinecone_ids = result.ids || [];
-
-    progress(onProgress, 'db', 90, 'Đang ghi metadata & chuyên mục…');
+    progress(onProgress, 'db', 62, 'Đang ghi danh mục tài liệu…');
     const cats = await listCategories();
     const flat = cats.items || [];
     let categoryId = options.categoryId || null;
@@ -182,6 +149,11 @@ async function ingestTextContent(text, options = {}) {
       metadata.content_sha256 = options.contentSha256;
       metadata.byte_size = options.byteSize != null ? Number(options.byteSize) : undefined;
     }
+
+    const existing =
+      options.replaceDocumentId
+        ? { ok: true, id: options.replaceDocumentId }
+        : await getDocumentByFileName(fileName);
 
     const catalogPayload = {
       fileName,
@@ -219,6 +191,9 @@ async function ingestTextContent(text, options = {}) {
         storage_url: publicUrl || metadata.link_goc || undefined,
         content_sha256: options.contentSha256 || undefined,
         byte_size: options.byteSize,
+        category_id: categoryId,
+        folder_path: folderPath,
+        chuyen_mon: cat?.name || null,
         metadata,
         chunk_count: chunks.length,
       });
@@ -240,7 +215,7 @@ async function ingestTextContent(text, options = {}) {
     const verified = await getDocument(insertedId);
     if (!verified?.ok || !verified.item) {
       const err = new Error(
-        'Số hóa vector xong nhưng không đọc lại được dòng danh mục. Kiểm tra bảng documents trên Supabase.'
+        'Không đọc lại được dòng danh mục sau khi ghi. Kiểm tra bảng documents trên Supabase.'
       );
       err.code = 'CATALOG_VERIFY_FAILED';
       throw err;
@@ -252,9 +227,47 @@ async function ingestTextContent(text, options = {}) {
       err.code = 'CATALOG_VERIFY_FAILED';
       throw err;
     }
-
     if (insertedId && categoryId) {
       setLocalDocCategory(insertedId, categoryId);
+    }
+
+    chunks.forEach((c) => {
+      c.metadata = { ...(c.metadata || {}), document_id: insertedId };
+    });
+
+    progress(onProgress, 'embed', 78, 'Đang embed & đẩy lên Pinecone…');
+    try {
+      const pinecone = getPinecone();
+      const pc = pineconeIndexTarget();
+      const indexDim = await getPineconeIndexDimension(pinecone, pc.indexName);
+      const emb = await withProviderFallback('embedding', async (p) => {
+        const creds = providerCreds(p);
+        assertExpectedFitsIndex({ model: creds.embeddingModel, indexDim });
+        return getEmbeddings(p);
+      });
+      embeddingProvider = emb.provider;
+      const result = await upsertChunksToPinecone(chunks, {
+        embeddings: emb.result,
+        pinecone,
+        indexName: pc.indexName,
+        namespace: pc.namespace,
+        batchSize: Number(process.env.UPSERT_BATCH_SIZE) || 64,
+        replaceFileName: fileName,
+        previousIds: existing?.item?.metadata?.pinecone_ids || existing?.metadata?.pinecone_ids,
+      });
+      upserted = result.upserted;
+      metadata.pinecone_ids = result.ids || [];
+      await updateDocument(insertedId, {
+        metadata,
+        chunk_count: chunks.length,
+      });
+    } catch (e) {
+      const err = new Error(
+        `Đã ghi danh mục nhưng chưa đẩy vector: ${e.message || e}. Số hóa lại tài liệu này.`
+      );
+      err.code = 'VECTOR_UPSERT_FAILED';
+      err.catalogId = insertedId;
+      throw err;
     }
   }
 

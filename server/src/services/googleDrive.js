@@ -60,7 +60,7 @@ function parseDriveResource(raw) {
   }
   const fileM = u.pathname.match(/\/file\/d\/([^/]+)/);
   if (fileM) return { type: 'file', id: fileM[1] };
-  const folderM = u.pathname.match(/\/(?:drive\/)?folders\/([^/]+)/);
+  const folderM = u.pathname.match(/\/(?:drive\/)?(?:u\/\d+\/)?folders\/([^/]+)/);
   if (folderM) return { type: 'folder', id: folderM[1] };
   const docM = u.pathname.match(/\/(?:document|spreadsheets|presentation)\/d\/([^/]+)/);
   if (docM) return { type: 'file', id: docM[1] };
@@ -240,6 +240,42 @@ async function downloadPublicDriveFile(fileId) {
   };
 }
 
+async function inspectDriveResource(parsed) {
+  if (!parsed?.id) return parsed;
+  if (parsed.type === 'folder') {
+    return {
+      ...parsed,
+      webViewLink: parsed.webViewLink || `https://drive.google.com/drive/folders/${parsed.id}`,
+    };
+  }
+  if (!(await hasAnyDriveKey())) return parsed;
+  try {
+    const drive = await getDrive();
+    const meta = await drive.files.get({
+      fileId: parsed.id,
+      fields: 'id,name,mimeType,webViewLink',
+      supportsAllDrives: true,
+    });
+    const mime = String(meta.data.mimeType || '');
+    if (mime === 'application/vnd.google-apps.folder') {
+      return {
+        type: 'folder',
+        id: meta.data.id || parsed.id,
+        name: meta.data.name,
+        webViewLink: meta.data.webViewLink || `https://drive.google.com/drive/folders/${parsed.id}`,
+      };
+    }
+    return {
+      type: 'file',
+      id: meta.data.id || parsed.id,
+      name: meta.data.name,
+      webViewLink: meta.data.webViewLink || `https://drive.google.com/file/d/${parsed.id}/view`,
+    };
+  } catch {
+    return parsed;
+  }
+}
+
 async function getFileParentIds(fileId) {
   const drive = await getDrive();
   const meta = await drive.files.get({
@@ -269,6 +305,7 @@ module.exports = {
   isDriveConfigured,
   resetDriveClient,
   parseDriveResource,
+  inspectDriveResource,
   listPdfInFolder,
   listDocsInFolder,
   getFileParentIds,

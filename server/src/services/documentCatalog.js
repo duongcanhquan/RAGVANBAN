@@ -37,12 +37,22 @@ function hydrateDocument(d = {}) {
     null;
   const so_hieu = d.so_hieu || meta.so_hieu || null;
   const content_sha256 = d.content_sha256 || meta.content_sha256 || null;
+  const category_id = d.category_id || meta.category_id || null;
+  const folder_path = d.folder_path || meta.folder_path || '';
+  const drive_web_view_link =
+    d.drive_web_view_link || meta.drive_web_view_link || meta.link_goc || null;
   return {
     ...d,
     display_name,
     mo_ta,
-    storage_url,
+    storage_url: storage_url || drive_web_view_link,
     content_sha256,
+    category_id,
+    folder_path,
+    drive_web_view_link,
+    drive_file_id: d.drive_file_id || meta.drive_file_id || null,
+    source: d.source || meta.source || null,
+    sort_order: d.sort_order ?? meta.sort_order ?? null,
     label: [so_hieu, display_name].filter(Boolean).join(' · ') || display_name,
   };
 }

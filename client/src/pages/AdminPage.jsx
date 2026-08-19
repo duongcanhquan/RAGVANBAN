@@ -68,7 +68,7 @@ function buildGroups(docs, categoryOptions) {
   const extras = new Map()
   const uncat = []
   for (const d of docs) {
-    const cid = d.category_id || ''
+    const cid = d.category_id || d.metadata?.category_id || ''
     if (!cid) uncat.push(d)
     else if (by.has(cid)) by.get(cid).push(d)
     else {
@@ -311,9 +311,9 @@ export default function AdminPage() {
       loai_van_ban: result.metadata?.loai_van_ban || '',
       trang_thai: result.metadata?.trang_thai || '',
       chunk_count: result.chunks || 0,
-      storage_url: result.storageUrl || result.publicUrl || '',
+      storage_url: result.storageUrl || result.publicUrl || result.driveWebViewLink || result.downloadUrl || '',
       storage_path: result.storagePath || '',
-      drive_web_view_link: result.driveWebViewLink || '',
+      drive_web_view_link: result.driveWebViewLink || result.downloadUrl || '',
       category_id: result.categoryId || categoryId || '',
       folder_path: result.folderPath || '',
       source: result.source || result.kind || 'upload',
@@ -326,9 +326,7 @@ export default function AdminPage() {
     const items = await loadDocs()
     loadStats()
     if (item?.id && !items.some((d) => d.id === item.id)) {
-      throw new Error(
-        'Hệ thống không ghi được tài liệu vào danh mục (Supabase). Không tính số hóa thành công — kiểm tra R2/Storage và bảng documents.'
-      )
+      setDocs((prev) => [item, ...prev.filter((d) => d.id !== item.id)])
     }
     if (item) setDetailId(item.id)
   }
@@ -390,7 +388,7 @@ export default function AdminPage() {
         setFiles((prev) => prev.filter((f) => f !== queue[i]))
       }
       setResult(last)
-      setProgress({ percent: 100, message: 'Hoàn tất' })
+      setProgress({ percent: 0, message: '' })
       setFiles([])
       if (queue.length === 1) {
         setDocTitle('')
@@ -439,7 +437,7 @@ export default function AdminPage() {
             )
           }
           setResult(data)
-          setProgress({ percent: 100, message: 'Hoàn tất' })
+          setProgress({ percent: 0, message: '' })
           setPasteText('')
           showIngested(data)
         },
@@ -480,22 +478,27 @@ export default function AdminPage() {
           setProgress({ percent: data.percent || 0, message: data.message || '' }),
         onDone: (data) => {
           const nested = (data?.items || []).flatMap((it) => it.results || [])
-          const first =
-            data?.id
-              ? data
-              : data?.items?.find((it) => it.id) || nested.find((it) => it.ok && it.id)
-          const hadWork = Boolean(first?.id || data?.items?.length || data?.processed)
-          if (!hadWork) {
-            throw new Error(
+          const listed = data?.files || []
+          const persisted = listed.filter((it) => it.id)
+          const failedItems = listed.filter((it) => it.error || it.ok === false)
+          const firstFile =
+            persisted[0] ||
+            nested.find((it) => it.id) ||
+            data?.items?.find((it) => it.type !== 'folder' && it.id)
+          const skippedOnly = Number(data?.skipped || 0) > 0 && !persisted.length && !failedItems.length
+          if (!firstFile?.id && !skippedOnly) {
+            const detail =
+              failedItems[0]?.error ||
+              nested.find((it) => it.error)?.error ||
               data?.error ||
-                'Số hóa xong nhưng chưa ghi được vào danh mục tài liệu. Kiểm tra Supabase rồi thử lại.'
-            )
+              'Số hóa Drive xong nhưng chưa ghi được vào danh mục tài liệu. Kiểm tra Supabase rồi thử lại.'
+            throw new Error(detail)
           }
           setResult(data)
-          setProgress({ percent: 100, message: 'Hoàn tất' })
+          setProgress({ percent: 0, message: '' })
           setDriveLinks([''])
           setDriveHint(null)
-          if (first?.id) showIngested(first)
+          if (firstFile?.id) showIngested(firstFile)
           else {
             loadStats()
             loadDocs()
@@ -505,6 +508,8 @@ export default function AdminPage() {
     } catch (e) {
       setError(e.message)
       setProgress({ percent: 0, message: '' })
+      loadDocs()
+      loadStats()
     } finally {
       setUploading(false)
     }
@@ -972,7 +977,7 @@ export default function AdminPage() {
               </button>
             )}
 
-            {(uploading || progress.percent > 0) && (
+            {uploading && (
               <DigitizingWait
                 percent={progress.percent}
                 message={progress.message}
@@ -989,7 +994,7 @@ export default function AdminPage() {
             {result ? (
               <div
                 className={`mt-3 rounded-2xl border p-4 text-sm ${
-                  result.duplicate
+                  result.duplicate || result.failed
                     ? 'border-amber-400/30 bg-amber-400/10 text-amber-50'
                     : 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100'
                 }`}
@@ -997,7 +1002,9 @@ export default function AdminPage() {
                 <p className="m-0 font-medium">
                   {result.duplicate
                     ? result.message || 'File trùng — không lưu thêm R2/vector'
-                    : `Số hóa thành công: ${result.displayName || result.fileName}`}
+                    : result.failed && !result.processed
+                      ? `Không ghi được danh mục: ${result.displayName || result.fileName || 'Google Drive'}`
+                      : `Số hóa thành công: ${result.displayName || result.fileName || 'Google Drive'}`}
                   {result.count > 1 ? ` · ${result.count} link` : ''}
                 </p>
                 {result.duplicate ? (
@@ -1008,26 +1015,59 @@ export default function AdminPage() {
                   <p className="m-0 mt-1 text-xs text-emerald-100/75">
                     File mới xử lý {result.processed || 0}
                     {result.skipped ? ` · đã có trong kho ${result.skipped}` : ''}
+                    {result.failed ? ` · lỗi ${result.failed}` : ''}
                   </p>
                 ) : null}
                 {result.moTa ? (
                   <p className="m-0 mt-1 text-emerald-100/80">{result.moTa}</p>
                 ) : null}
                 <p className="m-0 mt-1 text-emerald-100/80">
-                  {result.metadata?.loai_van_ban} {result.metadata?.so_hieu} · {result.chunks} chunks
+                  {[result.metadata?.loai_van_ban, result.metadata?.so_hieu]
+                    .filter(Boolean)
+                    .join(' ')}
+                  {result.chunks != null && result.chunks !== '' ? ` · ${result.chunks} chunks` : ''}
                 </p>
-                {result.storageUrl || result.publicUrl || result.driveWebViewLink ? (
+                {Array.isArray(result.files) && result.files.length > 0 ? (
+                  <ul className="m-0 mt-2 list-none space-y-1 p-0 text-xs">
+                    {result.files.map((f) => (
+                      <li key={f.id || f.fileName} className="text-emerald-50/90">
+                        {f.driveWebViewLink || f.storageUrl ? (
+                          <a
+                            href={f.driveWebViewLink || f.storageUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[var(--hcc-gold-bright)] underline"
+                          >
+                            {f.displayName || f.fileName || 'Mở file Drive'}
+                          </a>
+                        ) : (
+                          <span>{f.displayName || f.fileName}</span>
+                        )}
+                        {f.chunks ? ` · ${f.chunks} chunks` : ''}
+                        {f.error ? ` · ${f.error}` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {result.storageUrl || result.publicUrl || result.driveWebViewLink || result.downloadUrl ? (
                   <a
-                    href={result.storageUrl || result.publicUrl || result.driveWebViewLink}
+                    href={
+                      result.storageUrl ||
+                      result.publicUrl ||
+                      result.driveWebViewLink ||
+                      result.downloadUrl
+                    }
                     target="_blank"
                     rel="noreferrer"
                     className="mt-1 inline-block text-[var(--hcc-gold-bright)] underline"
                   >
-                    Mở bản gốc
+                    {result.source === 'google_drive' ? 'Mở bản gốc trên Drive' : 'Mở bản gốc'}
                   </a>
                 ) : (
                   <p className="m-0 mt-1 text-[11px] text-amber-100/80">
-                    Chưa có link tải về — cấu hình R2 hoặc dùng Google Drive để có bản gốc.
+                    {result.source === 'google_drive'
+                      ? 'Chưa có link tải về — Share file/thư mục Viewer cho service account, hoặc bật “Anyone with the link”.'
+                      : 'Chưa có link tải về — cấu hình R2 hoặc dùng Google Drive để có bản gốc.'}
                   </p>
                 )}
                 {result.storagePath ? (

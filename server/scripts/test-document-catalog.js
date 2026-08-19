@@ -19,11 +19,15 @@ test('tên hiển thị ưu tiên display_name, mô tả và link lấy từ met
       display_name: 'Quyết định 12/QĐ-UBND',
       mo_ta: 'Quy định thời gian làm việc',
       link_goc: 'https://example.com/qd.pdf',
+      category_id: 'cat-cccd',
+      folder_path: 'Hành chính công / CCCD',
     },
   });
   assert.equal(d.display_name, 'Quyết định 12/QĐ-UBND');
   assert.equal(d.mo_ta, 'Quy định thời gian làm việc');
   assert.equal(d.storage_url, 'https://example.com/qd.pdf');
+  assert.equal(d.category_id, 'cat-cccd');
+  assert.equal(d.folder_path, 'Hành chính công / CCCD');
   assert.match(d.label, /Quyết định 12/);
 });
 

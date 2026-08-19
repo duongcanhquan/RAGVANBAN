@@ -10,7 +10,64 @@ function shouldMirrorToSupabase() {
   return String(process.env.DRIVE_MIRROR_TO_SUPABASE || '').toLowerCase() === 'true';
 }
 
-function pickNewDriveFiles(files, ingestedIds, limit = 8) {
+function summarizeDriveUrlJob(items) {
+  const files = [];
+  let folderLink = '';
+  for (const it of items || []) {
+    if (it?.type === 'folder') {
+      folderLink =
+        it.webViewLink ||
+        it.link ||
+        (it.folderId ? `https://drive.google.com/drive/folders/${it.folderId}` : '') ||
+        folderLink;
+      for (const r of it.results || []) {
+        const view = r.driveWebViewLink || r.downloadUrl || folderLink;
+        files.push({
+          ok: r.ok !== false && !r.error,
+          id: r.id || r.fileId,
+          fileName: r.fileName || r.name,
+          displayName: r.displayName || r.fileName || r.name,
+          chunks: r.chunks || 0,
+          driveWebViewLink: view,
+          storageUrl: r.storageUrl || view,
+          error: r.error,
+          duplicate: r.duplicate,
+        });
+      }
+    } else if (it) {
+      const view = it.driveWebViewLink || it.downloadUrl || it.link || '';
+      files.push({
+        ok: !it.error && (it.id || it.ok !== false),
+        id: it.id,
+        fileName: it.fileName || it.name,
+        displayName: it.displayName || it.fileName || it.name,
+        chunks: it.chunks || 0,
+        driveWebViewLink: view,
+        storageUrl: it.storageUrl || view,
+        error: it.error,
+        duplicate: it.duplicate,
+      });
+    }
+  }
+  const okFiles = files.filter((f) => f.ok && f.id);
+  const first = okFiles[0] || files[0] || {};
+  const n = okFiles.length;
+  return {
+    files,
+    chunks: okFiles.reduce((sum, f) => sum + Number(f.chunks || 0), 0),
+    processed: n,
+    failed: files.filter((f) => !f.ok).length,
+    fileName: n === 1 ? first.fileName : n ? `${n} file Drive` : 'Drive',
+    displayName: n === 1 ? first.displayName || first.fileName : n ? `${n} file từ Google Drive` : 'Drive',
+    driveWebViewLink: n === 1 ? first.driveWebViewLink || folderLink : folderLink || first.driveWebViewLink || '',
+    storageUrl: n === 1 ? first.storageUrl || first.driveWebViewLink || '' : folderLink || first.storageUrl || '',
+    downloadUrl:
+      n === 1 ? first.driveWebViewLink || first.storageUrl || '' : folderLink || first.driveWebViewLink || '',
+    id: first.id,
+  };
+}
+
+function pickNewDriveFiles(files, ingestedIds, limit) {
   const seen = new Set(
     [...(ingestedIds || [])]
       .map((id) => String(id || '').trim())
@@ -163,19 +220,46 @@ async function syncDriveFolder(options = {}) {
       }
       try {
         const r = await ingestDriveFile(f.id, { onProgress, categoryId: t.categoryId });
-        allResults.push({ ok: true, fileId: f.id, name: f.name, ...r });
-        ingestedIds.push(f.id);
+        if (!r?.id) {
+          allResults.push({
+            ok: false,
+            fileId: f.id,
+            name: f.name,
+            error: r?.error || r?.message || 'Không ghi được tài liệu vào danh mục',
+          });
+        } else {
+          allResults.push({ ok: true, fileId: f.id, name: f.name, ...r });
+          ingestedIds.push(f.id);
+        }
       } catch (err) {
-        allResults.push({ ok: false, fileId: f.id, name: f.name, error: err.message });
+        allResults.push({
+          ok: false,
+          id: err.catalogId || undefined,
+          fileId: f.id,
+          name: f.name,
+          error: err.message,
+        });
       }
     }
+  }
+
+  const recorded = allResults.filter((r) => r.id);
+  const failed = allResults.filter((r) => r.ok === false || r.error);
+
+  if (!recorded.length && failed.length) {
+    const err = new Error(
+      failed[0].error || 'Số hóa Drive xong nhưng không ghi được tài liệu vào danh mục.'
+    );
+    err.failures = failed;
+    throw err;
   }
 
   return {
     totalListed,
     skipped,
     pending,
-    processed: allResults.length,
+    processed: recorded.length,
+    failed: failed.length,
     results: allResults,
   };
 }
@@ -186,4 +270,5 @@ module.exports = {
   shouldMirrorToSupabase,
   pickNewDriveFiles,
   driveFileIdFromWebhookBody,
+  summarizeDriveUrlJob,
 };

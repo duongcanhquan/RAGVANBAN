@@ -14,6 +14,14 @@ const {
   updateLocalDocument,
 } = require('./localDocuments');
 const { hydrateDocument, catalogFieldsFromIngest } = require('./documentCatalog');
+const {
+  pgErrorText,
+  writeWithColumnFallback,
+  selectColumnsWithFallback,
+  missingColumnFromPgError,
+  rememberMissingDocumentColumn,
+  missingDocumentColumns,
+} = require('./pgSchemaFallback');
 
 const STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'documents';
 
@@ -172,30 +180,42 @@ async function listDocuments({ limit = 500 } = {}) {
     return { ...local, items: (local.items || []).map(hydrateDocument) };
   }
 
-  const fullSelect =
-    'id,file_name,display_name,mo_ta,so_hieu,loai_van_ban,trang_thai,chunk_count,storage_path,storage_url,drive_web_view_link,source,metadata,created_at,category_id,chuyen_mon,folder_path,sort_order';
-  const { data, error } = await sb
-    .from('documents')
-    .select(fullSelect)
-    .order('created_at', { ascending: false })
-    .limit(limit);
-
-  if (!error) {
-    return { ok: true, source: 'supabase', items: (data || []).map(hydrateDocument) };
+  const columns = [
+    'id',
+    'file_name',
+    'display_name',
+    'mo_ta',
+    'so_hieu',
+    'loai_van_ban',
+    'trang_thai',
+    'chunk_count',
+    'storage_path',
+    'storage_url',
+    'drive_web_view_link',
+    'drive_file_id',
+    'source',
+    'metadata',
+    'created_at',
+    'category_id',
+    'chuyen_mon',
+    'folder_path',
+    'sort_order',
+    'content_sha256',
+    'byte_size',
+  ];
+  const listed = await selectColumnsWithFallback(async (select) => {
+    const res = await sb
+      .from('documents')
+      .select(select)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    return { data: res.data, error: res.error };
+  }, columns);
+  if (listed.error) {
+    console.warn('[supabase] listDocuments:', pgErrorText(listed.error));
+    return { ok: false, source: 'supabase', items: [], error: pgErrorText(listed.error) };
   }
-
-  const retry = await sb
-    .from('documents')
-    .select(
-      'id,file_name,so_hieu,loai_van_ban,trang_thai,chunk_count,storage_path,storage_url,drive_web_view_link,source,metadata,created_at,category_id,chuyen_mon,folder_path'
-    )
-    .order('created_at', { ascending: false })
-    .limit(limit);
-  if (retry.error) {
-    console.warn('[supabase] listDocuments:', retry.error.message);
-    return { ok: false, source: 'supabase', items: [], error: retry.error.message };
-  }
-  return { ok: true, source: 'supabase', items: (retry.data || []).map(hydrateDocument) };
+  return { ok: true, source: 'supabase', items: (listed.data || []).map(hydrateDocument) };
 }
 
 async function countChatLogs() {
@@ -265,6 +285,7 @@ async function insertDocument(row) {
   };
 
   const withCats = {
+    ...(row.id ? { id: row.id } : {}),
     ...base,
     drive_file_id: row.driveFileId || null,
     drive_web_view_link: row.driveWebViewLink || null,
@@ -272,43 +293,21 @@ async function insertDocument(row) {
     category_id: row.categoryId || null,
     chuyen_mon: row.chuyenMon || null,
     folder_path: row.folderPath || null,
-    content_sha256: row.contentSha256 || row.metadata?.content_sha256 || null,
-    byte_size: row.byteSize != null ? Number(row.byteSize) : null,
+    ...(row.contentSha256 || row.metadata?.content_sha256
+      ? { content_sha256: row.contentSha256 || row.metadata.content_sha256 }
+      : {}),
+    ...(row.byteSize != null ? { byte_size: Number(row.byteSize) } : {}),
   };
 
-  let { data, error } = await sb.from('documents').insert(withCats).select('id').single();
-
-  if (error && /content_sha256|byte_size/i.test(error.message || '')) {
-    const { content_sha256: _h, byte_size: _b, ...noHash } = withCats;
-    ({ data, error } = await sb.from('documents').insert(noHash).select('id').single());
-  }
-  if (error && /display_name|mo_ta/i.test(error.message || '')) {
-    const { display_name: _n, mo_ta: _m, ...noDisplay } = withCats;
-    ({ data, error } = await sb.from('documents').insert(noDisplay).select('id').single());
-  }
-  if (error && /category_id|chuyen_mon|folder_path/i.test(error.message || '')) {
-    const mid = {
-      ...base,
-      drive_file_id: row.driveFileId || null,
-      drive_web_view_link: row.driveWebViewLink || null,
-      source: row.source || (row.driveFileId ? 'google_drive' : 'upload'),
-    };
-    const { display_name: _n2, mo_ta: _m2, ...midNoDisplay } = mid;
-    const midPayload = /display_name|mo_ta/i.test(error.message || '') ? midNoDisplay : mid;
-    ({ data, error } = await sb.from('documents').insert(midPayload).select('id').single());
-  }
-  if (error && /drive_file_id|column.*source/i.test(error.message || '')) {
-    const { display_name: _n3, mo_ta: _m3, ...baseNoDisplay } = base;
-    ({ data, error } = await sb
-      .from('documents')
-      .insert(/display_name|mo_ta/i.test(error.message || '') ? baseNoDisplay : base)
-      .select('id')
-      .single());
-  }
+  const written = await writeWithColumnFallback(async (body) => {
+    const res = await sb.from('documents').insert(body).select('id').single();
+    return { data: res.data, error: res.error };
+  }, withCats);
+  let { data, error } = written;
 
   if (error) {
-    console.warn('[supabase] insertDocument:', error.message);
-    return { ok: false, error: error.message, source: 'supabase' };
+    console.warn('[supabase] insertDocument:', pgErrorText(error));
+    return { ok: false, error: pgErrorText(error), source: 'supabase' };
   }
   return { ok: true, id: data?.id, source: 'supabase' };
 }
@@ -323,27 +322,24 @@ async function updateDocumentCategory(id, { categoryId, folderPath, chuyenMon })
     chuyen_mon: chuyenMon || null,
   };
 
-  let { data, error } = await sb.from('documents').update(payload).eq('id', id).select('id').maybeSingle();
-
-  if (error && /category_id|folder_path|chuyen_mon/i.test(error.message || '')) {
+  const loadMetadata = async () => {
     const cur = await sb.from('documents').select('metadata').eq('id', id).maybeSingle();
-    const meta = {
-      ...(cur.data?.metadata || {}),
-      category_id: categoryId,
-      folder_path: folderPath,
-      chuyen_mon: chuyenMon,
-    };
-    const retry = await sb.from('documents').update({ metadata: meta }).eq('id', id).select('id').maybeSingle();
-    if (retry.error) {
-      console.warn('[supabase] updateDocumentCategory:', retry.error.message);
-      return { ok: false, error: retry.error.message };
-    }
-    return { ok: true, id: retry.data?.id, via: 'metadata' };
-  }
+    return cur.data?.metadata || {};
+  };
+
+  const written = await writeWithColumnFallback(
+    async (body) => {
+      const res = await sb.from('documents').update(body).eq('id', id).select('id').maybeSingle();
+      return { data: res.data, error: res.error };
+    },
+    payload,
+    { loadMetadata }
+  );
+  const { data, error } = written;
 
   if (error) {
-    console.warn('[supabase] updateDocumentCategory:', error.message);
-    return { ok: false, error: error.message };
+    console.warn('[supabase] updateDocumentCategory:', pgErrorText(error));
+    return { ok: false, error: pgErrorText(error) };
   }
 
   return { ok: true, id: data?.id || id };
@@ -370,6 +366,7 @@ async function listIngestedDriveFileIds() {
       .select('drive_file_id, metadata')
       .range(from, from + page - 1));
     if (error && /drive_file_id/i.test(error.message || '')) {
+      rememberMissingDocumentColumn('drive_file_id');
       ({ data, error } = await sb.from('documents').select('metadata').range(from, from + page - 1));
     }
     if (error) {
@@ -394,8 +391,20 @@ async function getDocumentByContentHash(hash) {
   if (!sha) return { ok: false };
   const sb = getSupabase();
   if (sb) {
-    let { data, error } = await sb.from('documents').select('*').eq('content_sha256', sha).limit(1).maybeSingle();
-    if (error && /content_sha256/i.test(error.message || '')) {
+    let data;
+    let error;
+    if (!missingDocumentColumns.has('content_sha256')) {
+      ({ data, error } = await sb.from('documents').select('*').eq('content_sha256', sha).limit(1).maybeSingle());
+      if (error) {
+        const col = missingColumnFromPgError(error);
+        if (col === 'content_sha256' || /content_sha256|schema cache/i.test(pgErrorText(error))) {
+          rememberMissingDocumentColumn('content_sha256');
+          data = null;
+          error = null;
+        }
+      }
+    }
+    if (!data) {
       ({ data, error } = await sb
         .from('documents')
         .select('*')
@@ -457,35 +466,20 @@ async function updateDocument(id, patch) {
   }
 
   if (sb && Object.keys(payload).length) {
-    let { data, error } = await sb.from('documents').update(payload).eq('id', id).select('*').maybeSingle();
-    if (error && /display_name|mo_ta/i.test(error.message || '')) {
-      const { display_name: n, mo_ta: m, ...rest } = payload;
-      const cur = await sb.from('documents').select('metadata').eq('id', id).maybeSingle();
-      rest.metadata = {
-        ...(cur.data?.metadata || {}),
-        ...(payload.metadata || {}),
-        ...(n !== undefined ? { display_name: n } : {}),
-        ...(m !== undefined ? { mo_ta: m } : {}),
-      };
-      ({ data, error } = await sb.from('documents').update(rest).eq('id', id).select('*').maybeSingle());
-    }
-    if (error && /content_sha256|byte_size/i.test(error.message || '')) {
-      const { content_sha256: h, byte_size: sz, ...rest } = payload;
-      const cur = await sb.from('documents').select('metadata').eq('id', id).maybeSingle();
-      rest.metadata = {
-        ...(cur.data?.metadata || {}),
-        ...(payload.metadata || {}),
-        ...(h !== undefined ? { content_sha256: h } : {}),
-        ...(sz !== undefined ? { byte_size: sz } : {}),
-      };
-      ({ data, error } = await sb.from('documents').update(rest).eq('id', id).select('*').maybeSingle());
-    }
-    if (error && /sort_order/i.test(error.message || '')) {
-      const { sort_order: orderVal, ...rest } = payload;
-      const cur = await sb.from('documents').select('metadata').eq('id', id).maybeSingle();
-      rest.metadata = { ...(cur.data?.metadata || {}), sort_order: orderVal };
-      ({ data, error } = await sb.from('documents').update(rest).eq('id', id).select('*').maybeSingle());
-    }
+    const written = await writeWithColumnFallback(
+      async (body) => {
+        const res = await sb.from('documents').update(body).eq('id', id).select('*').maybeSingle();
+        return { data: res.data, error: res.error };
+      },
+      payload,
+      {
+        loadMetadata: async () => {
+          const cur = await sb.from('documents').select('metadata').eq('id', id).maybeSingle();
+          return cur.data?.metadata || {};
+        },
+      }
+    );
+    let { data, error } = written;
     if (!error && data) {
       if (payload.sort_order !== undefined) {
         const meta = { ...(data.metadata || {}), sort_order: payload.sort_order };
@@ -494,7 +488,7 @@ async function updateDocument(id, patch) {
       }
       return { ok: true, source: 'supabase', item: hydrateDocument(data) };
     }
-    if (error) console.warn('[supabase] updateDocument:', error.message);
+    if (error) console.warn('[supabase] updateDocument:', pgErrorText(error));
   }
   return updateLocalDocument(id, payload);
 }

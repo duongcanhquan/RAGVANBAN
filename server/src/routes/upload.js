@@ -19,8 +19,8 @@ const {
 const { extractWebPage } = require('../ingestion/extractWebPage');
 const { ensureBrain, liveKeysReport, brainNotReadyMessage } = require('../services/clients');
 const { assertCanUseCategory } = require('../services/adminAccess');
-const { parseDriveResource } = require('../services/googleDrive');
-const { ingestDriveFile, syncDriveFolder } = require('../services/driveIngest');
+const { parseDriveResource, inspectDriveResource } = require('../services/googleDrive');
+const { ingestDriveFile, syncDriveFolder, summarizeDriveUrlJob } = require('../services/driveIngest');
 const { getRagConfig, assertUploadSize, multerFileSizeCap, formatBytes } = require('../services/ragConfig');
 const { getFlags } = require('../services/integrations');
 const { listenSseAbort } = require('../services/sseAbort');
@@ -339,11 +339,12 @@ router.post('/url', async (req, res) => {
       }
       const items = [];
       for (let i = 0; i < driveParts.length; i += 1) {
-        const { raw: link, parsed } = driveParts[i];
+        const { raw: link, parsed: parsedRaw } = driveParts[i];
+        const parsed = await inspectDriveResource(parsedRaw);
         progress({
           stage: 'drive',
           percent: Math.round((i / driveParts.length) * 90),
-          message: `Drive ${i + 1}/${driveParts.length}: ${link}`,
+          message: `Drive ${i + 1}/${driveParts.length}: ${parsed?.name || link}`,
         });
         if (parsed.type === 'folder') {
           const folderResult = await syncDriveFolder({
@@ -354,32 +355,38 @@ router.post('/url', async (req, res) => {
               if (!closed()) progress(p);
             },
           });
-          items.push({ type: 'folder', link, ...folderResult });
+          items.push({
+            type: 'folder',
+            link,
+            folderId: parsed.id,
+            webViewLink: parsed.webViewLink || `https://drive.google.com/drive/folders/${parsed.id}`,
+            ...folderResult,
+          });
         } else {
           const one = await ingestDriveFile(parsed.id, {
             categoryId,
-            displayName: displayName || undefined,
+            displayName: displayName || parsed.name || undefined,
             description: description || undefined,
             onProgress: (p) => {
               if (!closed()) progress(p);
             },
           });
-          items.push({ type: 'file', link, ...one });
+          items.push({
+            type: 'file',
+            link,
+            ...one,
+            driveWebViewLink: one.driveWebViewLink || parsed.webViewLink || link,
+          });
         }
       }
+      const summary = summarizeDriveUrlJob(items);
       done({
         source: 'google_drive',
         count: items.length,
         items,
         skipped: items.reduce((n, it) => n + Number(it.skipped || 0), 0),
         pending: items.reduce((n, it) => n + Number(it.pending || 0), 0),
-        processed: items.reduce((n, it) => n + Number(it.processed || (it.id ? 1 : 0)), 0),
-        fileName: items[0]?.fileName || `drive-${items.length}-link`,
-        displayName:
-          items.length === 1
-            ? items[0]?.displayName || items[0]?.fileName || 'Drive'
-            : `${items.length} link Drive`,
-        downloadUrl: items[0]?.driveWebViewLink,
+        ...summary,
       });
       return;
     }
