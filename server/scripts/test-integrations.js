@@ -14,6 +14,15 @@ test('parseServiceAccount nhận JSON key Google', () => {
   assert.ok(json.private_key);
 });
 
+test('getIntegrationHealth Drive/n8n OFF khi thiếu key nhưng cờ mặc định bật', async () => {
+  const { getIntegrationHealth } = require('../src/services/integrations');
+  const h = await getIntegrationHealth();
+  assert.equal(h.drive.enabled, true);
+  assert.equal(h.n8n.enabled, true);
+  if (!h.drive.hasKey) assert.equal(h.drive.reason, 'missing_key');
+  if (!h.n8n.hasSecret) assert.equal(h.n8n.reason, 'missing_secret');
+});
+
 test('policy app_settings không đọc secret cho anon', () => {
   const sql = require('fs').readFileSync(
     require('path').resolve(__dirname, '../../supabase/migrations/006_app_settings.sql'),
@@ -21,4 +30,9 @@ test('policy app_settings không đọc secret cho anon', () => {
   );
   assert.match(sql, /key = 'quick_keywords'/);
   assert.doesNotMatch(sql, /using \(true\)/);
+  const setup = require('fs').readFileSync(
+    require('path').resolve(__dirname, '../../supabase/setup-all.sql'),
+    'utf8'
+  );
+  assert.match(setup, /key = 'quick_keywords'/);
 });

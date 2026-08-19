@@ -1,5 +1,5 @@
 -- ============================================================
--- RAGVANBAN — chạy MỘT LẦN trong SQL Editor (đúng thứ tự 001→006)
+-- RAGVANBAN — chạy MỘT LẦN trong SQL Editor (đúng thứ tự 001→007)
 -- ============================================================
 
 -- ---------- 001: chat_logs + documents + storage ----------
@@ -190,3 +190,9 @@ create policy "anon_read_app_settings"
   on public.app_settings for select
   to anon, authenticated
   using (key = 'quick_keywords');
+
+-- ---------- 007: sort_order tài liệu ----------
+alter table public.documents add column if not exists sort_order integer;
+
+create index if not exists documents_category_sort_idx
+  on public.documents (category_id, sort_order, created_at desc);

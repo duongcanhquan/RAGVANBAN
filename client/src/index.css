@@ -56,8 +56,8 @@ body {
   font-family: var(--font-sans);
   font-size: 16px;
   line-height: 1.5;
-  color: var(--color-foreground);
-  background: var(--color-background);
+  color: #f4ecee;
+  background: #1a080c;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -160,17 +160,57 @@ body {
   padding-right: max(1rem, env(safe-area-inset-right));
 }
 
-/* Canvas hành chính — đỏ nhẹ + vàng ấm */
+/* Canvas công khai — cùng nền đỏ–vàng với /quantri */
 .app-canvas {
+  --hcc-ink: #f4ecee;
+  --hcc-muted: rgba(244, 236, 238, 0.62);
+  --hcc-line: rgba(255, 213, 74, 0.2);
+  --hcc-surface: rgba(255, 255, 255, 0.08);
+  --hcc-canvas: rgba(0, 0, 0, 0.28);
+  --hcc-red-soft: rgba(196, 30, 58, 0.38);
+  --color-foreground: #f4ecee;
+  --color-background: transparent;
+  --color-border: rgba(255, 213, 74, 0.2);
+  --color-destructive: #fca5a5;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 10px 32px rgba(0, 0, 0, 0.38);
+  color: #f4ecee;
   background:
-    radial-gradient(900px 420px at 50% -8%, rgba(196, 30, 58, 0.12), transparent 55%),
-    radial-gradient(700px 360px at 100% 0%, rgba(232, 185, 35, 0.14), transparent 45%),
-    radial-gradient(600px 400px at 0% 100%, rgba(196, 30, 58, 0.06), transparent 50%),
-    linear-gradient(180deg, #fff8f9 0%, var(--hcc-canvas) 38%, #f5f2f3 100%);
+    radial-gradient(1000px 520px at 12% -5%, rgba(232, 185, 35, 0.22), transparent 55%),
+    radial-gradient(800px 480px at 92% 8%, rgba(196, 30, 58, 0.28), transparent 50%),
+    linear-gradient(165deg, #2a0a12 0%, #4a101f 42%, #1a080c 100%);
+}
+
+.app-canvas .btn-gold {
+  color: #1a1214;
+}
+
+.app-canvas .field-glass {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f4ecee;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.app-canvas .field-glass::placeholder {
+  color: rgba(244, 236, 238, 0.42);
+}
+
+.app-canvas .field-glass:focus {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--hcc-gold);
+  outline: none;
 }
 
 .prose-chat a.citation-chip {
   text-decoration: none;
+}
+
+.prose-chat {
+  color: inherit;
+}
+
+.prose-chat a {
+  color: var(--hcc-gold-bright);
 }
 
 /* Nút vàng sang */

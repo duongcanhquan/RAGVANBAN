@@ -8,21 +8,29 @@ const {
   withProviderFallback,
   hasLiveKeys,
   listAvailableProviders,
+  ensureBrain,
 } = require('./llmFactory');
+const { pineconeCreds } = require('./llmConfig');
 
 let pineconeCached = null;
+let pineconeKeyUsed = '';
+
+function pineconeIndexTarget() {
+  const pc = pineconeCreds();
+  return {
+    indexName: pc.indexName || 'van-ban-hanh-chinh',
+    namespace: pc.namespace || '',
+  };
+}
 
 function getPinecone() {
-  if (pineconeCached) return pineconeCached;
-  if (!hasLiveKeys() && !process.env.PINECONE_API_KEY) return null;
-
-  const key = process.env.PINECONE_API_KEY;
-  if (!key || String(key).includes('your-pinecone')) {
-    return null;
-  }
+  const creds = pineconeCreds();
+  if (!creds.hasKey) return null;
+  if (pineconeCached && pineconeKeyUsed === creds.apiKey) return pineconeCached;
 
   const { Pinecone } = require('@pinecone-database/pinecone');
-  pineconeCached = new Pinecone({ apiKey: key });
+  pineconeCached = new Pinecone({ apiKey: creds.apiKey });
+  pineconeKeyUsed = creds.apiKey;
   return pineconeCached;
 }
 
@@ -31,10 +39,12 @@ function getPinecone() {
  * Chat/extract dùng factory + fallback; embeddings theo DEFAULT_EMBEDDING_PROVIDER.
  */
 async function getClients() {
+  await ensureBrain();
   if (!hasLiveKeys()) return null;
 
   const pinecone = getPinecone();
   if (!pinecone) return null;
+  const pc = pineconeCreds();
 
   const { result: chatModel, provider: chatProvider } = await withProviderFallback(
     'chat',
@@ -52,8 +62,8 @@ async function getClients() {
     pinecone,
     chatProvider,
     embeddingProvider,
-    indexName: process.env.PINECONE_INDEX_NAME || 'van-ban-hanh-chinh',
-    namespace: process.env.PINECONE_NAMESPACE || '',
+    indexName: pc.indexName || 'van-ban-hanh-chinh',
+    namespace: pc.namespace || '',
   };
 }
 
@@ -70,10 +80,12 @@ async function getExtractLLM() {
 module.exports = {
   getClients,
   getPinecone,
+  pineconeIndexTarget,
   getExtractLLM,
   hasLiveKeys,
   listAvailableProviders,
   getLLM,
   getEmbeddings,
   withProviderFallback,
+  ensureBrain,
 };

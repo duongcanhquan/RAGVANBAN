@@ -26,7 +26,7 @@ export default function ChatWindow({
       }`}
     >
       {empty && (
-        <section className="rounded-2xl border border-[var(--hcc-line)]/80 bg-white/70 px-4 py-4 sm:px-5">
+        <section className="glass-panel rounded-2xl px-4 py-4 sm:px-5">
           <h1 className="m-0 text-lg font-semibold tracking-tight text-[var(--hcc-ink)] sm:text-xl">
             Hệ thống tra cứu văn bản thông minh
           </h1>
@@ -43,7 +43,7 @@ export default function ChatWindow({
                   key={ex.id || query}
                   type="button"
                   onClick={() => onExampleClick(query)}
-                  className="cursor-pointer rounded-full border border-[var(--hcc-line)] bg-white px-3 py-2 text-left text-xs text-[var(--hcc-ink)] transition hover:border-[var(--hcc-red)] hover:text-[var(--hcc-red)] sm:text-sm"
+                  className="cursor-pointer rounded-full border border-white/15 bg-white/10 px-3 py-2 text-left text-xs text-slate-100 transition hover:border-[var(--hcc-gold)] hover:text-[var(--hcc-gold-bright)] sm:text-sm"
                 >
                   {label}
                 </button>
@@ -55,7 +55,7 @@ export default function ChatWindow({
 
       {statusText && (
         <p
-          className="m-0 rounded-xl border border-[var(--hcc-line)] bg-white/80 px-3 py-2 text-xs text-[var(--hcc-muted)]"
+          className="m-0 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-xs text-[var(--hcc-muted)]"
           aria-live="polite"
         >
           {statusText}

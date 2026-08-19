@@ -1,50 +1,42 @@
-# n8n + Google Drive → RAG
+# n8n → RAGVANBAN
 
-Tự động số hóa PDF khi có file mới trên Drive — phù hợp dùng **cá nhân** hoặc **nhiều nơi** mà không mở Admin upload công khai.
+Server đã có webhook. n8n chỉ việc gọi — **không cần** Google credential trên n8n nếu chỉ đồng bộ thư mục đã khai trong `/quantri`.
 
-## Bảo mật
+## Chạy ngay (khuyến nghị)
 
-1. Đặt `N8N_WEBHOOK_SECRET` dài, ngẫu nhiên trên server (`.env`).
-2. n8n gọi `POST /api/webhooks/n8n` với header `X-N8N-Secret`.
-3. Chỉ expose webhook qua HTTPS (tunnel / reverse proxy). Không public Admin nếu không cần.
+File import: [`ragvanban-sync.workflow.json`](./ragvanban-sync.workflow.json)
 
-## Biến môi trường (server)
+1. App **bật** (`npm run dev` hoặc production).
+2. Vào **`/quantri` → Cài đặt → Google Drive & n8n**
+   - Dán Google service account JSON (nếu chưa)
+   - Thêm link thư mục Drive
+   - Bật webhook n8n → **Tạo secret** → copy
+3. n8n → **Workflows → Import from File** → chọn file JSON trên.
+4. Mở node **Gọi RAG webhook**
+   - URL: `http://127.0.0.1:5000/api/webhooks/n8n`  
+     n8n Docker trên Mac: `http://host.docker.internal:5000/api/webhooks/n8n`  
+     Vercel: `https://YOUR-DOMAIN/api/webhooks/n8n`
+   - Header `X-N8N-Secret` = secret vừa copy (thay `PASTE_N8N_SECRET`)
+5. Bấm **Execute Workflow** trên node **Chạy tay**.
 
-```env
-GOOGLE_SERVICE_ACCOUNT_JSON=C:/secrets/rag-drive-sa.json
-GOOGLE_DRIVE_FOLDER_ID=1abc...
-N8N_WEBHOOK_SECRET=doi-thanh-chuoi-dai-ngau-nhien
-```
+Thành công: JSON `ok: true`, `action: sync_folder`, danh sách file đã số hóa.
 
-## Google Service Account (cá nhân an toàn)
+Bật workflow (Active) để **Mỗi 15 phút** tự chạy. Node **File mới trên Drive** là tùy chọn — cần gắn Google OAuth trên n8n và dán Folder ID.
 
-1. [Google Cloud Console](https://console.cloud.google.com/) → tạo project → bật **Google Drive API**.
-2. **IAM → Service Accounts** → Create → tạo key **JSON** → lưu ngoài repo.
-3. Share thư mục Drive chứa PDF cho **email service account** (quyền Viewer).
-4. Copy **Folder ID** từ URL: `https://drive.google.com/drive/folders/<FOLDER_ID>`.
+## Payload server nhận
 
-## Payload webhook
+| Body | Việc làm |
+|------|----------|
+| `{ "action": "sync_folder", "limit": 20 }` | Đồng bộ thư mục đã khai trong Cài đặt |
+| `{ "fileId": "1abc..." }` | Số hóa 1 file Drive |
+| `{ "fileUrl": "https://...", "fileName": "vb.pdf" }` | Tải URL công khai rồi số hóa |
 
-| Body | Ý nghĩa |
-|------|---------|
-| `{ "fileId": "..." }` | Tải 1 PDF từ Drive → ingest |
-| `{ "action": "sync_folder", "limit": 10 }` | Đồng bộ tối đa N file trong folder |
-| `{ "fileUrl": "https://...", "fileName": "a.pdf" }` | Tải PDF từ URL công khai |
+Header bắt buộc: `X-N8N-Secret`.
 
-## Import workflow mẫu
-
-File: `drive-to-rag.workflow.json`
-
-1. n8n → **Workflows → Import**
-2. Gắn credential Google Drive (Trigger)
-3. Env trên n8n:
-   - `RAG_WEBHOOK_URL` = `https://your-public-host/api/webhooks/n8n`
-   - `N8N_WEBHOOK_SECRET` = cùng giá trị server
-   - `GOOGLE_DRIVE_FOLDER_ID` = folder theo dõi
-
-## Kiểm tra nhanh
+## Kiểm tra server
 
 ```bash
 curl http://127.0.0.1:5000/api/webhooks/n8n/health
-curl http://127.0.0.1:5000/api/drive/status
 ```
+
+`enabled: true` và `secretConfigured: true` rồi hãy Execute n8n.

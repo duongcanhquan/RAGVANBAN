@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Lightbulb, Plus, Trash2, Play } from 'lucide-react'
+import { adminFetch } from '../lib/adminApi'
+import { apiUrl } from '../lib/apiBase'
 
 /**
  * Kho tình huống đặc thù mẫu — làm giàu AI & tái sử dụng.
@@ -13,6 +15,7 @@ export default function ScenariosPage() {
   const [error, setError] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [canEdit, setCanEdit] = useState(false)
   const [form, setForm] = useState({
     title: '',
     situation: '',
@@ -21,13 +24,27 @@ export default function ScenariosPage() {
     tags: '',
   })
 
+  useEffect(() => {
+    let cancelled = false
+    adminFetch('/api/quantri/me')
+      .then((res) => {
+        if (!cancelled) setCanEdit(res.ok)
+      })
+      .catch(() => {
+        if (!cancelled) setCanEdit(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
       const qs = new URLSearchParams()
       if (q.trim()) qs.set('q', q.trim())
-      const res = await fetch(`/api/scenarios?${qs}`)
+      const res = await fetch(apiUrl(`/api/scenarios?${qs}`))
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Không tải được')
       setItems(data.items || [])
@@ -48,7 +65,7 @@ export default function ScenariosPage() {
     setSaving(true)
     setError('')
     try {
-      const res = await fetch('/api/scenarios', {
+      const res = await adminFetch('/api/scenarios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
@@ -72,7 +89,7 @@ export default function ScenariosPage() {
   }
 
   async function handleUse(id) {
-    const res = await fetch(`/api/scenarios/${id}/use`, { method: 'POST' })
+    const res = await fetch(apiUrl(`/api/scenarios/${id}/use`), { method: 'POST' })
     const data = await res.json()
     if (data.ask) {
       navigate('/', { state: { prefill: data.ask, mode: 'advise' } })
@@ -81,7 +98,7 @@ export default function ScenariosPage() {
 
   async function handleDelete(id) {
     if (!confirm('Xóa tình huống này?')) return
-    await fetch(`/api/scenarios/${id}`, { method: 'DELETE' })
+    await adminFetch(`/api/scenarios/${id}`, { method: 'DELETE' })
     await load()
   }
 
@@ -89,7 +106,7 @@ export default function ScenariosPage() {
     <div className="safe-x mx-auto h-full min-h-0 w-full max-w-6xl overflow-y-auto py-4 xl:px-6">
       <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="m-0 mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--hcc-red)]">
+          <p className="m-0 mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--hcc-gold-bright)]">
             <Lightbulb className="h-3.5 w-3.5" />
             Kho mẫu
           </p>
@@ -100,6 +117,7 @@ export default function ScenariosPage() {
             Lưu case hay gặp → người sau dùng lại · AI tham khảo khi trả lời
           </p>
         </div>
+        {canEdit ? (
         <button
           type="button"
           onClick={() => setFormOpen((v) => !v)}
@@ -108,19 +126,20 @@ export default function ScenariosPage() {
           <Plus className="h-4 w-4" />
           Thêm mẫu
         </button>
+        ) : null}
       </header>
 
-      {formOpen && (
+      {formOpen && canEdit && (
         <form
           onSubmit={handleCreate}
-          className="mb-4 space-y-3 rounded-2xl border border-[var(--hcc-line)] bg-white p-4 shadow-[var(--shadow-sm)]"
+          className="mb-4 space-y-3 rounded-2xl glass-panel p-4"
         >
           <input
             required
             value={form.title}
             onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
             placeholder="Tiêu đề tình huống *"
-            className="w-full rounded-xl border border-[var(--hcc-line)] px-3 py-2.5 text-sm outline-none focus:border-[var(--hcc-red)]"
+            className="field-glass w-full rounded-xl border px-3 py-2.5 text-sm"
           />
           <textarea
             required
@@ -128,26 +147,26 @@ export default function ScenariosPage() {
             value={form.situation}
             onChange={(e) => setForm((f) => ({ ...f, situation: e.target.value }))}
             placeholder="Mô tả tình huống đặc thù *"
-            className="w-full resize-y rounded-xl border border-[var(--hcc-line)] px-3 py-2.5 text-sm outline-none focus:border-[var(--hcc-red)]"
+            className="field-glass w-full resize-y rounded-xl border px-3 py-2.5 text-sm"
           />
           <input
             value={form.suggested_question}
             onChange={(e) => setForm((f) => ({ ...f, suggested_question: e.target.value }))}
             placeholder="Câu hỏi gợi ý để tra cứu"
-            className="w-full rounded-xl border border-[var(--hcc-line)] px-3 py-2.5 text-sm outline-none focus:border-[var(--hcc-red)]"
+            className="field-glass w-full rounded-xl border px-3 py-2.5 text-sm"
           />
           <textarea
             rows={3}
             value={form.sample_answer}
             onChange={(e) => setForm((f) => ({ ...f, sample_answer: e.target.value }))}
             placeholder="Gợi ý xử lý / câu trả lời mẫu (tuỳ chọn)"
-            className="w-full resize-y rounded-xl border border-[var(--hcc-line)] px-3 py-2.5 text-sm outline-none focus:border-[var(--hcc-red)]"
+            className="field-glass w-full resize-y rounded-xl border px-3 py-2.5 text-sm"
           />
           <input
             value={form.tags}
             onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
             placeholder="Tags (cách nhau bởi dấu phẩy)"
-            className="w-full rounded-xl border border-[var(--hcc-line)] px-3 py-2.5 text-sm outline-none focus:border-[var(--hcc-red)]"
+            className="field-glass w-full rounded-xl border px-3 py-2.5 text-sm"
           />
           <div className="flex gap-2">
             <button
@@ -172,7 +191,7 @@ export default function ScenariosPage() {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="Tìm tình huống…"
-        className="mb-4 w-full rounded-2xl border border-[var(--hcc-line)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--hcc-red)]"
+        className="field-glass mb-4 w-full rounded-2xl border px-4 py-3 text-sm"
       />
 
       {error && (
@@ -186,12 +205,12 @@ export default function ScenariosPage() {
         {items.map((s) => (
           <li
             key={s.id}
-            className="rounded-2xl border border-[var(--hcc-line)] bg-white p-4 shadow-[var(--shadow-sm)]"
+            className="glass-panel rounded-2xl p-4"
           >
             <h2 className="m-0 text-base font-semibold text-[var(--hcc-ink)]">{s.title}</h2>
             <p className="m-0 mt-2 text-sm leading-relaxed text-[var(--hcc-muted)]">{s.situation}</p>
             {s.suggested_question && (
-              <p className="m-0 mt-2 text-xs text-[var(--hcc-red)]">
+              <p className="m-0 mt-2 text-xs text-[var(--hcc-gold-bright)]">
                 Hỏi gợi ý: {s.suggested_question}
               </p>
             )}
@@ -200,7 +219,7 @@ export default function ScenariosPage() {
                 {s.tags.map((t) => (
                   <span
                     key={t}
-                    className="rounded-full bg-[var(--hcc-red-soft)] px-2 py-0.5 text-[11px] text-[var(--hcc-red-deep)]"
+                    className="rounded-full bg-[var(--hcc-red-soft)] px-2 py-0.5 text-[11px] text-rose-200"
                   >
                     {t}
                   </span>
@@ -216,6 +235,7 @@ export default function ScenariosPage() {
                 <Play className="h-3.5 w-3.5" />
                 Dùng để hỏi
               </button>
+              {canEdit ? (
               <button
                 type="button"
                 onClick={() => handleDelete(s.id)}
@@ -224,6 +244,7 @@ export default function ScenariosPage() {
                 <Trash2 className="h-3.5 w-3.5" />
                 Xóa
               </button>
+              ) : null}
               <span className="ml-auto self-center text-[11px] text-[var(--hcc-muted)]">
                 dùng {s.use_count || 0} lần
               </span>

@@ -3,23 +3,29 @@
  */
 const path = require('path');
 const { extractAnyText } = require('../ingestion/extractAnyText');
-const { extractMetadataFromPrefix } = require('../ingestion/extractMetadata');
+const {
+  extractMetadataFromPrefix,
+  enrichMetadataFromFullText,
+} = require('../ingestion/extractMetadata');
 const { chunkTextWithMetadata } = require('../ingestion/chunkDocuments');
 const { upsertChunksToPinecone } = require('../ingestion/upsertToPinecone');
 const {
   getExtractLLM,
   getPinecone,
+  pineconeIndexTarget,
   getEmbeddings,
   withProviderFallback,
   hasLiveKeys,
+  ensureBrain,
 } = require('./clients');
-const { insertDocument } = require('./supabase');
+const { insertDocument, getDocumentByFileName, updateDocument } = require('./supabase');
 const {
   listCategories,
   suggestCategoryId,
   pathForCategory,
   setLocalDocCategory,
 } = require('./taxonomyStore');
+const { getRagConfig } = require('./ragConfig');
 
 function defaultUrlForFile(filePath) {
   const base = process.env.PUBLIC_DOCS_BASE_URL || '';
@@ -51,8 +57,12 @@ async function ingestTextContent(text, options = {}) {
   const cleaned = String(text || '').trim();
   if (!cleaned) throw new Error('Nội dung trống');
 
-  const chunkSize = Number(process.env.CHUNK_SIZE) || 900;
-  const chunkOverlap = Number(process.env.CHUNK_OVERLAP) || 150;
+  const rag = await getRagConfig();
+  const chunkSize = Number(options.chunkSize) || rag.chunkSize;
+  const chunkOverlap =
+    options.chunkOverlap != null && options.chunkOverlap !== ''
+      ? Number(options.chunkOverlap)
+      : rag.chunkOverlap;
 
   progress(onProgress, 'read', 15, `Đã nhận ${cleaned.length} ký tự (${sourceKind})`);
 
@@ -65,12 +75,13 @@ async function ingestTextContent(text, options = {}) {
     extractProvider = extract.provider;
   }
 
-  const metadata = await extractMetadataFromPrefix(cleaned, {
+  const extractedMeta = await extractMetadataFromPrefix(cleaned, {
     fileName,
     urlFileGoc: publicUrl || '',
     llm,
     useLlm: Boolean(llm),
   });
+  const metadata = enrichMetadataFromFullText(extractedMeta, cleaned);
 
   if (publicUrl) {
     metadata.link_goc = publicUrl;
@@ -78,6 +89,7 @@ async function ingestTextContent(text, options = {}) {
   }
   metadata.nguon_loai = sourceKind;
   metadata.mime_type = mimeType;
+  if (options.pageCountHint) metadata.page_count = Number(options.pageCountHint) || 0;
 
   progress(onProgress, 'chunk', 50, 'Đang chunk văn bản…');
   const chunks = await chunkTextWithMetadata(cleaned, metadata, {
@@ -87,24 +99,41 @@ async function ingestTextContent(text, options = {}) {
 
   let upserted = 0;
   let embeddingProvider = null;
+  let insertedId = null;
 
   if (!dryRun) {
     if (!hasLiveKeys()) {
       throw new Error('Thiếu cấu hình Multi-LLM / Pinecone để số hóa');
     }
+    await ensureBrain();
     progress(onProgress, 'embed', 65, 'Đang embed & đẩy lên Pinecone…');
     const emb = await withProviderFallback('embedding', async (p) => getEmbeddings(p));
     embeddingProvider = emb.provider;
     const pinecone = getPinecone();
+    const pc = pineconeIndexTarget();
+
+    const existing =
+      options.replaceDocumentId
+        ? { ok: true, id: options.replaceDocumentId }
+        : await getDocumentByFileName(fileName);
+    const documentId = existing?.id || existing?.item?.id || options.replaceDocumentId || '';
+    if (documentId) {
+      chunks.forEach((c) => {
+        c.metadata = { ...(c.metadata || {}), document_id: documentId };
+      });
+    }
 
     const result = await upsertChunksToPinecone(chunks, {
       embeddings: emb.result,
       pinecone,
-      indexName: process.env.PINECONE_INDEX_NAME || 'van-ban-hanh-chinh',
-      namespace: process.env.PINECONE_NAMESPACE || '',
+      indexName: pc.indexName,
+      namespace: pc.namespace,
       batchSize: Number(process.env.UPSERT_BATCH_SIZE) || 64,
+      replaceFileName: fileName,
+      previousIds: existing?.item?.metadata?.pinecone_ids || existing?.metadata?.pinecone_ids,
     });
     upserted = result.upserted;
+    metadata.pinecone_ids = result.ids || [];
 
     progress(onProgress, 'db', 90, 'Đang ghi metadata & chuyên mục…');
     const cats = await listCategories();
@@ -124,7 +153,7 @@ async function ingestTextContent(text, options = {}) {
     metadata.folder_path = folderPath;
     metadata.chuyen_mon = cat?.name || metadata.chuyen_mon || null;
 
-    const inserted = await insertDocument({
+    const catalogPayload = {
       fileName,
       soHieu: metadata.so_hieu,
       loaiVanBan: metadata.loai_van_ban,
@@ -140,16 +169,39 @@ async function ingestTextContent(text, options = {}) {
       folderPath,
       chuyenMon: cat?.name || null,
       metadata,
-    });
+    };
 
-    if (inserted?.id && categoryId) {
-      setLocalDocCategory(inserted.id, categoryId);
+    const replaceId = options.replaceDocumentId || existing?.id || existing?.item?.id || null;
+    if (replaceId) {
+      const updated = await updateDocument(replaceId, {
+        file_name: fileName,
+        so_hieu: metadata.so_hieu,
+        loai_van_ban: metadata.loai_van_ban,
+        trang_thai: metadata.trang_thai,
+        storage_path: storagePath || undefined,
+        storage_url: publicUrl || metadata.link_goc || undefined,
+        metadata,
+        chunk_count: chunks.length,
+      });
+      insertedId = replaceId;
+      if (!updated?.ok) {
+        const inserted = await insertDocument({ ...catalogPayload, id: replaceId });
+        insertedId = inserted?.id || replaceId;
+      }
+    } else {
+      const inserted = await insertDocument(catalogPayload);
+      insertedId = inserted?.id || null;
+    }
+
+    if (insertedId && categoryId) {
+      setLocalDocCategory(insertedId, categoryId);
     }
   }
 
   progress(onProgress, 'done', 100, 'Hoàn tất số hóa');
 
   return {
+    id: insertedId,
     fileName,
     pageCount: 0,
     kind: sourceKind,
@@ -184,7 +236,12 @@ async function ingestSingleFile(source, options = {}) {
     (typeof source === 'string' ? path.basename(source) : 'upload.bin');
 
   progress(onProgress, 'read', 10, `Đang trích xuất nội dung: ${fileName}`);
-  const extracted = await extractAnyText(source, { fileName, mimeType });
+  const rag = options.ocrLangs ? null : await getRagConfig();
+  const extracted = await extractAnyText(source, {
+    fileName,
+    mimeType,
+    ocrLangs: options.ocrLangs || rag?.ocrLangs,
+  });
   if (!extracted.text) {
     throw new Error(`Không trích xuất được text từ ${fileName}`);
   }

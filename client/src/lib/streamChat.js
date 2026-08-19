@@ -3,11 +3,11 @@
  * Dev: Vite proxy `/api` → http://localhost:5000 (tránh CORS).
  * Có thể override bằng VITE_API_BASE.
  */
-const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
+import { apiUrl } from './apiBase'
 
 export async function streamChat(message, handlers = {}) {
-  const { onMeta, onToken, onDone, onError, signal, sessionId, mode } = handlers
-  const url = `${API_BASE}/api/chat`
+  const { onMeta, onToken, onDone, onError, signal, sessionId, mode, voiceTalk } = handlers
+  const url = apiUrl('/api/chat')
 
   const response = await fetch(url, {
     method: 'POST',
@@ -16,7 +16,12 @@ export async function streamChat(message, handlers = {}) {
       Accept: 'text/event-stream',
       ...(sessionId ? { 'X-Session-Id': sessionId } : {}),
     },
-    body: JSON.stringify({ message, sessionId, mode: mode || 'lookup' }),
+    body: JSON.stringify({
+      message,
+      sessionId,
+      mode: mode || 'lookup',
+      voiceTalk: Boolean(voiceTalk),
+    }),
     signal,
   })
 

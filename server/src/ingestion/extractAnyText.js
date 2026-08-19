@@ -30,7 +30,7 @@ const MIME_MAP = {
   'application/pdf': 'pdf',
   'application/msword': 'doc',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
-  'application/vnd.ms-powerpoint': 'pptx',
+  'application/vnd.ms-powerpoint': 'ppt_legacy',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
   'image/png': 'image',
   'image/jpeg': 'image',
@@ -52,7 +52,8 @@ function detectKind(fileName = '', mimeType = '') {
 }
 
 function isAllowedUpload(fileName, mimeType) {
-  return Boolean(detectKind(fileName, mimeType));
+  const kind = detectKind(fileName, mimeType);
+  return Boolean(kind) && kind !== 'ppt_legacy';
 }
 
 async function extractDocx(buffer) {
@@ -143,9 +144,9 @@ async function extractPptx(buffer) {
   return { text, pageCount: slideNames.length, kind: 'pptx' };
 }
 
-async function extractImageOcr(buffer) {
+async function extractImageOcr(buffer, options = {}) {
   const { createWorker } = require('tesseract.js');
-  const langs = process.env.OCR_LANGS || 'vie+eng';
+  const langs = options.ocrLangs || process.env.OCR_LANGS || 'vie+eng';
   const worker = await createWorker(langs);
   try {
     const {
@@ -197,7 +198,7 @@ async function extractAnyText(source, options = {}) {
   if (kind === 'ppt_legacy') {
     throw new Error('File .ppt cũ chưa hỗ trợ — hãy lưu thành .pptx hoặc PDF rồi tải lên.');
   }
-  if (kind === 'image') return extractImageOcr(buffer);
+  if (kind === 'image') return extractImageOcr(buffer, options);
   if (kind === 'text') return extractPlainText(buffer);
 
   throw new Error(`Kind không xử lý được: ${kind}`);

@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const {
   publicUrlForKey,
   objectKeyForFile,
+  r2FolderPrefix,
+  relocateKey,
   r2AccountId,
   isR2Configured,
   hasR2Credentials,
@@ -42,9 +44,23 @@ test('publicUrlForKey bỏ slash cuối và encode segment', () => {
   );
 });
 
-test('objectKeyForFile nằm thư mục theo ngày', () => {
+test('objectKeyForFile mặc định thư mục chua-gan theo ngày', () => {
   const key = objectKeyForFile('ND-123.pdf');
-  assert.match(key, /^van-ban\/\d{4}-\d{2}-\d{2}\/\d+-ND-123\.pdf$/);
+  assert.match(key, /^van-ban\/chua-gan\/\d{4}-\d{2}-\d{2}\/\d+-ND-123\.pdf$/);
+});
+
+test('objectKeyForFile xếp theo slug chuyên mục', () => {
+  const key = objectKeyForFile('ND-123.pdf', { folderPath: 'Hành chính công / CCCD' });
+  assert.match(key, /^van-ban\/hanh-chinh-cong\/cccd\/\d{4}-\d{2}-\d{2}\/\d+-ND-123\.pdf$/);
+});
+
+test('r2FolderPrefix và relocateKey giữ ngày, đổi thư mục chuyên mục', () => {
+  assert.equal(r2FolderPrefix(''), 'van-ban/chua-gan');
+  assert.equal(r2FolderPrefix('Hành chính công / CCCD'), 'van-ban/hanh-chinh-cong/cccd');
+  assert.equal(
+    relocateKey('van-ban/chua-gan/2026-08-19/99-ND-123.pdf', 'Hành chính công / CCCD'),
+    'van-ban/hanh-chinh-cong/cccd/2026-08-19/99-ND-123.pdf'
+  );
 });
 
 test('r2AccountId nhận ID thuần hoặc S3 endpoint', () => {
@@ -65,4 +81,17 @@ test('isR2Configured cần đủ key + URL công khai', () => {
   assert.equal(isR2Configured(), false);
   process.env.R2_PUBLIC_BASE_URL = 'https://pub-abc.r2.dev';
   assert.equal(isR2Configured(), true);
+});
+
+test('r2Status tách hasCredentials và hasPublicUrl', () => {
+  const { r2Status } = require('../src/services/r2');
+  process.env.R2_ACCOUNT_ID = 'abcdef0123456789abcdef0123456789';
+  process.env.R2_ACCESS_KEY_ID = 'aki';
+  process.env.R2_SECRET_ACCESS_KEY = 'secret';
+  process.env.R2_BUCKET = 'van-ban-goc';
+  delete process.env.R2_PUBLIC_BASE_URL;
+  const s = r2Status();
+  assert.equal(s.hasCredentials, true);
+  assert.equal(s.hasPublicUrl, false);
+  assert.equal(s.configured, false);
 });

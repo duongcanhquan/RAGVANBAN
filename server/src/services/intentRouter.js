@@ -121,9 +121,23 @@ Câu hỏi: """${String(question).trim()}"""`;
   return parsed;
 }
 
+function shouldSkipIntentLlm(question, mode = 'lookup') {
+  const q = String(question || '').trim();
+  if (!q) return true;
+  const { parseQuestionAnchors } = require('../ingestion/legalChunker');
+  const a = parseQuestionAnchors(q);
+  if (a.soHieu.length || a.dieu) return true;
+  if (a.wantsCompare) return true;
+  const h = heuristicIntent(q, mode);
+  if (h.linh_vuc !== DEFAULT_LINH_VUC) return true;
+  if (q.length < 48 && /^(khoản|điều|vậy|thế|còn)\b/i.test(q)) return true;
+  return false;
+}
+
 module.exports = {
   routeIntent,
   parseIntentResponse,
   heuristicIntent,
+  shouldSkipIntentLlm,
   DEFAULT_LINH_VUC,
 };

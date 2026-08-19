@@ -6,10 +6,13 @@
 const { hasR2Credentials, uploadToR2 } = require('./r2');
 const { isConfigured: isSupabaseConfigured, uploadPdfToStorage } = require('./supabase');
 
-async function storeUploadedOriginal(buffer, fileName, contentType) {
+async function storeUploadedOriginal(buffer, fileName, contentType, opts = {}) {
   if (hasR2Credentials()) {
-    const stored = await uploadToR2(buffer, fileName, contentType);
-    return { ...stored, source: stored.ok ? 'r2' : undefined };
+    const stored = await uploadToR2(buffer, fileName, contentType, {
+      folderPath: opts.folderPath || '',
+    });
+    if (stored.ok) return { ...stored, source: 'r2', backend: 'r2' };
+    console.warn('[originalStore] R2 thất bại, thử Supabase:', stored.error || stored.reason);
   }
   if (isSupabaseConfigured()) {
     const stored = await uploadPdfToStorage(buffer, fileName, contentType);

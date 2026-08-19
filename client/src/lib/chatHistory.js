@@ -1,3 +1,6 @@
+import { apiUrl } from './apiBase'
+import { adminFetch } from './adminApi'
+
 const KEY = 'hcc_chat_history_v1'
 
 /**
@@ -54,7 +57,7 @@ export async function fetchServerHistory(sessionId) {
   try {
     const qs = new URLSearchParams({ limit: '40' })
     if (sessionId) qs.set('sessionId', sessionId)
-    const res = await fetch(`/api/history?${qs}`)
+    const res = await fetch(apiUrl(`/api/history?${qs}`))
     if (!res.ok) return []
     const data = await res.json()
     return data.items || []
@@ -64,7 +67,7 @@ export async function fetchServerHistory(sessionId) {
 }
 
 export async function promoteToScenario(log) {
-  const res = await fetch('/api/scenarios', {
+  const res = await adminFetch('/api/scenarios', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -75,5 +78,7 @@ export async function promoteToScenario(log) {
       tags: ['từ-chat'],
     }),
   })
-  return res.json()
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || 'Không lưu được tình huống')
+  return data
 }

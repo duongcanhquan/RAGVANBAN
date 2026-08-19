@@ -2,6 +2,19 @@ import { useEffect, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Check, Copy, Plus, Trash2 } from 'lucide-react'
 import { adminFetch } from '../../lib/adminApi'
+import { apiUrl, publicApiUrl } from '../../lib/apiBase'
+
+function StatusPill({ on, reason, missingLabel }) {
+  const label = on ? 'ON' : reason === 'disabled' ? 'TẮT' : missingLabel
+  const cls = on
+    ? 'bg-emerald-400/20 text-emerald-200'
+    : reason === 'disabled'
+      ? 'bg-white/10 text-white/50'
+      : 'bg-amber-400/20 text-amber-100'
+  return (
+    <span className={`rounded-full px-2.5 py-0.5 text-[11px] ${cls}`}>{label}</span>
+  )
+}
 
 function Toggle({ on, onChange, disabled }) {
   return (
@@ -73,8 +86,7 @@ export default function QuantriIntegrations() {
     load().catch((e) => setError(e.message))
   }, [])
 
-  const webhookUrl =
-    typeof window !== 'undefined' ? `${window.location.origin}/api/webhooks/n8n` : '/api/webhooks/n8n'
+  const webhookUrl = publicApiUrl('/api/webhooks/n8n')
 
   async function patchFlags(patch) {
     setBusy(true)
@@ -188,15 +200,11 @@ export default function QuantriIntegrations() {
       <section className="rounded-3xl border border-white/10 bg-white/5 p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="m-0 text-lg font-semibold">Google Drive</h2>
-          <span
-            className={`rounded-full px-2.5 py-0.5 text-[11px] ${
-              data.drive.hasKey && data.drive.enabled
-                ? 'bg-emerald-400/20 text-emerald-200'
-                : 'bg-white/10 text-white/50'
-            }`}
-          >
-            {data.drive.hasKey && data.drive.enabled ? 'ON' : 'OFF'}
-          </span>
+          <StatusPill
+            on={data.drive.on}
+            reason={data.drive.reason}
+            missingLabel="CHƯA KEY"
+          />
         </div>
         <p className="m-0 mb-4 text-sm text-white/65">
           Một tài khoản máy (service account) dùng chung cho cả trường. Mỗi cán bộ tạo thư mục Drive của
@@ -339,15 +347,7 @@ export default function QuantriIntegrations() {
       <section className="rounded-3xl border border-white/10 bg-white/5 p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="m-0 text-lg font-semibold">n8n</h2>
-          <span
-            className={`rounded-full px-2.5 py-0.5 text-[11px] ${
-              data.n8n.enabled && data.n8n.secretConfigured
-                ? 'bg-emerald-400/20 text-emerald-200'
-                : 'bg-white/10 text-white/50'
-            }`}
-          >
-            {data.n8n.enabled && data.n8n.secretConfigured ? 'ON' : 'OFF'}
-          </span>
+          <StatusPill on={data.n8n.on} reason={data.n8n.reason} missingLabel="CHƯA SECRET" />
         </div>
         <p className="m-0 mb-4 text-sm text-white/65">
           Khi có file mới trên Drive, n8n chỉ việc gọi webhook này. Không cần điền Folder ID trên server.
@@ -397,8 +397,53 @@ export default function QuantriIntegrations() {
         </div>
       </section>
 
+      <section className="rounded-2xl border border-white/10 bg-black/20 p-4">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h2 className="m-0 text-lg font-semibold">Cloudflare R2</h2>
+          <StatusPill
+            on={Boolean(data.r2?.configured)}
+            reason={data.r2?.configured ? 'ok' : data.r2?.hasCredentials ? 'missing_url' : 'missing_key'}
+            missingLabel={data.r2?.hasCredentials ? 'THIẾU URL' : 'CHƯA KEY'}
+          />
+        </div>
+        <p className="m-0 mb-3 text-sm text-white/60">
+          File upload tay lưu bản gốc trên R2. Key đặt trong .env / Vercel: R2_ACCOUNT_ID,
+          R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_PUBLIC_BASE_URL.
+        </p>
+        {data.r2?.bucket ? (
+          <p className="m-0 mb-2 text-xs text-white/50">
+            Bucket {data.r2.bucket}
+            {data.r2.publicBaseUrl ? ` · ${data.r2.publicBaseUrl}` : ''}
+          </p>
+        ) : null}
+        {isSuper ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true)
+              setError('')
+              try {
+                const res = await adminFetch('/api/quantri/integrations/r2-ping', { method: 'POST' })
+                const body = await res.json().catch(() => ({}))
+                if (!res.ok || !body.ok) throw new Error(body.error || 'Thử ghi R2 thất bại')
+                setError('')
+                alert('R2 ghi/xóa thử thành công.')
+              } catch (e) {
+                setError(e.message)
+              } finally {
+                setBusy(false)
+              }
+            }}
+            className="rounded-full bg-white/10 px-3 py-1.5 text-xs"
+          >
+            Thử ghi R2
+          </button>
+        ) : null}
+      </section>
+
       <p className="m-0 text-[11px] text-white/40">
-        R2 (file upload tay): {data.r2 ? 'ON' : 'OFF — cấu hình trên Vercel nếu cần lưu bản gốc'}
+        Drive folder ID toàn cục (GOOGLE_DRIVE_FOLDER_ID) chỉ còn là dự phòng khi chưa thêm nguồn trong danh sách trên.
       </p>
     </div>
   )

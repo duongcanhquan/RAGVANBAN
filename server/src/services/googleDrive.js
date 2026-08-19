@@ -81,21 +81,36 @@ async function getDrive() {
   return driveClient;
 }
 
-async function listPdfInFolder(folderId = process.env.GOOGLE_DRIVE_FOLDER_ID) {
+async function listDocsInFolder(folderId = process.env.GOOGLE_DRIVE_FOLDER_ID) {
   const id = String(folderId || '').replace(/'/g, '');
   if (!id) throw new Error('Thiếu folderId');
   const drive = await getDrive();
-  const q = `'${id}' in parents and mimeType='application/pdf' and trashed=false`;
+  const mimeClause = [...ALLOWED_DRIVE_MIME]
+    .map((m) => `mimeType='${m}'`)
+    .concat(["mimeType contains 'image/'"])
+    .join(' or ');
+  const q = `'${id}' in parents and trashed=false and (${mimeClause})`;
 
-  const res = await drive.files.list({
-    q,
-    fields: 'files(id,name,mimeType,webViewLink,modifiedTime,size)',
-    pageSize: 100,
-    supportsAllDrives: true,
-    includeItemsFromAllDrives: true,
-  });
+  const files = [];
+  let pageToken;
+  do {
+    const res = await drive.files.list({
+      q,
+      fields: 'nextPageToken,files(id,name,mimeType,webViewLink,modifiedTime,size)',
+      pageSize: 100,
+      pageToken,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+    files.push(...(res.data.files || []));
+    pageToken = res.data.nextPageToken;
+  } while (pageToken);
 
-  return res.data.files || [];
+  return files;
+}
+
+async function listPdfInFolder(folderId) {
+  return listDocsInFolder(folderId);
 }
 
 const ALLOWED_DRIVE_MIME = new Set([
@@ -104,9 +119,31 @@ const ALLOWED_DRIVE_MIME = new Set([
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.ms-powerpoint',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.google-apps.document',
+  'application/vnd.google-apps.spreadsheet',
+  'application/vnd.google-apps.presentation',
   'text/plain',
   'text/markdown',
 ]);
+
+const GOOGLE_NATIVE_EXPORT = {
+  'application/vnd.google-apps.document': {
+    exportMime: 'application/pdf',
+    ext: '.pdf',
+  },
+  'application/vnd.google-apps.spreadsheet': {
+    exportMime: 'application/pdf',
+    ext: '.pdf',
+  },
+  'application/vnd.google-apps.presentation': {
+    exportMime: 'application/pdf',
+    ext: '.pdf',
+  },
+};
+
+function driveExportPlan(mimeType) {
+  return GOOGLE_NATIVE_EXPORT[String(mimeType || '')] || null;
+}
 
 async function downloadViaApi(fileId) {
   const drive = await getDrive();
@@ -118,6 +155,23 @@ async function downloadViaApi(fileId) {
   const meta = metaRes.data;
   if (meta.mimeType && !ALLOWED_DRIVE_MIME.has(meta.mimeType) && !String(meta.mimeType).startsWith('image/')) {
     throw new Error(`Định dạng Drive chưa hỗ trợ: ${meta.mimeType}`);
+  }
+
+  const native = driveExportPlan(meta.mimeType);
+  if (native) {
+    const exported = await drive.files.export(
+      { fileId, mimeType: native.exportMime },
+      { responseType: 'arraybuffer' }
+    );
+    const baseName = String(meta.name || fileId).replace(/\.[^.]+$/, '');
+    return {
+      buffer: Buffer.from(exported.data),
+      fileName: `${baseName}${native.ext}`,
+      mimeType: native.exportMime,
+      driveFileId: meta.id,
+      driveWebViewLink: meta.webViewLink || `https://drive.google.com/file/d/${fileId}/view`,
+      modifiedTime: meta.modifiedTime,
+    };
   }
 
   const res = await drive.files.get(
@@ -195,7 +249,9 @@ module.exports = {
   resetDriveClient,
   parseDriveResource,
   listPdfInFolder,
+  listDocsInFolder,
   getFileParentIds,
   downloadPdf,
   getDrive,
+  driveExportPlan,
 };

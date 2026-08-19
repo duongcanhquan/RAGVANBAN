@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react'
-import { Loader2, SendHorizontal } from 'lucide-react'
+import { Loader2, SendHorizontal, Mic } from 'lucide-react'
 
 /**
- * ChatInput — placeholder theo chế độ + touch-friendly.
+ * ChatInput — placeholder theo chế độ + mic khi admin bật voice.
  */
 export default function ChatInput({
   value,
@@ -11,6 +11,9 @@ export default function ChatInput({
   disabled,
   placeholder,
   wide = false,
+  voiceEnabled = false,
+  listening = false,
+  onMicClick,
 }) {
   const ref = useRef(null)
 
@@ -35,7 +38,7 @@ export default function ChatInput({
 
   return (
     <form
-      className="z-20 shrink-0 border-t border-[var(--hcc-line)]/80 bg-white/95 backdrop-blur-xl"
+      className="z-20 shrink-0 border-t border-white/10 bg-black/30 backdrop-blur-xl"
       style={{
         paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',
       }}
@@ -62,8 +65,24 @@ export default function ChatInput({
           onKeyDown={handleKeyDown}
           placeholder={placeholder || 'Nhập câu hỏi…'}
           enterKeyHint="send"
-          className="min-h-12 max-h-40 flex-1 resize-none overflow-y-auto rounded-2xl border border-[var(--hcc-line)] bg-[var(--hcc-canvas)] px-4 py-3 text-base leading-normal text-[var(--hcc-ink)] placeholder:text-[var(--hcc-muted)]/70 transition focus:border-[var(--hcc-red)] focus:bg-white focus:outline-none disabled:opacity-50"
+          className="field-glass min-h-12 max-h-40 flex-1 resize-none overflow-y-auto rounded-2xl border px-4 py-3 text-base leading-normal transition disabled:opacity-50"
         />
+        {voiceEnabled ? (
+          <button
+            type="button"
+            onClick={onMicClick}
+            disabled={disabled}
+            aria-label={listening ? 'Dừng nghe' : 'Nói câu hỏi'}
+            aria-pressed={listening}
+            className={`inline-flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-2xl border transition disabled:opacity-40 ${
+              listening
+                ? 'border-emerald-400/50 bg-emerald-500/25 text-emerald-100'
+                : 'border-white/15 bg-white/10 text-white/85 hover:bg-white/15'
+            }`}
+          >
+            <Mic className="h-5 w-5" aria-hidden="true" />
+          </button>
+        ) : null}
         <button
           type="submit"
           disabled={disabled || !value.trim()}

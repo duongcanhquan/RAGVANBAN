@@ -1,13 +1,16 @@
 /**
- * Hybrid Search — embedding query + Pinecone metadata filter.
- * Loại trừ văn bản "Hết hiệu lực"; giữ "Còn hiệu lực" và "Bị thay thế một phần".
+ * Hybrid Search — embedding + neo số hiệu/Điều + VB liên quan + rerank từ khóa.
  */
 
 const { ACTIVE_TRANG_THAI } = require('../ingestion/extractMetadata');
+const {
+  collectRelatedSoHieu,
+  parseQuestionAnchors,
+  compactSoHieu,
+  soHieuFilterValues,
+} = require('../ingestion/legalChunker');
+const { rerankLegal } = require('./rerank');
 
-/**
- * @param {{ linh_vuc?: string, onlyActive?: boolean }} intent
- */
 function buildMetadataFilter(intent = {}) {
   const onlyActive = intent.onlyActive !== false;
   const conditions = [];
@@ -20,6 +23,14 @@ function buildMetadataFilter(intent = {}) {
     conditions.push({ linh_vuc: { $eq: intent.linh_vuc } });
   }
 
+  if (intent.so_hieu_in?.length) {
+    conditions.push({ so_hieu: { $in: soHieuFilterValues(intent.so_hieu_in) } });
+  }
+
+  if (intent.dieu) {
+    conditions.push({ dieu: { $eq: String(intent.dieu) } });
+  }
+
   if (conditions.length === 0) return undefined;
   if (conditions.length === 1) return conditions[0];
   return { $and: conditions };
@@ -28,16 +39,24 @@ function buildMetadataFilter(intent = {}) {
 function normalizeMatch(match) {
   const meta = match.metadata || {};
   const link = meta.link_goc || meta.url_file_goc || '';
+  const list = (v) => (Array.isArray(v) ? v.map(String).filter(Boolean) : v ? [String(v)] : []);
   return {
     id: match.id,
     score: match.score,
     text: meta.text || meta.text_preview || '',
-    so_hieu: meta.so_hieu || '',
+    so_hieu: compactSoHieu(meta.so_hieu) || meta.so_hieu || '',
     loai_van_ban: meta.loai_van_ban || '',
     ngay_ban_hanh: meta.ngay_ban_hanh || '',
     co_quan_ban_hanh: meta.co_quan_ban_hanh || '',
     trang_thai: meta.trang_thai || '',
-    van_ban_thay_the: meta.van_ban_thay_the || [],
+    van_ban_thay_the: list(meta.van_ban_thay_the),
+    van_ban_sua_doi: list(meta.van_ban_sua_doi),
+    van_ban_bai_bo: list(meta.van_ban_bai_bo),
+    van_ban_goc: compactSoHieu(meta.van_ban_goc) || meta.van_ban_goc || '',
+    dieu: meta.dieu || '',
+    khoan: meta.khoan || '',
+    heading: meta.heading || '',
+    related: Boolean(meta.related || match.related),
     link_goc: link,
     url_file_goc: link,
     ten_file: meta.ten_file || '',
@@ -45,24 +64,52 @@ function normalizeMatch(match) {
   };
 }
 
-function dedupeAndRank(matches) {
-  const byKey = new Map();
+function rankMatches(matches, options = {}) {
+  const maxPerDoc = Number(options.maxPerDoc) || 4;
+  const maxTotal = Number(options.maxTotal) || 12;
+  const byDoc = new Map();
 
-  for (const m of matches) {
-    const key = `${m.so_hieu}::${m.link_goc || m.url_file_goc || m.ten_file}`;
-    const prev = byKey.get(key);
-    if (!prev) {
-      byKey.set(key, m);
-      continue;
-    }
-    const prevDate = prev.ngay_ban_hanh || '';
-    const nextDate = m.ngay_ban_hanh || '';
-    if (nextDate > prevDate || (nextDate === prevDate && (m.score || 0) > (prev.score || 0))) {
-      byKey.set(key, m);
-    }
+  for (const m of matches || []) {
+    const key = `${m.so_hieu || ''}::${m.link_goc || m.url_file_goc || m.ten_file || m.id || ''}`;
+    if (!byDoc.has(key)) byDoc.set(key, []);
+    const bucket = byDoc.get(key);
+    const dup = m.id
+      ? bucket.some((x) => x.id === m.id)
+      : bucket.some((x) => x.text === m.text && String(x.dieu || '') === String(m.dieu || ''));
+    if (!dup) bucket.push(m);
   }
 
-  return Array.from(byKey.values()).sort((a, b) => (b.score || 0) - (a.score || 0));
+  const picked = [];
+  for (const list of byDoc.values()) {
+    list.sort((a, b) => {
+      const ds = (b.score || 0) - (a.score || 0);
+      if (Math.abs(ds) > 0.001) return ds;
+      return String(b.ngay_ban_hanh || '').localeCompare(String(a.ngay_ban_hanh || ''));
+    });
+    picked.push(...list.slice(0, maxPerDoc));
+  }
+
+  picked.sort((a, b) => {
+    const ds = (b.score || 0) - (a.score || 0);
+    if (ds) return ds;
+    return String(b.ngay_ban_hanh || '').localeCompare(String(a.ngay_ban_hanh || ''));
+  });
+
+  return picked.slice(0, maxTotal);
+}
+
+function dedupeAndRank(matches) {
+  return rankMatches(matches, { maxPerDoc: 4, maxTotal: 24 });
+}
+
+async function queryIndex(target, vector, topK, filter) {
+  const result = await target.query({
+    vector,
+    topK,
+    includeMetadata: true,
+    filter,
+  });
+  return (result.matches || []).map(normalizeMatch).filter((m) => m.text);
 }
 
 async function hybridSearch(question, intent, deps) {
@@ -71,44 +118,108 @@ async function hybridSearch(question, intent, deps) {
     pinecone,
     indexName,
     namespace = '',
-    topK = 6,
+    topK = 16,
+    maxPerDoc = 4,
+    maxTotal = 12,
   } = deps;
 
   if (!embeddings || !pinecone || !indexName) {
     throw new Error('hybridSearch: thiếu embeddings / pinecone / indexName');
   }
 
+  const anchors = parseQuestionAnchors(question);
   const vector = await embeddings.embedQuery(question);
-  const filter = buildMetadataFilter({ ...intent, onlyActive: true });
+  const onlyActive = intent?.onlyActive !== false && anchors.onlyActive !== false;
+  const filter = buildMetadataFilter({ ...intent, onlyActive });
 
   const index = pinecone.Index(indexName);
   const target = namespace ? index.namespace(namespace) : index;
 
-  const result = await target.query({
-    vector,
-    topK,
-    includeMetadata: true,
-    filter,
-  });
+  const queries = [queryIndex(target, vector, topK, filter)];
 
-  let matches = (result.matches || []).map(normalizeMatch).filter((m) => m.text);
-
-  if (matches.length === 0 && intent?.linh_vuc && intent.linh_vuc !== 'Chung') {
-    const fallback = await target.query({
-      vector,
-      topK,
-      includeMetadata: true,
-      filter: buildMetadataFilter({ onlyActive: true }),
-    });
-    matches = (fallback.matches || []).map(normalizeMatch).filter((m) => m.text);
+  if (anchors.soHieu.length) {
+    queries.push(
+      queryIndex(
+        target,
+        vector,
+        Math.min(10, topK),
+        buildMetadataFilter({
+          onlyActive,
+          so_hieu_in: anchors.soHieu,
+          dieu: anchors.dieu || undefined,
+        })
+      )
+    );
+    if (anchors.dieu) {
+      queries.push(
+        queryIndex(
+          target,
+          vector,
+          8,
+          buildMetadataFilter({ onlyActive, so_hieu_in: anchors.soHieu })
+        )
+      );
+    }
   }
 
-  return dedupeAndRank(matches);
+  const batches = await Promise.all(queries);
+  let matches = batches.flat();
+
+  if (matches.length === 0 && intent?.linh_vuc && intent.linh_vuc !== 'Chung') {
+    matches = await queryIndex(
+      target,
+      vector,
+      topK,
+      buildMetadataFilter({ onlyActive })
+    );
+  }
+
+  const relatedIds = collectRelatedSoHieu(matches);
+  if (relatedIds.length) {
+    const dieuFromHits =
+      anchors.dieu ||
+      matches.map((m) => m.dieu).find((d) => d && d !== 'mo_dau') ||
+      '';
+    const relatedQueries = [
+      queryIndex(
+        target,
+        vector,
+        Math.min(8, topK),
+        buildMetadataFilter({
+          onlyActive,
+          so_hieu_in: relatedIds,
+        })
+      ),
+    ];
+    if (dieuFromHits) {
+      relatedQueries.push(
+        queryIndex(
+          target,
+          vector,
+          8,
+          buildMetadataFilter({
+            onlyActive,
+            so_hieu_in: relatedIds,
+            dieu: dieuFromHits,
+          })
+        )
+      );
+    }
+    const extra = (await Promise.all(relatedQueries)).flat();
+    matches = matches.concat(extra.map((m) => ({ ...m, related: true })));
+  }
+
+  const reranked = rerankLegal(question, matches, intent);
+  return rankMatches(reranked, { maxPerDoc, maxTotal });
 }
 
 module.exports = {
   buildMetadataFilter,
   normalizeMatch,
+  rankMatches,
   dedupeAndRank,
   hybridSearch,
+  collectRelatedSoHieu,
+  compactSoHieu,
+  soHieuFilterValues,
 };

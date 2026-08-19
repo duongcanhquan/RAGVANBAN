@@ -6,7 +6,8 @@
  * POST   /api/library/categories
  * PATCH  /api/library/categories/:id
  * DELETE /api/library/categories/:id
- * PATCH  /api/library/documents/:id   { categoryId }
+ * POST   /api/library/documents/reorder
+ * PATCH  /api/library/documents/:id   { categoryId, file_name, sort_order }
  * GET    /api/library/search?q=
  */
 
@@ -30,7 +31,8 @@ const {
 } = require('../services/taxonomyStore');
 const { requireAdmin } = require('../middleware/requireAdmin');
 const { assertCanManageCategory } = require('../services/adminAccess');
-const { removeDocument, patchDocument, filterDocsForAdmin } = require('../services/documentAdmin');
+const { removeDocument, patchDocument, reorderDocuments, filterDocsForAdmin } = require('../services/documentAdmin');
+const { reingestDocument } = require('../services/reingest');
 
 const router = express.Router();
 
@@ -297,6 +299,15 @@ router.post('/documents/bulk-category', requireAdmin, async (req, res, next) => 
   }
 });
 
+router.post('/documents/reorder', requireAdmin, async (req, res, next) => {
+  try {
+    const result = await reorderDocuments(req.admin, req.body?.items || []);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.patch('/documents/:id', requireAdmin, async (req, res, next) => {
   try {
     const result = await patchDocument(req.admin, req.params.id, req.body || {});
@@ -313,6 +324,15 @@ router.delete('/documents/:id', requireAdmin, async (req, res, next) => {
   try {
     const result = await removeDocument(req.admin, req.params.id);
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/documents/:id/reindex', requireAdmin, async (req, res, next) => {
+  try {
+    const result = await reingestDocument(req.admin, req.params.id);
+    res.json({ ok: true, ...result });
   } catch (err) {
     next(err);
   }

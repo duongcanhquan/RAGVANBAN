@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { fetchServerHistory, loadLocalHistory } from '../lib/chatHistory'
 import { MODES } from '../lib/modes'
+import { apiUrl } from '../lib/apiBase'
 
 /**
  * Panel phải (desktop) — thao tác nhanh · cây VB · tình huống · lịch sử.
@@ -39,8 +40,8 @@ export default function WorkbenchPanel({
     setLoading(true)
     try {
       const [libRes, scRes] = await Promise.all([
-        fetch('/api/library/tree'),
-        fetch('/api/scenarios?limit=30'),
+        fetch(apiUrl('/api/library/tree')),
+        fetch(apiUrl('/api/scenarios?limit=30')),
       ])
       if (libRes.ok) {
         const d = await libRes.json()
@@ -94,9 +95,9 @@ export default function WorkbenchPanel({
   ]
 
   return (
-    <aside className="flex h-full min-h-0 w-full flex-col border-l border-[var(--hcc-line)] bg-white/90 backdrop-blur-xl">
-      <div className="border-b border-[var(--hcc-line)] px-4 py-3">
-        <p className="m-0 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--hcc-red)]">
+    <aside className="flex h-full min-h-0 w-full flex-col border-l border-white/10 bg-black/25 backdrop-blur-xl">
+      <div className="border-b border-white/10 px-4 py-3">
+        <p className="m-0 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--hcc-gold-bright)]">
           Bàn làm việc
         </p>
         <p className="m-0 mt-0.5 text-sm text-[var(--hcc-muted)]">
@@ -104,7 +105,7 @@ export default function WorkbenchPanel({
         </p>
       </div>
 
-      <div className="flex gap-0.5 border-b border-[var(--hcc-line)] bg-[var(--hcc-canvas)]/80 p-1.5">
+      <div className="flex gap-0.5 border-b border-white/10 bg-black/20 p-1.5">
         {tabs.map(({ id, label, Icon }) => (
           <button
             key={id}
@@ -112,8 +113,8 @@ export default function WorkbenchPanel({
             onClick={() => setTab(id)}
             className={`flex flex-1 cursor-pointer flex-col items-center gap-0.5 rounded-xl px-1 py-2 text-[10px] font-semibold transition ${
               tab === id
-                ? 'bg-white text-[var(--hcc-red)] shadow-sm'
-                : 'text-[var(--hcc-muted)] hover:bg-white/60'
+                ? 'bg-white/15 text-[var(--hcc-gold-bright)] shadow-sm'
+                : 'text-white/55 hover:bg-white/10 hover:text-white'
             }`}
           >
             <Icon className="h-4 w-4" />
@@ -139,9 +140,9 @@ export default function WorkbenchPanel({
                     className={`cursor-pointer rounded-2xl border px-3 py-3 text-left transition ${
                       mode === m.id
                         ? m.id === 'advise'
-                          ? 'border-[var(--hcc-gold)] bg-[linear-gradient(135deg,#fff9e6,#fff)]'
+                          ? 'border-[var(--hcc-gold)] bg-[var(--hcc-gold)]/15'
                           : 'border-[var(--hcc-red)] bg-[var(--hcc-red-soft)]'
-                        : 'border-[var(--hcc-line)] bg-white hover:border-[var(--hcc-red)]/40'
+                        : 'border-white/15 bg-white/5 hover:border-white/30'
                     } disabled:opacity-50`}
                   >
                     <span className="flex items-center gap-1.5 text-sm font-semibold text-[var(--hcc-ink)]">
@@ -177,7 +178,7 @@ export default function WorkbenchPanel({
                         type="button"
                         disabled={streaming}
                         onClick={() => onAsk?.(query)}
-                        className="w-full cursor-pointer rounded-xl border border-[var(--hcc-line)] bg-white px-3 py-2.5 text-left text-xs leading-snug text-[var(--hcc-ink)] transition hover:border-[var(--hcc-red)] hover:bg-[var(--hcc-red-soft)]/40 disabled:opacity-50"
+                        className="w-full cursor-pointer rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-left text-xs leading-snug text-slate-100 transition hover:border-[var(--hcc-gold)] hover:bg-white/10 disabled:opacity-50"
                       >
                         <span className="font-medium">{label}</span>
                         {label !== query ? (
@@ -193,14 +194,14 @@ export default function WorkbenchPanel({
             <div className="grid grid-cols-2 gap-2">
               <Link
                 to="/thu-vien"
-                className="rounded-2xl border border-[var(--hcc-line)] bg-white px-3 py-3 text-center text-xs font-medium text-[var(--hcc-ink)] hover:border-[var(--hcc-red)]"
+                className="rounded-2xl border border-white/15 bg-white/5 px-3 py-3 text-center text-xs font-medium text-slate-100 hover:border-[var(--hcc-gold)]"
               >
                 <FolderTree className="mx-auto mb-1 h-4 w-4 text-[var(--hcc-red)]" />
                 Thư viện đầy đủ
               </Link>
               <Link
                 to="/tinh-huong"
-                className="col-span-2 rounded-2xl border border-[var(--hcc-line)] bg-white px-3 py-3 text-center text-xs font-medium text-[var(--hcc-ink)] hover:border-[var(--hcc-red)]"
+                className="col-span-2 rounded-2xl border border-white/15 bg-white/5 px-3 py-3 text-center text-xs font-medium text-slate-100 hover:border-[var(--hcc-gold)]"
               >
                 <Lightbulb className="mx-auto mb-1 h-4 w-4 text-[var(--hcc-gold)]" />
                 Kho tình huống
@@ -227,7 +228,7 @@ export default function WorkbenchPanel({
               <p className="text-xs text-[var(--hcc-muted)]">Đang tải…</p>
             )}
             {!loading && !tree.length && (
-              <p className="rounded-xl border border-dashed border-[var(--hcc-line)] p-3 text-xs text-[var(--hcc-muted)]">
+              <p className="rounded-xl border border-dashed border-white/20 p-3 text-xs text-[var(--hcc-muted)]">
                 Chưa có văn bản. Vào Quản trị để nạp dữ liệu.
               </p>
             )}
@@ -258,7 +259,7 @@ export default function WorkbenchPanel({
             {scenarios.map((s) => (
               <article
                 key={s.id}
-                className="rounded-2xl border border-[var(--hcc-line)] bg-white p-3"
+                className="glass-panel rounded-2xl p-3"
               >
                 <h3 className="m-0 text-sm font-semibold text-[var(--hcc-ink)]">{s.title}</h3>
                 <p className="m-0 mt-1 line-clamp-2 text-[11px] text-[var(--hcc-muted)]">
@@ -294,7 +295,7 @@ export default function WorkbenchPanel({
                 key={h.id}
                 type="button"
                 onClick={() => onRestore?.(h)}
-                className="w-full cursor-pointer rounded-xl border border-[var(--hcc-line)] bg-white px-3 py-2.5 text-left transition hover:border-[var(--hcc-red)]"
+                className="w-full cursor-pointer rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-left transition hover:border-[var(--hcc-gold)]"
               >
                 <p className="m-0 line-clamp-2 text-xs font-medium text-[var(--hcc-ink)]">
                   {h.question}
@@ -318,7 +319,7 @@ function CategoryBranch({ node, depth, openNodes, toggle, streaming, onAsk }) {
     <li
       className={
         depth === 0
-          ? 'overflow-hidden rounded-xl border border-[var(--hcc-line)] bg-white'
+          ? 'glass-panel overflow-hidden rounded-xl'
           : 'border-t border-[var(--hcc-line)]/70'
       }
     >
@@ -384,7 +385,7 @@ function CategoryBranch({ node, depth, openNodes, toggle, streaming, onAsk }) {
                         `Tóm tắt nội dung và quy định chính của văn bản: ${doc.label}`
                       )
                     }
-                    className="cursor-pointer rounded-md border border-[var(--hcc-line)] bg-white px-1.5 py-0.5 text-[10px] text-[var(--hcc-muted)] hover:text-[var(--hcc-red)] disabled:opacity-40"
+                    className="cursor-pointer rounded-md border border-white/15 bg-white/10 px-1.5 py-0.5 text-[10px] text-[var(--hcc-muted)] hover:text-[var(--hcc-gold-bright)] disabled:opacity-40"
                   >
                     Hỏi về VB này
                   </button>

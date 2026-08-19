@@ -171,7 +171,7 @@ async function listDocuments({ limit = 500 } = {}) {
   const { data, error } = await sb
     .from('documents')
     .select(
-      'id,file_name,so_hieu,loai_van_ban,trang_thai,chunk_count,storage_url,drive_web_view_link,source,metadata,created_at,category_id,chuyen_mon,folder_path'
+      'id,file_name,so_hieu,loai_van_ban,trang_thai,chunk_count,storage_path,storage_url,drive_web_view_link,source,metadata,created_at,category_id,chuyen_mon,folder_path,sort_order'
     )
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -180,7 +180,7 @@ async function listDocuments({ limit = 500 } = {}) {
     const retry = await sb
       .from('documents')
       .select(
-        'id,file_name,so_hieu,loai_van_ban,trang_thai,chunk_count,storage_url,metadata,created_at'
+        'id,file_name,so_hieu,loai_van_ban,trang_thai,chunk_count,storage_path,storage_url,drive_web_view_link,source,metadata,created_at,category_id,chuyen_mon,folder_path'
       )
       .order('created_at', { ascending: false })
       .limit(limit);
@@ -315,6 +315,19 @@ async function updateDocumentCategory(id, { categoryId, folderPath, chuyenMon })
   return { ok: true, id: data?.id || id };
 }
 
+async function getDocumentByFileName(fileName) {
+  const name = String(fileName || '').trim();
+  if (!name) return { ok: false };
+  const sb = getSupabase();
+  if (sb) {
+    const { data, error } = await sb.from('documents').select('*').eq('file_name', name).limit(1).maybeSingle();
+    if (!error && data) return { ok: true, source: 'supabase', id: data.id, item: data };
+  }
+  const local = require('./localDocuments').getLocalDocumentByFileName(name);
+  if (local) return { ok: true, source: 'local', id: local.id, item: local };
+  return { ok: false };
+}
+
 async function getDocument(id) {
   const sb = getSupabase();
   if (sb) {
@@ -336,10 +349,30 @@ async function updateDocument(id, patch) {
   if (patch.category_id !== undefined) payload.category_id = patch.category_id || null;
   if (patch.folder_path !== undefined) payload.folder_path = patch.folder_path || null;
   if (patch.chuyen_mon !== undefined) payload.chuyen_mon = patch.chuyen_mon || null;
+  if (patch.storage_path !== undefined) payload.storage_path = patch.storage_path || null;
+  if (patch.storage_url !== undefined) payload.storage_url = patch.storage_url || null;
+  if (patch.chunk_count !== undefined) payload.chunk_count = Number(patch.chunk_count) || 0;
+  if (patch.metadata !== undefined) payload.metadata = patch.metadata;
+  if (patch.sort_order !== undefined && patch.sort_order !== null && patch.sort_order !== '') {
+    payload.sort_order = Number(patch.sort_order) || 0;
+  }
 
   if (sb && Object.keys(payload).length) {
-    const { data, error } = await sb.from('documents').update(payload).eq('id', id).select('*').maybeSingle();
-    if (!error && data) return { ok: true, source: 'supabase', item: data };
+    let { data, error } = await sb.from('documents').update(payload).eq('id', id).select('*').maybeSingle();
+    if (error && /sort_order/i.test(error.message || '')) {
+      const { sort_order: orderVal, ...rest } = payload;
+      const cur = await sb.from('documents').select('metadata').eq('id', id).maybeSingle();
+      rest.metadata = { ...(cur.data?.metadata || {}), sort_order: orderVal };
+      ({ data, error } = await sb.from('documents').update(rest).eq('id', id).select('*').maybeSingle());
+    }
+    if (!error && data) {
+      if (payload.sort_order !== undefined) {
+        const meta = { ...(data.metadata || {}), sort_order: payload.sort_order };
+        await sb.from('documents').update({ metadata: meta }).eq('id', id);
+        data = { ...data, metadata: meta, sort_order: payload.sort_order };
+      }
+      return { ok: true, source: 'supabase', item: data };
+    }
     if (error) console.warn('[supabase] updateDocument:', error.message);
   }
   return updateLocalDocument(id, payload);
@@ -375,6 +408,7 @@ module.exports = {
   insertDocument,
   updateDocumentCategory,
   getDocument,
+  getDocumentByFileName,
   updateDocument,
   deleteDocumentRow,
   STORAGE_BUCKET,

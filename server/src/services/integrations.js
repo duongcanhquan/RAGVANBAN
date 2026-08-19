@@ -111,6 +111,44 @@ async function getN8nSecret() {
   return { source: 'none', secret: '' };
 }
 
+async function getIntegrationHealth() {
+  const [flags, n8n, sa] = await Promise.all([
+    getFlags(),
+    getN8nSecret(),
+    getSavedServiceAccount(),
+  ]);
+  const driveHasKey = Boolean(sa.json?.client_email && sa.json?.private_key);
+  const n8nHasSecret = Boolean(n8n.secret);
+  return {
+    flags,
+    drive: {
+      enabled: flags.driveEnabled !== false,
+      hasKey: driveHasKey,
+      email: sa.json?.client_email || null,
+      source: sa.source,
+      on: flags.driveEnabled !== false && driveHasKey,
+      reason:
+        flags.driveEnabled === false
+          ? 'disabled'
+          : driveHasKey
+            ? 'ok'
+            : 'missing_key',
+    },
+    n8n: {
+      enabled: flags.n8nEnabled !== false,
+      hasSecret: n8nHasSecret,
+      source: n8n.source,
+      on: flags.n8nEnabled !== false && n8nHasSecret,
+      reason:
+        flags.n8nEnabled === false
+          ? 'disabled'
+          : n8nHasSecret
+            ? 'ok'
+            : 'missing_secret',
+    },
+  };
+}
+
 async function ensureN8nSecret(admin) {
   if (!isSuperAdmin(admin)) {
     const err = new Error('Chỉ super-admin được tạo secret n8n');
@@ -230,6 +268,7 @@ module.exports = {
   getSavedServiceAccount,
   saveServiceAccount,
   getN8nSecret,
+  getIntegrationHealth,
   ensureN8nSecret,
   listDriveSources,
   upsertDriveSource,

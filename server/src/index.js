@@ -19,10 +19,9 @@ const driveRouter = require('./routes/drive');
 const webhooksRouter = require('./routes/webhooks');
 const quantriRouter = require('./routes/quantri');
 const { requireAdmin } = require('./middleware/requireAdmin');
-const { hasLiveKeys, listAvailableProviders } = require('./services/clients');
+const { hasLiveKeys, listAvailableProviders, ensureBrain } = require('./services/clients');
 const { isConfigured: isSupabaseConfigured } = require('./services/supabase');
-const { isR2Configured } = require('./services/r2');
-const { hasDriveCredentials, hasAnyDriveKey } = require('./services/googleDrive');
+const { publicErrorMessage } = require('./services/publicError');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
@@ -69,17 +68,26 @@ app.use(
 app.use(express.json({ limit: '2mb' }));
 
 app.get('/api/health', async (_req, res) => {
-  let driveOn = hasDriveCredentials();
-  let n8nOn = Boolean(
-    process.env.N8N_WEBHOOK_SECRET && !String(process.env.N8N_WEBHOOK_SECRET).includes('your-')
-  );
   try {
-    const { getN8nSecret, getFlags } = require('./services/integrations');
-    const [flags, n8n, hasKey] = await Promise.all([getFlags(), getN8nSecret(), hasAnyDriveKey()]);
-    driveOn = Boolean(hasKey && flags.driveEnabled);
-    n8nOn = Boolean(n8n.secret && flags.n8nEnabled);
+    await ensureBrain();
   } catch {
-    /* keep env fallback */
+    /* env-only */
+  }
+  let driveOn = false;
+  let n8nOn = false;
+  let driveReason = 'unknown';
+  let n8nReason = 'unknown';
+  try {
+    const { getIntegrationHealth } = require('./services/integrations');
+    const health = await getIntegrationHealth();
+    driveOn = health.drive.on;
+    n8nOn = health.n8n.on;
+    driveReason = health.drive.reason;
+    n8nReason = health.n8n.reason;
+  } catch (err) {
+    console.warn('[health] integrations:', err.message);
+    driveReason = 'error';
+    n8nReason = 'error';
   }
   res.json({
     status: 'ok',
@@ -88,7 +96,9 @@ app.get('/api/health', async (_req, res) => {
     supabase: isSupabaseConfigured(),
     r2: isR2Configured(),
     googleDrive: driveOn,
+    googleDriveReason: driveReason,
     n8nWebhook: n8nOn,
+    n8nWebhookReason: n8nReason,
     vercel: Boolean(process.env.VERCEL),
     providers: listAvailableProviders(),
     port: PORT,
@@ -138,7 +148,7 @@ app.use((req, res) => {
 // Error handler
 app.use((err, _req, res, _next) => {
   console.error('[server] error:', err);
-  res.status(err.status || 500).json({ error: err.message || 'Internal error' });
+  res.status(err.status || 500).json({ error: publicErrorMessage(err, 'Internal error') });
 });
 
 function startServer() {
@@ -150,19 +160,39 @@ function startServer() {
     console.log(`[server] Local:   http://localhost:${PORT}/api/health`);
     console.log(`[server] RAG:     ${hasLiveKeys() ? 'LIVE' : 'DEMO (thiếu API keys)'}`);
     console.log(`[server] Supabase:${isSupabaseConfigured() ? ' ON' : ' OFF'}`);
-    console.log(`[server] Drive:   ${hasDriveCredentials() ? 'ON' : 'OFF'}`);
-    console.log(
-      `[server] n8n:     ${
-        process.env.N8N_WEBHOOK_SECRET && !String(process.env.N8N_WEBHOOK_SECRET).includes('your-')
-          ? 'ON'
-          : 'OFF'
-      }`
-    );
     console.log(`[server] Providers:`, listAvailableProviders());
     console.log(`[server] .env:    ${fs.existsSync(envPath) ? 'OK' : 'MISSING'} (${envPath})`);
-    console.log('[server] ========================================');
-    console.log('[server] Giữ cửa sổ này mở. Ctrl+C để dừng.');
-    console.log('');
+    const { getIntegrationHealth } = require('./services/integrations');
+    getIntegrationHealth()
+      .then((h) => {
+        const driveLabel =
+          h.drive.reason === 'ok'
+            ? 'ON'
+            : h.drive.reason === 'missing_key'
+              ? 'OFF (chưa dán Google JSON trong Cài đặt)'
+              : h.drive.reason === 'disabled'
+                ? 'OFF (đã tắt công tắc)'
+                : 'OFF';
+        const n8nLabel =
+          h.n8n.reason === 'ok'
+            ? 'ON'
+            : h.n8n.reason === 'missing_secret'
+              ? 'OFF (chưa có secret — mở Cài đặt → n8n)'
+              : h.n8n.reason === 'disabled'
+                ? 'OFF (đã tắt công tắc)'
+                : 'OFF';
+        console.log(`[server] Drive:   ${driveLabel}`);
+        console.log(`[server] n8n:     ${n8nLabel}`);
+        console.log('[server] ========================================');
+        console.log('[server] Giữ cửa sổ này mở. Ctrl+C để dừng.');
+        console.log('');
+      })
+      .catch((err) => {
+        console.log(`[server] Drive/n8n: không đọc được cài đặt (${err.message})`);
+        console.log('[server] ========================================');
+        console.log('[server] Giữ cửa sổ này mở. Ctrl+C để dừng.');
+        console.log('');
+      });
   });
 
   server.on('error', (err) => {
@@ -199,7 +229,10 @@ function startServer() {
 }
 
 if (require.main === module) {
-  startServer();
+  const { refreshBrain } = require('./services/llmConfig');
+  refreshBrain()
+    .catch((err) => console.warn('[brain] load:', err.message))
+    .finally(() => startServer());
 }
 
 module.exports = app;

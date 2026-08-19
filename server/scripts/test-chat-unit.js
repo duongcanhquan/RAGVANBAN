@@ -8,10 +8,12 @@ const {
   parseIntentResponse,
   heuristicIntent,
   routeIntent,
+  shouldSkipIntentLlm,
 } = require('../src/services/intentRouter');
 const {
   buildMetadataFilter,
   normalizeMatch,
+  rankMatches,
   dedupeAndRank,
 } = require('../src/services/hybridSearch');
 const {
@@ -66,6 +68,10 @@ async function run() {
     assert.strictEqual(intent.needs_retrieval, true);
   });
 
+  test('shouldSkipIntentLlm với câu hỏi neo số hiệu', () => {
+    assert.equal(shouldSkipIntentLlm('Nghị định 01/2024/NĐ-CP còn hiệu lực?'), true);
+  });
+
   test('buildMetadataFilter luôn loại trừ hết hiệu lực ($in active)', () => {
     const filter = buildMetadataFilter({ linh_vuc: 'Chung' });
     assert.ok(filter.trang_thai.$in);
@@ -79,8 +85,8 @@ async function run() {
     assert.strictEqual(filter.$and.length, 2);
   });
 
-  test('dedupeAndRank ưu tiên ngày mới / score cao', () => {
-    const ranked = dedupeAndRank([
+  test('rankMatches giữ nhiều đoạn cùng số hiệu, điểm cao trước', () => {
+    const ranked = rankMatches([
       normalizeMatch({
         id: '1',
         score: 0.5,
@@ -89,6 +95,7 @@ async function run() {
           so_hieu: '01',
           url_file_goc: 'u',
           ngay_ban_hanh: '2020-01-01',
+          dieu: '1',
         },
       }),
       normalizeMatch({
@@ -99,11 +106,28 @@ async function run() {
           so_hieu: '01',
           url_file_goc: 'u',
           ngay_ban_hanh: '2024-01-01',
+          dieu: '5',
         },
       }),
     ]);
-    assert.strictEqual(ranked.length, 1);
-    assert.strictEqual(ranked[0].ngay_ban_hanh, '2024-01-01');
+    assert.strictEqual(ranked.length, 2);
+    assert.strictEqual(ranked[0].id, '1');
+  });
+
+  test('dedupeAndRank vẫn là hàm xếp hạng (không còn gộp còn 1 chunk)', () => {
+    const ranked = dedupeAndRank([
+      normalizeMatch({
+        id: '1',
+        score: 0.9,
+        metadata: { text: 'a', so_hieu: '01', url_file_goc: 'u' },
+      }),
+      normalizeMatch({
+        id: '2',
+        score: 0.1,
+        metadata: { text: 'b', so_hieu: '01', url_file_goc: 'u' },
+      }),
+    ]);
+    assert.ok(ranked.length >= 2);
   });
 
   test('formatContext + buildSourceList', () => {

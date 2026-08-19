@@ -6,23 +6,36 @@
 const fs = require('fs');
 const path = require('path');
 
+const { EXT_MAP } = require('./extractAnyText');
+
 function listPdfFiles(dataDir) {
+  return listIngestFiles(dataDir, ['.pdf']);
+}
+
+function listIngestFiles(dataDir, exts) {
   if (!dataDir || typeof dataDir !== 'string') {
-    throw new Error('listPdfFiles: dataDir phải là chuỗi đường dẫn');
+    throw new Error('listIngestFiles: dataDir phải là chuỗi đường dẫn');
   }
 
   const absoluteDir = path.resolve(dataDir);
 
   if (!fs.existsSync(absoluteDir)) {
-    throw new Error(`listPdfFiles: thư mục không tồn tại: ${absoluteDir}`);
+    throw new Error(`listIngestFiles: thư mục không tồn tại: ${absoluteDir}`);
   }
 
+  const allowed = new Set(
+    (exts || Object.keys(EXT_MAP)).map((e) => String(e).toLowerCase())
+  );
   const entries = fs.readdirSync(absoluteDir, { withFileTypes: true });
 
   return entries
-    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.pdf'))
+    .filter((entry) => {
+      if (!entry.isFile()) return false;
+      const ext = path.extname(entry.name).toLowerCase();
+      return allowed.has(ext);
+    })
     .map((entry) => path.join(absoluteDir, entry.name))
     .sort();
 }
 
-module.exports = { listPdfFiles };
+module.exports = { listPdfFiles, listIngestFiles };

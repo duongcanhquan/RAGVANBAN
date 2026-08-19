@@ -101,6 +101,12 @@ function getLocalDocument(id) {
   return ensure().items.find((d) => d.id === id) || null;
 }
 
+function getLocalDocumentByFileName(fileName) {
+  const name = String(fileName || '').trim();
+  if (!name) return null;
+  return ensure().items.find((d) => d.file_name === name) || null;
+}
+
 function updateLocalDocument(id, patch) {
   const data = ensure();
   const idx = data.items.findIndex((d) => d.id === id);
@@ -115,9 +121,13 @@ function updateLocalDocument(id, patch) {
     category_id: patch.category_id !== undefined ? patch.category_id : cur.category_id,
     folder_path: patch.folder_path !== undefined ? patch.folder_path : cur.folder_path,
     chuyen_mon: patch.chuyen_mon !== undefined ? patch.chuyen_mon : cur.chuyen_mon,
+    storage_path: patch.storage_path !== undefined ? patch.storage_path : cur.storage_path,
+    storage_url: patch.storage_url !== undefined ? patch.storage_url : cur.storage_url,
+    chunk_count: patch.chunk_count !== undefined ? Number(patch.chunk_count) || 0 : cur.chunk_count,
     metadata: {
       ...(cur.metadata || {}),
       ...(patch.metadata || {}),
+      ...(patch.sort_order !== undefined ? { sort_order: Number(patch.sort_order) || 0 } : {}),
     },
   };
   write(data);
@@ -131,6 +141,7 @@ module.exports = {
   updateLocalDocumentCategory,
   deleteLocalDocument,
   getLocalDocument,
+  getLocalDocumentByFileName,
   updateLocalDocument,
   LOCAL_PATH,
 };

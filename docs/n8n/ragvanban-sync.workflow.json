@@ -1,0 +1,169 @@
+{
+  "name": "RAGVANBAN — Drive → số hóa",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Ho_Chi_Minh"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "pinData": {},
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Chạy trong 3 bước\n\n1. Mở app → **/quantri → Cài đặt → Google Drive & n8n**\n   - Bật webhook n8n\n   - **Tạo secret** → copy\n   - Dán Google service account + thêm link thư mục Drive\n2. Node **Gọi RAG webhook**: dán URL + secret (2 chỗ PASTE)\n3. Bấm **Execute Workflow** (nút Chạy tay)\n\nLocal: `http://127.0.0.1:5000/api/webhooks/n8n`\nn8n Docker trên Mac: `http://host.docker.internal:5000/api/webhooks/n8n`\nProduction: `https://YOUR-DOMAIN/api/webhooks/n8n`\n\nDrive Trigger (tùy chọn): gắn credential Google rồi chọn folder.",
+        "height": 380,
+        "width": 360,
+        "color": 7
+      },
+      "id": "note-huong-dan",
+      "name": "Hướng dẫn",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [0, 80]
+    },
+    {
+      "parameters": {},
+      "id": "manual-run",
+      "name": "Chạy tay",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [420, 80]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "schedule-15",
+      "name": "Mỗi 15 phút",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [420, 280]
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "mode": "id",
+          "value": "PASTE_DRIVE_FOLDER_ID"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "id": "drive-created",
+      "name": "File mới trên Drive",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [420, 500],
+      "notes": "Tùy chọn. Gắn Google credential, dán Folder ID. Không bắt buộc nếu chỉ dùng Chạy tay / lịch."
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json || {};\nconst mime = String(item.mimeType || '');\nif (mime === 'application/vnd.google-apps.folder') {\n  return [];\n}\nif (item.id && (item.name || mime)) {\n  const folderId = Array.isArray(item.parents) ? item.parents[0] : '';\n  return [{ json: { fileId: String(item.id), fileName: item.name || '', folderId } }];\n}\nreturn [{ json: { action: 'sync_folder', limit: 20 } }];"
+      },
+      "id": "normalize-body",
+      "name": "Gói body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 280]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:5000/api/webhooks/n8n",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-N8N-Secret",
+              "value": "PASTE_N8N_SECRET"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 180000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": true
+            }
+          }
+        }
+      },
+      "id": "http-rag",
+      "name": "Gọi RAG webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 280],
+      "notes": "Đổi URL nếu n8n không chạy cùng máy server. Timeout 180s vì số hóa PDF lâu."
+    }
+  ],
+  "connections": {
+    "Chạy tay": {
+      "main": [
+        [
+          {
+            "node": "Gói body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mỗi 15 phút": {
+      "main": [
+        [
+          {
+            "node": "Gói body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "File mới trên Drive": {
+      "main": [
+        [
+          {
+            "node": "Gói body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gói body": {
+      "main": [
+        [
+          {
+            "node": "Gọi RAG webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

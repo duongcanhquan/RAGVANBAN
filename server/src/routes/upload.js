@@ -9,21 +9,28 @@ const express = require('express');
 const multer = require('multer');
 const { ingestSingleFile, ingestTextContent } = require('../services/ingestFile');
 const { storeUploadedOriginal } = require('../services/originalStore');
+const { updateDocument } = require('../services/supabase');
+const { listCategories, pathForCategory } = require('../services/taxonomyStore');
+const { moveR2Object } = require('../services/r2');
 const {
   isAllowedUpload,
   guessContentType,
 } = require('../ingestion/extractAnyText');
 const { extractWebPage } = require('../ingestion/extractWebPage');
-const { hasLiveKeys } = require('../services/clients');
+const { hasLiveKeys, ensureBrain } = require('../services/clients');
 const { assertCanUseCategory } = require('../services/adminAccess');
 const { parseDriveResource } = require('../services/googleDrive');
 const { ingestDriveFile, syncDriveFolder } = require('../services/driveIngest');
+const { getRagConfig, assertUploadSize } = require('../services/ragConfig');
+const { getFlags } = require('../services/integrations');
+const { listenSseAbort } = require('../services/sseAbort');
+const { publicErrorMessage } = require('../services/publicError');
 
 const router = express.Router();
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: Number(process.env.UPLOAD_MAX_BYTES) || 40 * 1024 * 1024 },
+  limits: { fileSize: 80 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (!isAllowedUpload(file.originalname, file.mimetype)) {
       return cb(
@@ -47,11 +54,16 @@ function sendEvent(res, event, data) {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
-function requireLiveKeys(res) {
+async function requireLiveKeys(res) {
+  try {
+    await ensureBrain();
+  } catch {
+    /* env-only */
+  }
   if (hasLiveKeys()) return true;
   res.status(503).json({
     error:
-      'Chưa cấu hình Multi-LLM + Pinecone — không thể số hóa. Điền API keys trong .env rồi restart server.',
+      'Chưa cấu hình bộ não (LLM + embedding + Pinecone). Super-admin vào /quantri/bo-nao để dán API key.',
     ragReady: false,
   });
   return false;
@@ -59,18 +71,16 @@ function requireLiveKeys(res) {
 
 async function runWithSse(req, res, work) {
   initSse(res);
-  let closed = false;
-  req.on('close', () => {
-    closed = true;
-  });
+  const aborted = listenSseAbort(res);
+  const closed = () => aborted();
   try {
     await work({
-      closed: () => closed,
+      closed,
       progress: (p) => {
-        if (!closed) sendEvent(res, 'progress', p);
+        if (!closed()) sendEvent(res, 'progress', p);
       },
       done: (data) => {
-        if (!closed) {
+        if (!closed()) {
           sendEvent(res, 'done', { ok: true, ...data });
           res.end();
         }
@@ -78,15 +88,15 @@ async function runWithSse(req, res, work) {
     });
   } catch (e) {
     console.error('[upload]', e);
-    if (!closed) {
-      sendEvent(res, 'error', { message: e.message || 'Lỗi số hóa' });
+    if (!closed()) {
+      sendEvent(res, 'error', { message: publicErrorMessage(e, 'Lỗi số hóa') });
       res.end();
     }
   }
 }
 
-router.post('/', (req, res) => {
-  if (!requireLiveKeys(res)) return;
+router.post('/', async (req, res) => {
+  if (!(await requireLiveKeys(res))) return;
   upload.single('file')(req, res, async (err) => {
     if (err) {
       res.status(400).json({ error: err.message || 'Upload thất bại' });
@@ -94,6 +104,13 @@ router.post('/', (req, res) => {
     }
     if (!req.file?.buffer) {
       res.status(400).json({ error: 'Thiếu file (field name: file)' });
+      return;
+    }
+    try {
+      const rag = await getRagConfig();
+      assertUploadSize(req.file.size, rag.uploadMaxBytes);
+    } catch (sizeErr) {
+      res.status(sizeErr.status || 413).json({ error: sizeErr.message });
       return;
     }
 
@@ -113,13 +130,22 @@ router.post('/', (req, res) => {
       let publicUrl = '';
       let storagePath = '';
       let source = 'upload';
+      let folderPath = '';
+      if (categoryId) {
+        const cats = await listCategories();
+        folderPath = pathForCategory(cats.items || [], categoryId);
+      }
 
       progress({
         stage: 'storage',
         percent: 12,
-        message: 'Đang lưu bản gốc (R2 ưu tiên)…',
+        message: folderPath
+          ? `Đang lưu bản gốc R2 · ${folderPath}`
+          : 'Đang lưu bản gốc (R2 ưu tiên)…',
       });
-      const stored = await storeUploadedOriginal(req.file.buffer, fileName, mimeType);
+      const stored = await storeUploadedOriginal(req.file.buffer, fileName, mimeType, {
+        folderPath,
+      });
       if (!stored.ok && !stored.skipped) {
         throw new Error(stored.error || 'Lưu file gốc thất bại');
       }
@@ -155,6 +181,20 @@ router.post('/', (req, res) => {
         },
       });
 
+      if (stored.ok && stored.path && result.folderPath && result.folderPath !== folderPath) {
+        const moved = await moveR2Object(stored.path, result.folderPath);
+        if (moved.ok && moved.path && moved.path !== stored.path) {
+          storagePath = moved.path;
+          publicUrl = moved.publicUrl || publicUrl;
+          if (result.id) {
+            await updateDocument(result.id, {
+              storage_path: storagePath,
+              storage_url: publicUrl,
+            });
+          }
+        }
+      }
+
       done({ ...result, publicUrl, storagePath, storageBackend: stored.backend || null });
     });
   });
@@ -172,7 +212,7 @@ router.post('/text', async (req, res) => {
     res.status(400).json({ error: 'Text quá dài (tối đa ~500k ký tự)' });
     return;
   }
-  if (!requireLiveKeys(res)) return;
+  if (!(await requireLiveKeys(res))) return;
   try {
     assertCanUseCategory(req.admin, categoryId);
   } catch (e) {
@@ -203,7 +243,7 @@ router.post('/url', async (req, res) => {
     res.status(400).json({ error: 'Thiếu url' });
     return;
   }
-  if (!requireLiveKeys(res)) return;
+  if (!(await requireLiveKeys(res))) return;
   try {
     assertCanUseCategory(req.admin, categoryId);
   } catch (e) {
@@ -217,6 +257,10 @@ router.post('/url', async (req, res) => {
 
   await runWithSse(req, res, async ({ closed, progress, done }) => {
     if (allDrive) {
+      const flags = await getFlags();
+      if (!flags.driveEnabled) {
+        throw Object.assign(new Error('Google Drive đang tắt trong Cài đặt'), { status: 403 });
+      }
       const items = [];
       for (let i = 0; i < driveParts.length; i += 1) {
         const { raw: link, parsed } = driveParts[i];

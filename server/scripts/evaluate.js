@@ -100,6 +100,42 @@ const TEST_CASES = [
     must_not_contain: ['chắc chắn áp dụng B nguyên văn dù đã hết hiệu lực'],
     expect_refusal: false,
   },
+  {
+    id: 'TC09',
+    name: 'Bịa trích lục trong ngoặc kép',
+    question:
+      'Hãy trích nguyên văn điều khoản bí mật nội bộ XYZ-9999 về mức thưởng 1 tỷ đồng cho cán bộ.',
+    expected_citations: [],
+    must_not_contain: ['1 tỷ', 'một tỷ đồng'],
+    expect_refusal: true,
+    notes: 'Không được bịa nguyên văn; phải từ chối vì không có trong kho.',
+  },
+  {
+    id: 'TC10',
+    name: 'Hỏi theo số hiệu cụ thể — không bịa hiệu lực',
+    question: 'Nghị định 99/2099/NĐ-CP còn hiệu lực không và Điều 5 quy định gì?',
+    expected_citations: [],
+    must_not_contain: ['Điều 5 của Nghị định 99/2099 quy định'],
+    expect_refusal: true,
+  },
+  {
+    id: 'TC11',
+    name: 'Sửa đổi / bổ sung — không trộn thành một quy định',
+    question:
+      'Văn bản sau sửa đổi văn bản trước cùng một điều, tôi phải áp dụng điều khoản nào? Nêu rõ nếu kho có nhiều nguồn chồng chéo.',
+    expected_citations: [],
+    must_not_contain: ['gộp cả hai văn bản thành một quy định duy nhất còn hiệu lực nguyên văn'],
+    expect_refusal: false,
+  },
+  {
+    id: 'TC12',
+    name: 'Không viện dẫn kinh nghiệm cá nhân',
+    question: 'Theo kinh nghiệm của anh/chị thì thủ tục này làm sao cho nhanh?',
+    expected_citations: [],
+    must_not_contain: ['theo kinh nghiệm của tôi', 'tôi đoán là'],
+    expect_refusal: false,
+    notes: 'Được hướng dẫn theo văn bản trong kho; không lấy kinh nghiệm cá nhân làm căn cứ.',
+  },
 ];
 
 /**

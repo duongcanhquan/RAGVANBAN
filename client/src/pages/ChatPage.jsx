@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { History, PanelRightClose, PanelRightOpen, Plus, Scale, Sparkles } from 'lucide-react'
+import { History, PanelRightClose, PanelRightOpen, Plus, Scale, Sparkles, Volume2, VolumeX } from 'lucide-react'
 import ChatWindow from '../components/ChatWindow'
 import ChatInput from '../components/ChatInput'
 import HistoryPanel from '../components/HistoryPanel'
@@ -9,6 +9,9 @@ import { streamChat } from '../lib/streamChat'
 import { getSessionId } from '../lib/session'
 import { saveLocalTurn } from '../lib/chatHistory'
 import { getMode, MODES } from '../lib/modes'
+import { createSpeakAhead } from '../lib/speakAhead'
+import { speechRecognitionSupported, startSpeechListen } from '../lib/speechListen'
+import { apiUrl } from '../lib/apiBase'
 
 /**
  * Workspace chuyên viên — desktop 2 cột rộng; mobile vẫn 1 cột.
@@ -23,8 +26,16 @@ export default function ChatPage() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [sideOpen, setSideOpen] = useState(true)
   const [quickKeywords, setQuickKeywords] = useState([])
+  const [talkCfg, setTalkCfg] = useState(null)
+  const [disclaimer, setDisclaimer] = useState('')
+  const [speakOn, setSpeakOn] = useState(true)
+  const [listening, setListening] = useState(false)
   const abortRef = useRef(null)
+  const speakRef = useRef(null)
+  const listenRef = useRef(null)
   const sessionId = getSessionId()
+  const ttsSupported =
+    typeof window !== 'undefined' && typeof window.speechSynthesis !== 'undefined'
   const location = useLocation()
   const navigate = useNavigate()
   const modeConfig = useMemo(() => getMode(mode), [mode])
@@ -37,11 +48,55 @@ export default function ChatPage() {
   }, [quickKeywords, mode, modeConfig])
 
   useEffect(() => {
-    fetch('/api/settings/quick-keywords')
+    fetch(apiUrl('/api/settings/quick-keywords'))
       .then((r) => r.json())
       .then((d) => setQuickKeywords(d.items || []))
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    fetch(apiUrl('/api/settings/rag'))
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.disclaimer) setDisclaimer(d.disclaimer)
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    fetch(apiUrl('/api/settings/voice-talk'))
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d?.enabled) {
+          setTalkCfg(null)
+          return
+        }
+        setTalkCfg(d)
+        try {
+          const saved = localStorage.getItem('hcc_speak_on')
+          if (saved === '0') setSpeakOn(false)
+          else setSpeakOn(d.autoSpeak !== false)
+        } catch {
+          setSpeakOn(d.autoSpeak !== false)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      speakRef.current?.cancel()
+      listenRef.current?.stop()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!talkCfg?.enabled || typeof window === 'undefined' || !window.speechSynthesis) return
+    window.speechSynthesis.getVoices()
+    const warm = () => window.speechSynthesis.getVoices()
+    window.speechSynthesis.addEventListener?.('voiceschanged', warm)
+    return () => window.speechSynthesis.removeEventListener?.('voiceschanged', warm)
+  }, [talkCfg])
 
   useEffect(() => {
     const prefill = location.state?.prefill
@@ -82,10 +137,57 @@ export default function ChatPage() {
   }
 
   function newChat() {
+    speakRef.current?.cancel()
+    listenRef.current?.stop()
+    setListening(false)
     setMessages([])
     setInput('')
     setError('')
     setStatusText('')
+  }
+
+  function toggleSpeak() {
+    setSpeakOn((v) => {
+      const next = !v
+      try {
+        localStorage.setItem('hcc_speak_on', next ? '1' : '0')
+      } catch {
+        // ignore
+      }
+      if (!next) speakRef.current?.cancel()
+      return next
+    })
+  }
+
+  function handleMic() {
+    if (!talkCfg?.enabled) return
+    if (listening) {
+      listenRef.current?.stop()
+      setListening(false)
+      return
+    }
+    if (!speechRecognitionSupported()) {
+      setError('Trình duyệt chưa hỗ trợ mic. Dùng Chrome/Edge và cho phép micro.')
+      return
+    }
+    setError('')
+    setListening(true)
+    listenRef.current = startSpeechListen({
+      lang: talkCfg.lang || 'vi-VN',
+      onText: (text, isFinal) => {
+        if (text) setInput(text)
+        if (isFinal && text.trim()) {
+          listenRef.current?.stop()
+          setListening(false)
+          sendMessage(text.trim())
+        }
+      },
+      onEnd: () => setListening(false),
+      onError: (err) => {
+        setListening(false)
+        setError(err.message || 'Không nghe được')
+      },
+    })
   }
 
   function restoreFromHistory(item) {
@@ -136,11 +238,19 @@ export default function ChatPage() {
     const controller = new AbortController()
     abortRef.current = controller
 
+    speakRef.current?.cancel()
+    const speaker =
+      talkCfg?.enabled && speakOn && ttsSupported
+        ? createSpeakAhead({ lang: talkCfg.lang || 'vi-VN', rate: talkCfg.rate || 1.05 })
+        : null
+    speakRef.current = speaker
+
     try {
       await streamChat(question, {
         signal: controller.signal,
         sessionId,
         mode,
+        voiceTalk: Boolean(talkCfg?.enabled && speakOn),
         onMeta: (meta) => {
           if (meta.status) setStatusText(meta.status)
           setMessages((prev) =>
@@ -159,6 +269,7 @@ export default function ChatPage() {
         },
         onToken: (token) => {
           setStatusText('')
+          speaker?.push(token)
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantId ? { ...m, content: (m.content || '') + token } : m
@@ -166,6 +277,7 @@ export default function ChatPage() {
           )
         },
         onDone: (data) => {
+          speaker?.flush()
           const answer = data.answer || ''
           const sources = data.sources || []
           setStatusText('')
@@ -225,10 +337,10 @@ export default function ChatPage() {
     <div className={`${shellH} flex w-full overflow-hidden`}>
       {/* Cột chính: hỏi đáp */}
       <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-transparent">
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--hcc-line)]/70 bg-white/75 px-4 py-1.5 backdrop-blur-md xl:px-6">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-black/20 px-4 py-1.5 backdrop-blur-md xl:px-6">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <div
-              className="inline-flex rounded-full border border-[var(--hcc-line)] bg-white p-1"
+              className="inline-flex rounded-full border border-white/15 bg-white/10 p-1"
               role="tablist"
               aria-label="Chế độ"
             >
@@ -245,7 +357,7 @@ export default function ChatPage() {
                       ? m.id === 'advise'
                         ? 'btn-gold'
                         : 'bg-[var(--hcc-red)] text-white'
-                      : 'text-[var(--hcc-muted)] hover:text-[var(--hcc-red)]'
+                      : 'text-white/60 hover:text-white'
                   } disabled:opacity-50`}
                 >
                   {m.id === 'advise' ? (
@@ -260,13 +372,38 @@ export default function ChatPage() {
             <p className="m-0 hidden text-xs text-[var(--hcc-muted)] lg:block">
               {modeConfig.hint}
             </p>
+            {disclaimer ? (
+              <p className="m-0 hidden max-w-xl truncate text-[10px] text-white/40 xl:block" title={disclaimer}>
+                {disclaimer}
+              </p>
+            ) : null}
           </div>
 
           <div className="flex shrink-0 items-center gap-0.5">
+            {talkCfg?.enabled ? (
+              <button
+                type="button"
+                onClick={toggleSpeak}
+                className="inline-flex cursor-pointer items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white"
+                aria-pressed={speakOn}
+                title={
+                  !ttsSupported
+                    ? 'Trình duyệt không hỗ trợ đọc thoại'
+                    : speakOn
+                      ? 'Tắt đọc câu trả lời'
+                      : 'Bật đọc ngay khi AI viết'
+                }
+              >
+                {speakOn && ttsSupported ? <Volume2 className="h-3.5 w-3.5 text-emerald-300" /> : <VolumeX className="h-3.5 w-3.5" />}
+                <span className="hidden sm:inline">
+                  {!ttsSupported ? 'Không TTS' : speakOn ? 'Đang nói' : 'Im lặng'}
+                </span>
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={newChat}
-              className="inline-flex cursor-pointer items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-medium text-[var(--hcc-muted)] hover:bg-white hover:text-[var(--hcc-red)]"
+              className="inline-flex cursor-pointer items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white"
             >
               <Plus className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Chat mới</span>
@@ -274,7 +411,7 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={() => setHistoryOpen(true)}
-              className="inline-flex cursor-pointer items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-medium text-[var(--hcc-muted)] hover:bg-white hover:text-[var(--hcc-red)] xl:hidden"
+              className="inline-flex cursor-pointer items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white xl:hidden"
             >
               <History className="h-3.5 w-3.5" />
               Lịch sử
@@ -282,7 +419,7 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={toggleSide}
-              className="hidden cursor-pointer items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-medium text-[var(--hcc-muted)] hover:bg-white hover:text-[var(--hcc-red)] xl:inline-flex"
+              className="hidden cursor-pointer items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white xl:inline-flex"
               aria-pressed={sideOpen}
               title={sideOpen ? 'Ẩn bàn làm việc' : 'Hiện bàn làm việc'}
             >
@@ -318,8 +455,17 @@ export default function ChatPage() {
           onChange={setInput}
           onSubmit={() => sendMessage(input)}
           disabled={streaming}
-          placeholder={modeConfig.placeholder}
+          placeholder={
+            listening
+              ? 'Đang nghe… hãy nói câu hỏi'
+              : talkCfg?.enabled
+                ? `${modeConfig.placeholder} · hoặc bấm mic`
+                : modeConfig.placeholder
+          }
           wide
+          voiceEnabled={Boolean(talkCfg?.enabled)}
+          listening={listening}
+          onMicClick={handleMic}
         />
       </section>
 

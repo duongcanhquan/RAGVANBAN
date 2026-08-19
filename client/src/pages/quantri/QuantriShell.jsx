@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { FileText, KeyRound, LogOut, Settings, Users } from 'lucide-react'
+import { Brain, FileText, KeyRound, LogOut, Settings, Users, PenLine, Search } from 'lucide-react'
 import { supabase, supabaseConfigured } from '../../lib/supabase'
 import { adminFetch } from '../../lib/adminApi'
 import { explainLoginError } from '../../lib/authErrors'
+import { apiUrl } from '../../lib/apiBase'
 import logoVietmy from '../../assets/logo-vietmy.png'
 
 export default function QuantriShell() {
@@ -45,7 +46,7 @@ export default function QuantriShell() {
   }, [])
 
   useEffect(() => {
-    fetch('/api/quantri/status')
+    fetch(apiUrl('/api/quantri/status'))
       .then(async (res) => {
         const data = await res.json().catch(() => ({}))
         setGateStatus(data)
@@ -97,7 +98,7 @@ export default function QuantriShell() {
       if (!supabaseConfigured || !supabase) {
         throw new Error('Thiếu VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY trên bản build Vercel')
       }
-      const statusRes = await fetch('/api/quantri/status')
+      const statusRes = await fetch(apiUrl('/api/quantri/status'))
       const status = await statusRes.json().catch(() => ({}))
       setGateStatus(status)
       if (status.profileError) {
@@ -109,7 +110,7 @@ export default function QuantriShell() {
         if (!status.hasPasswordEnv) {
           throw new Error('Thiếu SUPER_ADMIN_PASSWORD trên Vercel. Thêm biến (≥ 8 ký tự, không dùng 123456), Redeploy, rồi đăng nhập.')
         }
-        const boot = await fetch('/api/quantri/bootstrap', { method: 'POST' })
+        const boot = await fetch(apiUrl('/api/quantri/bootstrap'), { method: 'POST' })
         const bootData = await boot.json().catch(() => ({}))
         if (!boot.ok) throw new Error(bootData.error || 'Không tạo được tài khoản super-admin')
       }
@@ -221,6 +222,13 @@ export default function QuantriShell() {
 
   const links = [
     { to: '/quantri', end: true, label: 'Tài liệu', Icon: FileText },
+    ...(me.role === 'super_admin'
+      ? [
+          { to: '/quantri/bo-nao', end: false, label: 'Bộ não', Icon: Brain },
+          { to: '/quantri/rag', end: false, label: 'RAG', Icon: Search },
+          { to: '/quantri/giong-ai', end: false, label: 'Giọng AI', Icon: PenLine },
+        ]
+      : []),
     { to: '/quantri/cai-dat', end: false, label: 'Cài đặt', Icon: Settings },
     ...(me.role === 'super_admin'
       ? [{ to: '/quantri/nhan-su', end: false, label: 'Nhân sự', Icon: Users }]

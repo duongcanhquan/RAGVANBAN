@@ -1,7 +1,20 @@
 /**
  * Trích xuất metadata văn bản hành chính từ phần đầu tài liệu.
- * Schema mở rộng: cơ quan, văn bản thay thế, trạng thái 3 mức.
+ * Schema mở rộng: cơ quan, văn bản thay thế, quan hệ sửa đổi/bổ sung.
  */
+
+const { extractRelationsFromText, compactSoHieu, extractSoHieuList } = require('./legalChunker');
+
+function listSoHieu(input) {
+  if (typeof input === 'string') {
+    return input
+      .split(',')
+      .map((s) => compactSoHieu(s))
+      .filter(Boolean);
+  }
+  if (!Array.isArray(input)) return [];
+  return input.map((x) => compactSoHieu(String(x))).filter(Boolean);
+}
 
 const VALID_TRANG_THAI = new Set([
   'Còn hiệu lực',
@@ -41,24 +54,23 @@ function parseMetadataJson(raw) {
  * Chuẩn hóa & validate schema metadata.
  */
 function normalizeMetadata(input = {}) {
-  let vanBanThayThe = input.van_ban_thay_the || [];
-  if (typeof vanBanThayThe === 'string') {
-    vanBanThayThe = vanBanThayThe
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
-  if (!Array.isArray(vanBanThayThe)) vanBanThayThe = [];
-
+  const vanBanThayThe = listSoHieu(input.van_ban_thay_the);
+  const vanBanSuaDoi = listSoHieu(input.van_ban_sua_doi);
+  const vanBanBaiBo = listSoHieu(input.van_ban_bai_bo);
   const linkGoc = String(input.link_goc || input.url_file_goc || '').trim();
+  const rawSo = String(input.so_hieu || 'Không rõ').trim();
+  const soHieu = compactSoHieu(rawSo) || rawSo;
 
   const meta = {
-    so_hieu: String(input.so_hieu || 'Không rõ').trim(),
+    so_hieu: soHieu,
     loai_van_ban: String(input.loai_van_ban || 'Không xác định').trim(),
     ngay_ban_hanh: String(input.ngay_ban_hanh || '').trim(),
     co_quan_ban_hanh: String(input.co_quan_ban_hanh || '').trim(),
     trang_thai: String(input.trang_thai || 'Còn hiệu lực').trim(),
-    van_ban_thay_the: vanBanThayThe.map((x) => String(x).trim()).filter(Boolean),
+    van_ban_thay_the: vanBanThayThe,
+    van_ban_sua_doi: vanBanSuaDoi,
+    van_ban_bai_bo: vanBanBaiBo,
+    van_ban_goc: compactSoHieu(input.van_ban_goc || ''),
     link_goc: linkGoc,
     // Alias tương thích ngược với pipeline cũ / UI
     url_file_goc: linkGoc,
@@ -84,8 +96,9 @@ function normalizeMetadata(input = {}) {
  */
 function heuristicMetadataFromText(textPrefix, { fileName, urlFileGoc }) {
   const head = (textPrefix || '').slice(0, 1200);
+  const soHits = extractSoHieuList(head);
   const soHieuMatch = head.match(
-    /(?:Số|So|No\.?)\s*[:：]?\s*([0-9]+\/[A-ZĐ\-0-9]+)/i
+    /(?:Số|So|No\.?)\s*[:：]?\s*([0-9]+\/[A-ZĐ\-0-9./]+)/i
   );
   const hetHieuLuc = /hết hiệu lực|bãi bỏ/i.test(head);
   const biThayTheMotPhan = /thay thế một phần|sửa đổi.*bổ sung/i.test(head);
@@ -106,7 +119,7 @@ function heuristicMetadataFromText(textPrefix, { fileName, urlFileGoc }) {
 
   return normalizeMetadata({
     loai_van_ban: loai,
-    so_hieu: soHieuMatch ? soHieuMatch[1] : fileName.replace(/\.pdf$/i, ''),
+    so_hieu: soHits[0] || (soHieuMatch ? soHieuMatch[1] : fileName.replace(/\.pdf$/i, '')),
     ngay_ban_hanh: '',
     co_quan_ban_hanh: cqMatch ? cqMatch[1].trim() : '',
     trang_thai,
@@ -136,6 +149,9 @@ async function extractMetadataFromPrefix(textPrefix, options = {}) {
   "co_quan_ban_hanh": string,
   "trang_thai": "Còn hiệu lực" | "Hết hiệu lực" | "Bị thay thế một phần",
   "van_ban_thay_the": string[],
+  "van_ban_sua_doi": string[],
+  "van_ban_bai_bo": string[],
+  "van_ban_goc": string,
   "link_goc": string,
   "ten_file": string,
   "linh_vuc": string
@@ -145,26 +161,65 @@ Quy tắc:
 - Nếu không chắc trạng thái → "Còn hiệu lực".
 - link_goc = "${urlFileGoc}"
 - ten_file = "${fileName}"
-- van_ban_thay_the: danh sách số hiệu văn bản thay thế (nếu có), ngược lại [].
+- van_ban_thay_the: số hiệu văn bản bị thay thế (nếu có), ngược lại [].
+- van_ban_sua_doi: số hiệu văn bản bị sửa đổi/bổ sung (nếu đây là VB sửa đổi).
+- van_ban_bai_bo: số hiệu văn bản bị bãi bỏ (nếu có).
+- van_ban_goc: số hiệu văn bản gốc nếu đây là phụ lục / VB hướng dẫn. Không lấy số hiệu bị sửa đổi làm van_ban_goc.
 
 Văn bản:
 """
 ${prefix}
 """`;
 
-  const response = await llm.invoke(prompt);
-  const content =
-    typeof response?.content === 'string'
-      ? response.content
-      : Array.isArray(response?.content)
-        ? response.content.map((c) => c.text || '').join('')
-        : String(response);
+  try {
+    const response = await llm.invoke(prompt);
+    const content =
+      typeof response?.content === 'string'
+        ? response.content
+        : Array.isArray(response?.content)
+          ? response.content.map((c) => c.text || '').join('')
+          : String(response);
 
-  const meta = parseMetadataJson(content);
-  meta.link_goc = urlFileGoc || meta.link_goc;
-  meta.url_file_goc = meta.link_goc;
-  meta.ten_file = fileName || meta.ten_file;
-  return meta;
+    const meta = parseMetadataJson(content);
+    meta.link_goc = urlFileGoc || meta.link_goc;
+    meta.url_file_goc = meta.link_goc;
+    meta.ten_file = fileName || meta.ten_file;
+    return meta;
+  } catch (err) {
+    console.warn('[metadata] LLM/JSON fallback:', err.message);
+    return heuristicMetadataFromText(prefix, { fileName, urlFileGoc });
+  }
+}
+
+/**
+ * Bổ sung quan hệ sửa đổi/bổ sung từ TOÀN BỘ văn bản (regex, không tốn LLM).
+ */
+function enrichMetadataFromFullText(meta = {}, fullText = '') {
+  const base = normalizeMetadata(meta);
+  const rel = extractRelationsFromText(fullText, base.so_hieu);
+  const merge = (a, b) => {
+    const seen = new Set(a.map((x) => x.toLowerCase()));
+    const out = [...a];
+    for (const x of b) {
+      if (!x || seen.has(x.toLowerCase())) continue;
+      seen.add(x.toLowerCase());
+      out.push(x);
+    }
+    return out;
+  };
+  base.van_ban_sua_doi = merge(base.van_ban_sua_doi, rel.van_ban_sua_doi);
+  base.van_ban_thay_the = merge(base.van_ban_thay_the, rel.van_ban_thay_the);
+  base.van_ban_bai_bo = merge(base.van_ban_bai_bo || [], rel.van_ban_bai_bo);
+  if (!base.van_ban_goc) {
+    const head = String(fullText || '').slice(0, 1800);
+    if (/phụ lục|hướng dẫn thi hành|quy định chi tiết/i.test(head)) {
+      const ofMatch = head.match(
+        /của\s+(?:nghị định|thông tư|quyết định|luật)[^\n]{0,60}?(\d+\s*\/\s*\d{4}\s*\/\s*[A-ZĐ0-9.\-]+)/i
+      );
+      if (ofMatch) base.van_ban_goc = compactSoHieu(ofMatch[1]);
+    }
+  }
+  return base;
 }
 
 module.exports = {
@@ -172,6 +227,7 @@ module.exports = {
   normalizeMetadata,
   heuristicMetadataFromText,
   extractMetadataFromPrefix,
+  enrichMetadataFromFullText,
   VALID_TRANG_THAI,
   ACTIVE_TRANG_THAI,
 };

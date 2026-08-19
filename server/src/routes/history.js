@@ -7,6 +7,7 @@
 
 const express = require('express');
 const { listChatLogs, getChatLog, markChatKnowledge, insertChatLog } = require('../services/supabase');
+const { requireAdmin } = require('../middleware/requireAdmin');
 const { createScenario } = require('../services/knowledgeStore');
 
 const router = express.Router();
@@ -47,11 +48,19 @@ router.post('/save', async (req, res) => {
   res.json(inserted);
 });
 
-router.post('/:id/mark-knowledge', async (req, res) => {
+router.post('/:id/mark-knowledge', async (req, res, next) => {
+  if (req.body?.asScenario) {
+    return requireAdmin(req, res, () => {
+      markAndMaybeScenario(req, res).catch(next);
+    });
+  }
+  markAndMaybeScenario(req, res).catch(next);
+});
+
+async function markAndMaybeScenario(req, res) {
   const marked = req.body?.marked !== false;
   const result = await markChatKnowledge(req.params.id, marked);
 
-  // Optionally promote to scenario
   if (marked && req.body?.asScenario) {
     const log = await getChatLog(req.params.id);
     if (log.ok && log.item) {
@@ -67,6 +76,6 @@ router.post('/:id/mark-knowledge', async (req, res) => {
   }
 
   res.json(result);
-});
+}
 
 module.exports = router;

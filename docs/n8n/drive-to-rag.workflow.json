@@ -1,35 +1,33 @@
 {
   "name": "Google Drive → RAG ingest",
+  "active": false,
+  "settings": { "executionOrder": "v1", "timezone": "Asia/Ho_Chi_Minh" },
+  "meta": { "templateCredsSetupCompleted": false },
+  "pinData": {},
   "nodes": [
     {
-      "parameters": {
-        "pollTimes": { "item": [{ "mode": "everyMinute" }] },
-        "triggerOn": "specificFolder",
-        "folderToWatch": "={{ $env.GOOGLE_DRIVE_FOLDER_ID }}",
-        "event": "fileCreated",
-        "options": {}
-      },
-      "id": "drive-trigger",
-      "name": "Google Drive Trigger",
-      "type": "n8n-nodes-base.googleDriveTrigger",
+      "parameters": {},
+      "id": "manual-run",
+      "name": "Chạy tay",
+      "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [260, 300]
+      "position": [240, 300]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.RAG_WEBHOOK_URL }}",
+        "url": "http://127.0.0.1:5000/api/webhooks/n8n",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "X-N8N-Secret", "value": "={{ $env.N8N_WEBHOOK_SECRET }}" },
+            { "name": "X-N8N-Secret", "value": "PASTE_N8N_SECRET" },
             { "name": "Content-Type", "value": "application/json" }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"fileId\": \"{{ $json.id }}\",\n  \"fileName\": \"{{ $json.name }}\"\n}",
-        "options": {}
+        "jsonBody": "{\n  \"action\": \"sync_folder\",\n  \"limit\": 20\n}",
+        "options": { "timeout": 180000 }
       },
       "id": "http-rag",
       "name": "POST /api/webhooks/n8n",
@@ -39,13 +37,8 @@
     }
   ],
   "connections": {
-    "Google Drive Trigger": {
+    "Chạy tay": {
       "main": [[{ "node": "POST /api/webhooks/n8n", "type": "main", "index": 0 }]]
     }
-  },
-  "meta": {
-    "templateCredsSetupCompleted": false,
-    "description": "Khi PDF mới vào folder Drive → gọi webhook RAG với X-N8N-Secret. Đặt env trên n8n: RAG_WEBHOOK_URL=https://your-host/api/webhooks/n8n, N8N_WEBHOOK_SECRET=..., GOOGLE_DRIVE_FOLDER_ID=..."
-  },
-  "settings": { "executionOrder": "v1" }
+  }
 }

@@ -69,8 +69,10 @@ async function setSetting(key, value) {
       updated_at: new Date().toISOString(),
     });
     if (!error) return { ok: true, source: 'supabase', value };
-    if (!/does not exist|schema cache/i.test(error.message || '')) {
+    const missing = /does not exist|schema cache/i.test(error.message || '');
+    if (!missing) {
       console.warn('[appSettings] set', key, error.message);
+      return { ok: false, source: 'supabase', error: error.message };
     }
   }
   const local = readLocal();

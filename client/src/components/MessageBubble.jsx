@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 import { Bot, User } from 'lucide-react'
 import CitationChip from './CitationChip'
 import logoVietmy from '../assets/logo-vietmy.png'
+import { extractSourceChips } from '../lib/sources'
 
 /**
  * MessageBubble — hiển thị độ tin cậy + copy nhanh.
@@ -30,6 +31,7 @@ export default function MessageBubble({
             : 'Chưa có căn cứ trong kho',
     sources: sources?.length || 0,
   }
+  const extraChips = !isUser && !streaming ? extractSourceChips('', sources) : []
 
   async function copyAnswer() {
     try {
@@ -67,7 +69,7 @@ export default function MessageBubble({
         className={`max-w-[min(100%,42rem)] rounded-2xl px-4 py-3 text-left text-[15px] leading-relaxed xl:max-w-[min(100%,48rem)] 2xl:max-w-[min(100%,52rem)] ${
           isUser
             ? 'rounded-tr-md bg-[var(--hcc-red)] text-white shadow-[var(--shadow-md)]'
-            : 'rounded-tl-md border border-[var(--hcc-line)] bg-white text-[var(--hcc-ink)] shadow-[var(--shadow-sm)]'
+            : 'glass-panel rounded-tl-md text-slate-100'
         }`}
       >
         {isUser ? (
@@ -79,10 +81,10 @@ export default function MessageBubble({
                 <span
                   className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
                     conf.level === 'high'
-                      ? 'bg-emerald-50 text-emerald-800'
+                      ? 'bg-emerald-500/20 text-emerald-200'
                       : conf.level === 'medium'
-                        ? 'bg-amber-50 text-amber-900'
-                        : 'bg-[var(--hcc-red-soft)] text-[var(--hcc-red-deep)]'
+                        ? 'bg-amber-500/20 text-amber-200'
+                        : 'bg-[var(--hcc-red-soft)] text-rose-200'
                   }`}
                 >
                   {conf.level === 'low' ? (
@@ -95,7 +97,7 @@ export default function MessageBubble({
                 </span>
                 {qaMode && (
                   <span className="rounded-full bg-[var(--hcc-canvas)] px-2 py-0.5 text-[11px] text-[var(--hcc-muted)]">
-                    {qaMode === 'advise' ? 'Tư vấn' : 'Tra cứu'}
+                    {qaMode === 'advise' ? 'Tư vấn' : qaMode === 'compare' ? 'So sánh' : 'Tra cứu'}
                   </span>
                 )}
               </div>
@@ -120,7 +122,7 @@ export default function MessageBubble({
                     <ol className="mb-2 list-decimal space-y-1 pl-5">{children}</ol>
                   ),
                   strong: ({ children }) => (
-                    <strong className="font-semibold text-[var(--hcc-red-deep)]">
+                    <strong className="font-semibold text-[var(--hcc-gold-bright)]">
                       {children}
                     </strong>
                   ),
@@ -134,7 +136,7 @@ export default function MessageBubble({
                       )
                     }
                     return (
-                      <code className="rounded bg-[var(--hcc-red-soft)] px-1 py-0.5 text-[0.9em] text-[var(--hcc-red-deep)]">
+                      <code className="rounded bg-[var(--hcc-red-soft)] px-1 py-0.5 text-[0.9em] text-rose-200">
                         {children}
                       </code>
                     )
@@ -156,18 +158,32 @@ export default function MessageBubble({
               )}
             </div>
 
+            {!streaming && extraChips.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {extraChips.map((c) => (
+                  <CitationChip
+                    key={`${c.title}::${c.url}`}
+                    href={c.url}
+                    status={c.trang_thai}
+                  >
+                    {[c.title, c.dieu ? `Đ.${c.dieu}` : '', c.trang_thai].filter(Boolean).join(' · ')}
+                  </CitationChip>
+                ))}
+              </div>
+            )}
+
             {!streaming && content && (
               <div className="mt-2 flex gap-2 border-t border-[var(--hcc-line)]/70 pt-2">
                 <button
                   type="button"
                   onClick={copyAnswer}
-                  className="inline-flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-[var(--hcc-muted)] hover:bg-[var(--hcc-canvas)] hover:text-[var(--hcc-red)]"
+                  className="inline-flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-[var(--hcc-muted)] hover:bg-white/10 hover:text-[var(--hcc-gold-bright)]"
                 >
                   <Copy className="h-3 w-3" />
                   Sao chép
                 </button>
                 {conf.level !== 'low' && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] text-emerald-700">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] text-emerald-300">
                     <CheckCircle2 className="h-3 w-3" />
                     Có trích dẫn
                   </span>

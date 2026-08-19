@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, ExternalLink, FileText, FolderTree, Search } from 'lucide-react'
+import { apiUrl } from '../lib/apiBase'
 
 const KIND_LABEL = {
   chuyen_muc: 'Chuyên mục',
@@ -65,7 +66,7 @@ function CategoryNode({ node, depth, open, toggle }) {
   const pad = Math.min(depth, 5) * 12
 
   return (
-    <li className={depth === 0 ? 'overflow-hidden rounded-2xl border border-[var(--hcc-line)] bg-white' : ''}>
+    <li className={depth === 0 ? 'glass-panel overflow-hidden rounded-2xl' : ''}>
       <div
         className={`flex w-full items-center gap-1.5 py-2.5 pr-2 text-left ${
           depth === 0
@@ -131,7 +132,7 @@ export default function LibraryPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch('/api/library/tree')
+      const res = await fetch(apiUrl('/api/library/tree'))
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Không tải được thư viện')
       setTree(data.tree || [])
@@ -161,7 +162,7 @@ export default function LibraryPage() {
   return (
     <div className="safe-x mx-auto h-full min-h-0 w-full max-w-6xl overflow-y-auto py-4 xl:px-6">
       <header className="mb-4">
-        <p className="m-0 mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--hcc-red)]">
+        <p className="m-0 mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--hcc-gold-bright)]">
           <FolderTree className="h-3.5 w-3.5" />
           Thư viện
         </p>
@@ -179,7 +180,7 @@ export default function LibraryPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Lọc theo chuyên mục, số hiệu, tên file…"
-          className="w-full rounded-2xl border border-[var(--hcc-line)] bg-white py-3 pl-10 pr-3 text-sm outline-none focus:border-[var(--hcc-red)]"
+          className="field-glass w-full rounded-2xl border py-3 pl-10 pr-3 text-sm"
         />
       </div>
 
@@ -190,7 +191,7 @@ export default function LibraryPage() {
         </p>
       )}
       {!loading && !filtered.length && (
-        <p className="rounded-2xl border border-[var(--hcc-line)] bg-white p-4 text-sm text-[var(--hcc-muted)]">
+        <p className="glass-panel rounded-2xl p-4 text-sm text-[var(--hcc-muted)]">
           Chưa có chuyên mục. Quản trị thêm mục tại /quantri → Cài đặt.
         </p>
       )}

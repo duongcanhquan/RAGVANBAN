@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { apiUrl } from './apiBase'
 
 export async function getAuthHeaders(extra = {}) {
   const headers = { ...extra }
@@ -11,5 +12,5 @@ export async function getAuthHeaders(extra = {}) {
 
 export async function adminFetch(url, options = {}) {
   const headers = await getAuthHeaders(options.headers || {})
-  return fetch(url, { ...options, headers })
+  return fetch(apiUrl(url), { ...options, headers })
 }
