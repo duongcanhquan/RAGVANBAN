@@ -13,5 +13,11 @@
       "maxDuration": 300,
       "includeFiles": "server/**"
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/drive-sync",
+      "schedule": "0 */4 * * *"
+    }
+  ]
 }

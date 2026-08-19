@@ -69,6 +69,7 @@ export default function QuantriIntegrations() {
   const [saJson, setSaJson] = useState('')
   const [draft, setDraft] = useState({ folderUrl: '', categoryId: '', label: '', isShared: false })
   const [categories, setCategories] = useState([])
+  const [syncOut, setSyncOut] = useState('')
 
   async function load() {
     const [iRes, cRes] = await Promise.all([
@@ -352,8 +353,9 @@ export default function QuantriIntegrations() {
           <StatusPill on={data.n8n.on} reason={data.n8n.reason} missingLabel="CHƯA SECRET" />
         </div>
         <p className="m-0 mb-4 text-sm text-white/65">
-          n8n gọi webhook <strong>Vercel</strong> (https://…). Tải file lên thư mục Drive → n8n bắt
-          file mới → Vercel số hóa. Lịch 4 giờ chỉ quét sót.
+          n8n <strong>không chạy trong app này</strong>. Bật công tắc chỉ mở cổng nhận webhook. Workflow
+          trên n8n Cloud phải <strong>Active</strong> và dán đúng URL + secret. Không cần n8n: bấm{' '}
+          <strong>Đồng bộ Drive ngay</strong> (và cron 4 giờ trên Vercel nếu có CRON_SECRET).
         </p>
 
         {isLocalWebhook ? (
@@ -406,16 +408,76 @@ export default function QuantriIntegrations() {
             <CopyBtn text={healthUrl} />
           </div>
           <ol className="m-0 list-decimal space-y-1 pl-5 text-xs text-white/70">
-            <li>Bật webhook + Tạo secret. Kiểm tra Health: enabled và secretConfigured = true.</li>
+            <li>Bật webhook + Tạo secret. Bấm «Thử cổng webhook» — phải hiện sẵn sàng.</li>
             <li>
-              n8n → Import file <code className="text-white/90">docs/n8n/ragvanban-sync.workflow.json</code>
+              Muốn số hóa file trên Drive <em>ngay</em>: thêm thư mục ở trên, rồi bấm «Đồng bộ Drive
+              ngay» (không chờ n8n).
             </li>
-            <li>Node HTTP: dán URL + secret ở trên (không localhost).</li>
             <li>
-              Node Drive: Google OAuth + Folder ID. Cùng folder phải share cho service account.
-              Active workflow. Tải PDF lên Drive → đợi ~1 phút.
+              n8n (tuỳ chọn): Import <code className="text-white/90">docs/n8n/ragvanban-sync.workflow.json</code>
+              → dán URL + secret → Folder ID → bật <strong>Active</strong> (file JSON mặc định tắt).
             </li>
           </ol>
+          {isSuper ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true)
+                  setError('')
+                  setSyncOut('')
+                  try {
+                    const res = await adminFetch('/api/quantri/integrations/n8n-ping', { method: 'POST' })
+                    const body = await res.json().catch(() => ({}))
+                    if (!res.ok || !body.ok) throw new Error(body.error || 'Cổng webhook chưa sẵn sàng')
+                    setSyncOut(body.hint || 'Cổng webhook sẵn sàng.')
+                  } catch (e) {
+                    setError(e.message)
+                  } finally {
+                    setBusy(false)
+                  }
+                }}
+                className="rounded-full bg-white/10 px-3 py-1.5 text-xs"
+              >
+                Thử cổng webhook
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true)
+                  setError('')
+                  setSyncOut('Đang đọc thư mục Drive…')
+                  try {
+                    const res = await adminFetch('/api/quantri/integrations/drive-sync', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ limit: 8 }),
+                    })
+                    const body = await res.json().catch(() => ({}))
+                    if (!res.ok) throw new Error(body.error || 'Đồng bộ thất bại')
+                    const okN = (body.results || []).filter((r) => r.ok).length
+                    const failN = body.failed || 0
+                    setSyncOut(
+                      `Đã xử lý ${body.processed || 0}/${body.totalListed || 0} file · thành công ${okN} · lỗi ${failN}` +
+                        (body.error ? ` · ${body.error}` : '')
+                    )
+                    if (failN && !okN) setError(body.error || 'Không số hóa được file nào')
+                  } catch (e) {
+                    setSyncOut('')
+                    setError(e.message)
+                  } finally {
+                    setBusy(false)
+                  }
+                }}
+                className="rounded-full bg-[var(--hcc-red)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+              >
+                Đồng bộ Drive ngay
+              </button>
+            </div>
+          ) : null}
+          {syncOut ? <p className="m-0 mt-2 text-xs text-emerald-100/80">{syncOut}</p> : null}
           <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
             <p className="m-0 mb-1 text-xs text-white/55">Body khi có file mới</p>
             <pre className="m-0 overflow-x-auto text-[11px] text-white/80">{`{ "fileId": "{{ $json.id }}" }`}</pre>

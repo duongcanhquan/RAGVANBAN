@@ -105,7 +105,8 @@ export default function QuantriSettings() {
         <section hidden={section !== 'tu-khoa'}>
           <h2 className="m-0 text-lg font-semibold">Từ khóa tìm nhanh</h2>
           <p className="m-0 mt-1 mb-4 text-sm text-white/65">
-            Chip gợi ý trên chat và tab Nhanh. Nhãn ngắn — câu hỏi đầy đủ khi bấm.
+            Chip trên chat công khai lấy từ văn bản đã số hóa. Thêm tại đây chỉ những từ khóa bạn muốn
+            gợi ý thêm — không dùng bộ mẫu CCCD/BHXH.
           </p>
           {error ? <p className="mb-3 text-sm text-red-200">{error}</p> : null}
 
@@ -116,7 +117,7 @@ export default function QuantriSettings() {
             <input
               value={draft.label}
               onChange={(e) => setDraft({ ...draft, label: e.target.value })}
-              placeholder="Nhãn (CCCD)"
+              placeholder="Nhãn (số hiệu / tên VB)"
               className="rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm"
             />
             <input

@@ -43,7 +43,7 @@ test('khớp thì không throw', () => {
   assert.equal(r.ok, true);
 });
 
-test('768 vs index 1536 thì throw, nêu cả hai model', () => {
+test('768 vs index 1536 thì throw, giữ index thì dùng OpenAI 1536', () => {
   assert.throws(
     () =>
       assertEmbeddingFitsIndex({
@@ -54,8 +54,28 @@ test('768 vs index 1536 thì throw, nêu cả hai model', () => {
     (err) => {
       assert.match(String(err.message), /768/);
       assert.match(String(err.message), /1536/);
-      assert.match(String(err.message), /text-embedding-004|Gemini/i);
-      assert.match(String(err.message), /3-small|1536/);
+      assert.match(String(err.message), /text-embedding-004/);
+      assert.match(String(err.message), /text-embedding-3-small|OpenAI/i);
+      assert.doesNotMatch(String(err.message), /không ghép được Gemini/);
+      assert.equal(err.code, 'EMBEDDING_DIM_MISMATCH');
+      return true;
+    }
+  );
+});
+
+test('1536 vs index 1024 thì throw, giữ index thì dùng Mistral', () => {
+  assert.throws(
+    () =>
+      assertEmbeddingFitsIndex({
+        vectors: new Array(1536).fill(0.1),
+        indexDim: 1024,
+        model: 'text-embedding-3-small',
+      }),
+    (err) => {
+      assert.match(String(err.message), /1536/);
+      assert.match(String(err.message), /1024/);
+      assert.match(String(err.message), /mistral-embed/i);
+      assert.doesNotMatch(String(err.message), /text-embedding-004/);
       assert.equal(err.code, 'EMBEDDING_DIM_MISMATCH');
       return true;
     }
@@ -102,7 +122,7 @@ test('hint hướng dẫn tạo index', () => {
   assert.match(embeddingDimHint('text-embedding-3-small'), /Custom|gõ 1536/i);
 });
 
-test('768 là cặp Gemini — không bắt buộc chip 1536 trên Pinecone', () => {
+test('768 là cặp Gemini; 1536 là ChatGPT / OpenAI', () => {
   const {
     modelsForIndexDim,
     pineconeCreateHint,
@@ -110,7 +130,30 @@ test('768 là cặp Gemini — không bắt buộc chip 1536 trên Pinecone', ()
   } = require('../src/services/embeddingDim');
   assert.ok(modelsForIndexDim(768).some((m) => /Gemini|embedding-001/i.test(m)));
   assert.equal(recommendEmbeddingForIndex(768).provider, 'gemini');
+  assert.equal(recommendEmbeddingForIndex(1536).provider, 'openai');
+  assert.equal(recommendEmbeddingForIndex(1536).defaultModel, 'text-embedding-3-small');
   assert.match(pineconeCreateHint(), /768/);
-  assert.match(pineconeCreateHint(), /Custom|gõ 1536/i);
-  assert.match(pineconeCreateHint(), /384|512|1024|2048/);
+  assert.match(pineconeCreateHint(), /1536/);
+  assert.match(pineconeCreateHint(), /text-embedding-3-small/i);
+  assert.match(pineconeCreateHint(), /1024/);
+});
+
+test('1024 là cặp Mistral; báo cáo lệch nêu action', () => {
+  const {
+    recommendEmbeddingForIndex,
+    embeddingAlignmentReport,
+  } = require('../src/services/embeddingDim');
+  assert.equal(recommendEmbeddingForIndex(1024).provider, 'mistral');
+  assert.equal(recommendEmbeddingForIndex(1024).defaultModel, 'mistral-embed');
+  const report = embeddingAlignmentReport({
+    model: 'text-embedding-3-small',
+    indexDim: 1024,
+  });
+  assert.equal(report.ok, false);
+  assert.equal(report.expectedDim, 1536);
+  assert.equal(report.action.embeddingPrimary, 'mistral');
+  assert.equal(report.action.embeddingModel, 'mistral-embed');
+  assert.match(report.fixHint, /1024/);
+  assert.match(report.fixHint, /mistral-embed/i);
+  assert.ok(report.pairings.find((p) => p.dim === 1024 && p.yours));
 });

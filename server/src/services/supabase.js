@@ -13,6 +13,7 @@ const {
   getLocalDocument,
   updateLocalDocument,
 } = require('./localDocuments');
+const { hydrateDocument, catalogFieldsFromIngest } = require('./documentCatalog');
 
 const STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'documents';
 
@@ -166,31 +167,35 @@ async function markChatKnowledge(id, marked = true) {
 
 async function listDocuments({ limit = 500 } = {}) {
   const sb = getSupabase();
-  if (!sb) return listLocalDocuments({ limit });
+  if (!sb) {
+    const local = listLocalDocuments({ limit });
+    return { ...local, items: (local.items || []).map(hydrateDocument) };
+  }
 
+  const fullSelect =
+    'id,file_name,display_name,mo_ta,so_hieu,loai_van_ban,trang_thai,chunk_count,storage_path,storage_url,drive_web_view_link,source,metadata,created_at,category_id,chuyen_mon,folder_path,sort_order';
   const { data, error } = await sb
     .from('documents')
-    .select(
-      'id,file_name,so_hieu,loai_van_ban,trang_thai,chunk_count,storage_path,storage_url,drive_web_view_link,source,metadata,created_at,category_id,chuyen_mon,folder_path,sort_order'
-    )
+    .select(fullSelect)
     .order('created_at', { ascending: false })
     .limit(limit);
 
-  if (error) {
-    const retry = await sb
-      .from('documents')
-      .select(
-        'id,file_name,so_hieu,loai_van_ban,trang_thai,chunk_count,storage_path,storage_url,drive_web_view_link,source,metadata,created_at,category_id,chuyen_mon,folder_path'
-      )
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (retry.error) {
-      console.warn('[supabase] listDocuments:', retry.error.message);
-      return { ok: false, source: 'supabase', items: [], error: retry.error.message };
-    }
-    return { ok: true, source: 'supabase', items: retry.data || [] };
+  if (!error) {
+    return { ok: true, source: 'supabase', items: (data || []).map(hydrateDocument) };
   }
-  return { ok: true, source: 'supabase', items: data || [] };
+
+  const retry = await sb
+    .from('documents')
+    .select(
+      'id,file_name,so_hieu,loai_van_ban,trang_thai,chunk_count,storage_path,storage_url,drive_web_view_link,source,metadata,created_at,category_id,chuyen_mon,folder_path'
+    )
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (retry.error) {
+    console.warn('[supabase] listDocuments:', retry.error.message);
+    return { ok: false, source: 'supabase', items: [], error: retry.error.message };
+  }
+  return { ok: true, source: 'supabase', items: (retry.data || []).map(hydrateDocument) };
 }
 
 async function countChatLogs() {
@@ -225,10 +230,19 @@ async function countDocuments() {
 
 async function insertDocument(row) {
   const sb = getSupabase();
-  if (!sb) return upsertLocalDocument(row);
+  const names = catalogFieldsFromIngest({
+    fileName: row.fileName,
+    displayName: row.displayName || row.display_name,
+    description: row.description || row.mo_ta,
+  });
+  if (!sb) {
+    return upsertLocalDocument({ ...row, displayName: names.display_name, description: names.mo_ta });
+  }
 
   const base = {
     file_name: row.fileName,
+    display_name: names.display_name,
+    mo_ta: names.mo_ta || null,
     so_hieu: row.soHieu || null,
     loai_van_ban: row.loaiVanBan || null,
     trang_thai: row.trangThai || null,
@@ -237,6 +251,7 @@ async function insertDocument(row) {
     storage_url: row.storageUrl || row.linkGoc || null,
     metadata: {
       ...(row.metadata || {}),
+      ...names.metadata,
       ...(row.driveFileId
         ? { drive_file_id: row.driveFileId, drive_web_view_link: row.driveWebViewLink }
         : {}),
@@ -259,6 +274,10 @@ async function insertDocument(row) {
 
   let { data, error } = await sb.from('documents').insert(withCats).select('id').single();
 
+  if (error && /display_name|mo_ta/i.test(error.message || '')) {
+    const { display_name: _n, mo_ta: _m, ...noDisplay } = withCats;
+    ({ data, error } = await sb.from('documents').insert(noDisplay).select('id').single());
+  }
   if (error && /category_id|chuyen_mon|folder_path/i.test(error.message || '')) {
     const mid = {
       ...base,
@@ -266,17 +285,24 @@ async function insertDocument(row) {
       drive_web_view_link: row.driveWebViewLink || null,
       source: row.source || (row.driveFileId ? 'google_drive' : 'upload'),
     };
-    ({ data, error } = await sb.from('documents').insert(mid).select('id').single());
+    const { display_name: _n2, mo_ta: _m2, ...midNoDisplay } = mid;
+    const midPayload = /display_name|mo_ta/i.test(error.message || '') ? midNoDisplay : mid;
+    ({ data, error } = await sb.from('documents').insert(midPayload).select('id').single());
   }
   if (error && /drive_file_id|column.*source/i.test(error.message || '')) {
-    ({ data, error } = await sb.from('documents').insert(base).select('id').single());
+    const { display_name: _n3, mo_ta: _m3, ...baseNoDisplay } = base;
+    ({ data, error } = await sb
+      .from('documents')
+      .insert(/display_name|mo_ta/i.test(error.message || '') ? baseNoDisplay : base)
+      .select('id')
+      .single());
   }
 
   if (error) {
     console.warn('[supabase] insertDocument:', error.message);
-    return upsertLocalDocument(row);
+    return { ok: false, error: error.message, source: 'supabase' };
   }
-  return { ok: true, id: data?.id };
+  return { ok: true, id: data?.id, source: 'supabase' };
 }
 
 async function updateDocumentCategory(id, { categoryId, folderPath, chuyenMon }) {
@@ -321,7 +347,7 @@ async function getDocumentByFileName(fileName) {
   const sb = getSupabase();
   if (sb) {
     const { data, error } = await sb.from('documents').select('*').eq('file_name', name).limit(1).maybeSingle();
-    if (!error && data) return { ok: true, source: 'supabase', id: data.id, item: data };
+    if (!error && data) return { ok: true, source: 'supabase', id: data.id, item: hydrateDocument(data) };
   }
   const local = require('./localDocuments').getLocalDocumentByFileName(name);
   if (local) return { ok: true, source: 'local', id: local.id, item: local };
@@ -332,10 +358,10 @@ async function getDocument(id) {
   const sb = getSupabase();
   if (sb) {
     const { data, error } = await sb.from('documents').select('*').eq('id', id).maybeSingle();
-    if (!error && data) return { ok: true, source: 'supabase', item: data };
+    if (!error && data) return { ok: true, source: 'supabase', item: hydrateDocument(data) };
   }
   const local = getLocalDocument(id);
-  if (local) return { ok: true, source: 'local', item: local };
+  if (local) return { ok: true, source: 'local', item: hydrateDocument(local) };
   return { ok: false, error: 'Không tìm thấy tài liệu' };
 }
 
@@ -343,6 +369,8 @@ async function updateDocument(id, patch) {
   const sb = getSupabase();
   const payload = {};
   if (patch.file_name != null) payload.file_name = String(patch.file_name).trim();
+  if (patch.display_name !== undefined) payload.display_name = String(patch.display_name || '').trim() || null;
+  if (patch.mo_ta !== undefined) payload.mo_ta = String(patch.mo_ta || '').trim() || null;
   if (patch.so_hieu !== undefined) payload.so_hieu = patch.so_hieu || null;
   if (patch.loai_van_ban !== undefined) payload.loai_van_ban = patch.loai_van_ban || null;
   if (patch.trang_thai !== undefined) payload.trang_thai = patch.trang_thai || null;
@@ -359,6 +387,17 @@ async function updateDocument(id, patch) {
 
   if (sb && Object.keys(payload).length) {
     let { data, error } = await sb.from('documents').update(payload).eq('id', id).select('*').maybeSingle();
+    if (error && /display_name|mo_ta/i.test(error.message || '')) {
+      const { display_name: n, mo_ta: m, ...rest } = payload;
+      const cur = await sb.from('documents').select('metadata').eq('id', id).maybeSingle();
+      rest.metadata = {
+        ...(cur.data?.metadata || {}),
+        ...(payload.metadata || {}),
+        ...(n !== undefined ? { display_name: n } : {}),
+        ...(m !== undefined ? { mo_ta: m } : {}),
+      };
+      ({ data, error } = await sb.from('documents').update(rest).eq('id', id).select('*').maybeSingle());
+    }
     if (error && /sort_order/i.test(error.message || '')) {
       const { sort_order: orderVal, ...rest } = payload;
       const cur = await sb.from('documents').select('metadata').eq('id', id).maybeSingle();
@@ -371,7 +410,7 @@ async function updateDocument(id, patch) {
         await sb.from('documents').update({ metadata: meta }).eq('id', id);
         data = { ...data, metadata: meta, sort_order: payload.sort_order };
       }
-      return { ok: true, source: 'supabase', item: data };
+      return { ok: true, source: 'supabase', item: hydrateDocument(data) };
     }
     if (error) console.warn('[supabase] updateDocument:', error.message);
   }

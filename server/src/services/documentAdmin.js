@@ -33,6 +33,10 @@ function normalizeCatalogPatch(body = {}) {
   }
   const fileName = body.file_name ?? body.fileName;
   if (fileName !== undefined) patch.file_name = String(fileName || '').trim() || undefined;
+  const displayName = body.display_name ?? body.displayName;
+  if (displayName !== undefined) patch.display_name = String(displayName || '').trim() || null;
+  const moTa = body.mo_ta ?? body.moTa ?? body.description;
+  if (moTa !== undefined) patch.mo_ta = String(moTa || '').trim() || null;
   if (body.sort_order !== undefined || body.sortOrder !== undefined) {
     patch.sort_order = body.sort_order ?? body.sortOrder;
   }
@@ -143,6 +147,13 @@ async function patchDocument(admin, id, body) {
 
   const catalog = normalizeCatalogPatch(body);
   if (Object.keys(catalog).length) {
+    if (catalog.display_name !== undefined || catalog.mo_ta !== undefined) {
+      catalog.metadata = {
+        ...(found.item.metadata || {}),
+        ...(catalog.display_name !== undefined ? { display_name: catalog.display_name } : {}),
+        ...(catalog.mo_ta !== undefined ? { mo_ta: catalog.mo_ta } : {}),
+      };
+    }
     const updated = await updateDocument(id, catalog);
     if (updated && updated.ok === false) {
       const err = new Error(updated.error || 'Không cập nhật được tài liệu');

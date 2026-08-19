@@ -12,7 +12,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Production (Vercel) — không dùng localhost\n\n1. App Vercel → **/quantri → Cài đặt → Google Drive & n8n**\n   Copy **URL webhook** + **X-N8N-Secret**\n2. Node **Gọi RAG webhook**: dán 2 giá trị đó (thay PASTE…)\n3. Node **File mới trên Drive**: gắn Google OAuth, dán Folder ID, rồi **Active**\n\nTải file lên thư mục Drive → n8n gọi Vercel → số hóa.\nLịch 4 giờ chỉ để quét sót.\n\nURL mẫu: `https://YOUR-APP.vercel.app/api/webhooks/n8n`\nHealth: `…/api/webhooks/n8n/health` → enabled + secretConfigured = true",
+        "content": "## Production (Vercel)\n\nApp **không chạy n8n**. Bật webhook chỉ mở cổng nhận.\n\nCách chắc: /quantri → Cài đặt → **Đồng bộ Drive ngay** (không cần n8n).\nCron Vercel `/api/cron/drive-sync` mỗi 4 giờ nếu đặt CRON_SECRET.\n\nn8n Cloud (tuỳ chọn):\n1. Copy URL webhook + X-N8N-Secret\n2. Dán vào node HTTP (không localhost)\n3. Drive trigger: Folder ID + OAuth\n4. Bật **Active** (file import mặc định tắt)\n\nHealth: `…/api/webhooks/n8n/health` · thử `{ \"action\": \"ping\" }`",
         "height": 420,
         "width": 380,
         "color": 7

@@ -24,6 +24,7 @@ const {
   getN8nSecret,
   getIntegrationHealth,
   ensureN8nSecret,
+  getFlags,
   listDriveSources,
   upsertDriveSource,
   removeDriveSource,
@@ -209,6 +210,56 @@ router.post('/integrations/n8n-secret', requireSuperAdmin, async (req, res, next
   }
 });
 
+router.post('/integrations/n8n-ping', requireSuperAdmin, async (_req, res, next) => {
+  try {
+    const health = await getIntegrationHealth();
+    if (!health.n8n.enabled) {
+      res.status(400).json({
+        ok: false,
+        error: 'Webhook n8n đang tắt. Bật công tắc rồi thử lại.',
+      });
+      return;
+    }
+    if (!health.n8n.hasSecret) {
+      res.status(400).json({ ok: false, error: 'Chưa có secret. Bấm Tạo secret.' });
+      return;
+    }
+    res.json({
+      ok: true,
+      webhookReady: true,
+      n8nOn: health.n8n.on,
+      hint:
+        'App sẵn sàng nhận webhook. n8n Cloud phải Import workflow, dán URL+secret, bật Active. Không cần n8n nếu bấm Đồng bộ Drive ngay bên dưới.',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/integrations/drive-sync', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const flags = await getFlags();
+    if (!flags.driveEnabled) {
+      res.status(403).json({ ok: false, error: 'Google Drive đang tắt trong Cài đặt' });
+      return;
+    }
+    const { syncDriveFolder } = require('../services/driveIngest');
+    const result = await syncDriveFolder({
+      limit: Math.min(20, Number(req.body?.limit) || 8),
+      folderId: req.body?.folderId || null,
+    });
+    const failed = (result.results || []).filter((r) => r.ok === false);
+    res.json({
+      ok: failed.length === 0,
+      ...result,
+      failed: failed.length,
+      error: failed[0]?.error,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/integrations/drive-sources', requireAdmin, async (req, res, next) => {
   try {
     const row = await upsertDriveSource(req.admin, req.body || {});
@@ -351,6 +402,7 @@ router.post('/brain/test', requireSuperAdmin, async (req, res, next) => {
         indexDim,
         mismatch: Boolean(indexDim && dims && indexDim !== dims),
         hint: align.hint,
+        fixHint: align.fixHint,
       });
       return;
     }

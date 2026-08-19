@@ -36,6 +36,7 @@ function DocRow({ doc }) {
           <span className="break-words">{doc.label}</span>
         </p>
         <p className="m-0 mt-0.5 pl-5 text-[11px] text-[var(--hcc-muted)]">
+          {doc.mo_ta ? `${doc.mo_ta} · ` : ''}
           {doc.folder_path || 'Chưa gắn mục'}
           {doc.trang_thai ? ` · ${doc.trang_thai}` : ''}
           {doc.chunk_count != null ? ` · ${doc.chunk_count} chunks` : ''}

@@ -40,12 +40,10 @@ export default function ChatPage() {
   const navigate = useNavigate()
   const modeConfig = useMemo(() => getMode(mode), [mode])
   const chipExamples = useMemo(() => {
-    const filtered = (quickKeywords || []).filter(
+    return (quickKeywords || []).filter(
       (k) => !k.mode || k.mode === 'both' || k.mode === mode
     )
-    if (filtered.length) return filtered
-    return (modeConfig.examples || []).map((q) => ({ id: q, label: q, query: q }))
-  }, [quickKeywords, mode, modeConfig])
+  }, [quickKeywords, mode])
 
   useEffect(() => {
     fetch(apiUrl('/api/settings/quick-keywords'))

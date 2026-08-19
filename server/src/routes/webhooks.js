@@ -76,6 +76,16 @@ router.post('/n8n', async (req, res) => {
     const action = String(req.body?.action || 'ingest_file').trim();
     const flags = await getFlags();
 
+    if (action === 'ping') {
+      res.json({
+        ok: true,
+        action: 'ping',
+        at: new Date().toISOString(),
+        hint: 'Webhook sống. n8n phải Active và POST đúng URL + X-N8N-Secret. App cũng đồng bộ Drive ngay từ Cài đặt, không cần n8n.',
+      });
+      return;
+    }
+
     if (action === 'sync_folder') {
       if (!flags.driveEnabled) {
         res.status(403).json({ error: 'Google Drive đang tắt trong Cài đặt' });
@@ -99,6 +109,9 @@ router.post('/n8n', async (req, res) => {
       const categoryId =
         req.body?.categoryId || (await categoryForFile(fileId, req.body?.folderId));
       const result = await ingestDriveFile(fileId, { categoryId });
+      if (!result?.id) {
+        throw new Error('Số hóa Drive xong nhưng không ghi được danh mục tài liệu.');
+      }
       res.json({ ok: true, action: 'ingest_file', durationMs: Date.now() - started, ...result });
       return;
     }
@@ -157,6 +170,7 @@ router.post('/n8n', async (req, res) => {
     res.status(400).json({
       error: 'Body cần fileId, fileUrl, hoặc action=sync_folder',
       examples: [
+        { action: 'ping' },
         { fileId: '1abc...' },
         { action: 'sync_folder', limit: 8 },
         { fileUrl: 'https://...', fileName: 'vb.pdf' },

@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { getSupabase, isConfigured } = require('./supabase');
 const { createTtlMap } = require('./ttlMap');
+const { isDemoKeyword } = require('./quickSuggest');
 
 const LOCAL_PATH = path.resolve(__dirname, '../../data/app-settings.json');
 const QUICK_KEY = 'quick_keywords';
@@ -36,10 +37,10 @@ function normalizeKeywords(raw) {
 
 function readLocal() {
   try {
-    if (!fs.existsSync(LOCAL_PATH)) return { [QUICK_KEY]: { items: DEFAULT_KEYWORDS } };
+    if (!fs.existsSync(LOCAL_PATH)) return {};
     return JSON.parse(fs.readFileSync(LOCAL_PATH, 'utf8'));
   } catch {
-    return { [QUICK_KEY]: { items: DEFAULT_KEYWORDS } };
+    return {};
   }
 }
 
@@ -121,18 +122,23 @@ function assertDurableSave(result, label = 'cài đặt', env = process.env) {
   return result;
 }
 
+function withoutDemo(value) {
+  const norm = normalizeKeywords(value);
+  return { items: norm.items.filter((it) => !isDemoKeyword(it)) };
+}
+
 async function getQuickKeywords() {
   const sb = getSupabase();
   if (sb && isConfigured()) {
     const { data, error } = await sb.from('app_settings').select('value').eq('key', QUICK_KEY).maybeSingle();
-    if (!error && data?.value) return { ok: true, source: 'supabase', ...normalizeKeywords(data.value) };
+    if (!error && data?.value) return { ok: true, source: 'supabase', ...withoutDemo(data.value) };
     if (error && !/does not exist|schema cache/i.test(error.message || '')) {
       console.warn('[appSettings]', error.message);
     }
   }
   const local = readLocal();
-  const value = local[QUICK_KEY] || { items: DEFAULT_KEYWORDS };
-  return { ok: true, source: 'local', ...normalizeKeywords(value) };
+  const value = local[QUICK_KEY] || { items: [] };
+  return { ok: true, source: 'local', ...withoutDemo(value) };
 }
 
 async function setQuickKeywords(input) {

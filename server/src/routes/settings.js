@@ -4,6 +4,8 @@
 
 const express = require('express');
 const { getQuickKeywords } = require('../services/appSettings');
+const { listDocuments } = require('../services/supabase');
+const { mergePublicQuickKeywords } = require('../services/quickSuggest');
 const { getTalk, publicTalkPayload } = require('../services/voiceTalk');
 const { getRagConfig, publicRagPayload } = require('../services/ragConfig');
 
@@ -11,7 +13,13 @@ const router = express.Router();
 
 router.get('/quick-keywords', async (_req, res, next) => {
   try {
-    res.json(await getQuickKeywords());
+    const saved = await getQuickKeywords();
+    const listed = await listDocuments({ limit: 80 });
+    const items = mergePublicQuickKeywords({
+      catalogItems: listed.ok === false ? [] : listed.items || [],
+      savedItems: saved.items || [],
+    });
+    res.json({ ok: true, source: 'catalog', items });
   } catch (err) {
     next(err);
   }

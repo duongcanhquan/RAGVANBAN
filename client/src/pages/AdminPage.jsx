@@ -120,6 +120,8 @@ export default function AdminPage() {
   const [files, setFiles] = useState([])
   const [pasteTitle, setPasteTitle] = useState('')
   const [pasteText, setPasteText] = useState('')
+  const [docTitle, setDocTitle] = useState('')
+  const [docDescription, setDocDescription] = useState('')
   const [webUrl, setWebUrl] = useState('')
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState({ percent: 0, message: '' })
@@ -182,10 +184,17 @@ export default function AdminPage() {
     try {
       const res = await adminFetch('/api/library/documents')
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) return
-      setDocs(data.items || [])
+      if (!res.ok || data.ok === false) {
+        setError(data.error || 'Không tải được danh mục tài liệu')
+        return []
+      }
+      const items = data.items || []
+      setDocs(items)
+      return items
     } catch (e) {
       console.warn(e)
+      setError(e.message || 'Không tải được danh mục tài liệu')
+      return []
     }
   }, [])
 
@@ -239,7 +248,15 @@ export default function AdminPage() {
       })
       setIngestTab('url')
     }
-    if (direct.length) setFiles((prev) => [...prev, ...direct])
+    if (direct.length) {
+      setFiles((prev) => {
+        const merged = [...prev, ...direct]
+        if (merged.length === 1) {
+          setDocTitle((cur) => cur.trim() || merged[0].name.replace(/\.[^.]+$/, ''))
+        }
+        return merged
+      })
+    }
     setError(
       tooLarge.length
         ? `Không nhận ${tooLarge.map((f) => `«${f.name}» (${formatBytes(f.size)})`).join(', ')} — lớn hơn mức cho phép (${formatBytes(uploadMaxBytes)}).`
@@ -282,10 +299,47 @@ export default function AdminPage() {
     }
   }
 
+  function catalogItemFromResult(result) {
+    if (!result?.id) return null
+    return {
+      id: result.id,
+      file_name: result.fileName,
+      display_name: result.displayName || result.fileName,
+      mo_ta: result.moTa || result.metadata?.mo_ta || '',
+      so_hieu: result.metadata?.so_hieu || '',
+      loai_van_ban: result.metadata?.loai_van_ban || '',
+      trang_thai: result.metadata?.trang_thai || '',
+      chunk_count: result.chunks || 0,
+      storage_url: result.storageUrl || result.publicUrl || '',
+      storage_path: result.storagePath || '',
+      drive_web_view_link: result.driveWebViewLink || '',
+      category_id: result.categoryId || categoryId || '',
+      folder_path: result.folderPath || '',
+      source: result.source || result.kind || 'upload',
+      created_at: new Date().toISOString(),
+    }
+  }
+
+  async function showIngested(result) {
+    const item = catalogItemFromResult(result)
+    const items = await loadDocs()
+    loadStats()
+    if (item?.id && !items.some((d) => d.id === item.id)) {
+      throw new Error(
+        'Hệ thống không ghi được tài liệu vào danh mục (Supabase). Không tính số hóa thành công — kiểm tra R2/Storage và bảng documents.'
+      )
+    }
+    if (item) setDetailId(item.id)
+  }
+
   async function ingestFile(file, index, total) {
     const form = new FormData()
     form.append('file', file)
     if (categoryId) form.append('categoryId', categoryId)
+    const title =
+      files.length === 1 ? docTitle.trim() : String(file.name || '').replace(/\.[^.]+$/, '')
+    if (title) form.append('displayName', title)
+    if (docDescription.trim()) form.append('description', docDescription.trim())
     const res = await adminFetch('/api/upload', {
       method: 'POST',
       body: form,
@@ -303,6 +357,17 @@ export default function AdminPage() {
         last = data
       },
     })
+    if (!last?.id) {
+      throw new Error(
+        last?.error ||
+          'Số hóa xong nhưng chưa ghi được vào danh mục tài liệu. Kiểm tra Supabase / bộ não rồi thử lại.'
+      )
+    }
+    if (!last.storagePath && !last.storageUrl && !last.publicUrl) {
+      throw new Error(
+        'Chưa lưu được bản gốc file (R2 hoặc Supabase Storage). Không tính số hóa thành công.'
+      )
+    }
     return last
   }
 
@@ -320,13 +385,16 @@ export default function AdminPage() {
       const queue = [...files]
       for (let i = 0; i < queue.length; i += 1) {
         last = await ingestFile(queue[i], i, queue.length)
+        showIngested(last)
         setFiles((prev) => prev.filter((f) => f !== queue[i]))
       }
       setResult(last)
       setProgress({ percent: 100, message: 'Hoàn tất' })
       setFiles([])
-      loadStats()
-      loadDocs()
+      if (queue.length === 1) {
+        setDocTitle('')
+        setDocDescription('')
+      }
     } catch (e) {
       setError(e.message || 'Upload thất bại — các file đã số hóa được bỏ khỏi danh sách, thử lại phần còn lại')
       setProgress({ percent: 0, message: '' })
@@ -353,7 +421,8 @@ export default function AdminPage() {
         headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
         body: JSON.stringify({
           text: pasteText,
-          title: pasteTitle || 'van-ban-dan',
+          title: pasteTitle || docTitle || 'van-ban-dan',
+          description: docDescription.trim() || undefined,
           categoryId: categoryId || undefined,
         }),
       })
@@ -362,11 +431,16 @@ export default function AdminPage() {
         onProgress: (data) =>
           setProgress({ percent: data.percent || 0, message: data.message || '' }),
         onDone: (data) => {
+          if (!data?.id) {
+            throw new Error(
+              data?.error ||
+                'Số hóa xong nhưng chưa ghi được vào danh mục tài liệu. Kiểm tra Supabase rồi thử lại.'
+            )
+          }
           setResult(data)
           setProgress({ percent: 100, message: 'Hoàn tất' })
           setPasteText('')
-          loadStats()
-          loadDocs()
+          showIngested(data)
         },
       })
     } catch (e) {
@@ -394,6 +468,8 @@ export default function AdminPage() {
         body: JSON.stringify({
           url: webUrl.trim(),
           categoryId: categoryId || undefined,
+          title: docTitle.trim() || undefined,
+          description: docDescription.trim() || undefined,
         }),
       })
       if (!res.ok) throw new Error(errorFromResponseBody(await res.text(), res.status))
@@ -401,12 +477,22 @@ export default function AdminPage() {
         onProgress: (data) =>
           setProgress({ percent: data.percent || 0, message: data.message || '' }),
         onDone: (data) => {
+          const first = data?.id ? data : data?.items?.find((it) => it.id)
+          if (!first?.id && !data?.items?.length) {
+            throw new Error(
+              data?.error ||
+                'Số hóa xong nhưng chưa ghi được vào danh mục tài liệu. Kiểm tra Supabase rồi thử lại.'
+            )
+          }
           setResult(data)
           setProgress({ percent: 100, message: 'Hoàn tất' })
           setWebUrl('')
           setDriveHint(null)
-          loadStats()
-          loadDocs()
+          if (first?.id) showIngested(first)
+          else {
+            loadStats()
+            loadDocs()
+          }
         },
       })
     } catch (e) {
@@ -498,7 +584,7 @@ export default function AdminPage() {
     const name = editName.trim()
     if (!name) return
     await patchCatalog(doc.id, {
-      file_name: name,
+      display_name: name,
       soHieu: editSoHieu,
       trangThai: editTrangThai,
     })
@@ -648,6 +734,34 @@ export default function AdminPage() {
               </span>
             </label>
 
+            <label className="mb-3 block">
+              <span className="mb-1.5 block text-xs font-medium text-white/70">Tên tài liệu</span>
+              <input
+                value={ingestTab === 'text' ? pasteTitle : docTitle}
+                onChange={(e) =>
+                  ingestTab === 'text' ? setPasteTitle(e.target.value) : setDocTitle(e.target.value)
+                }
+                placeholder={
+                  ingestTab === 'file'
+                    ? files.length === 1
+                      ? 'Tên hiện trên danh mục (mặc định = tên file)'
+                      : 'Một file: điền tên. Nhiều file: mỗi file dùng tên file'
+                    : 'Tên hiện trên danh mục'
+                }
+                className="w-full rounded-2xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/40"
+              />
+            </label>
+            <label className="mb-4 block">
+              <span className="mb-1.5 block text-xs font-medium text-white/70">Mô tả (hiện trên danh mục)</span>
+              <textarea
+                rows={2}
+                value={docDescription}
+                onChange={(e) => setDocDescription(e.target.value)}
+                placeholder="Ví dụ: Quy định thời gian làm việc, áp dụng từ năm học 2025–2026"
+                className="w-full resize-y rounded-2xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/40"
+              />
+            </label>
+
             {ingestTab === 'file' && (
               <>
                 <div
@@ -734,12 +848,6 @@ export default function AdminPage() {
 
             {ingestTab === 'text' && (
               <div className="space-y-3">
-                <input
-                  value={pasteTitle}
-                  onChange={(e) => setPasteTitle(e.target.value)}
-                  placeholder="Tiêu đề (tuỳ chọn)"
-                  className="w-full rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-white/40"
-                />
                 <textarea
                   rows={8}
                   value={pasteText}
@@ -847,10 +955,29 @@ export default function AdminPage() {
 
             {result ? (
               <div className="mt-3 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
-                <p className="m-0 font-medium">Số hóa thành công: {result.fileName}</p>
+                <p className="m-0 font-medium">
+                  Số hóa thành công: {result.displayName || result.fileName}
+                </p>
+                {result.moTa ? (
+                  <p className="m-0 mt-1 text-emerald-100/80">{result.moTa}</p>
+                ) : null}
                 <p className="m-0 mt-1 text-emerald-100/80">
                   {result.metadata?.loai_van_ban} {result.metadata?.so_hieu} · {result.chunks} chunks
                 </p>
+                {result.storageUrl || result.publicUrl || result.driveWebViewLink ? (
+                  <a
+                    href={result.storageUrl || result.publicUrl || result.driveWebViewLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 inline-block text-[var(--hcc-gold-bright)] underline"
+                  >
+                    Mở bản gốc
+                  </a>
+                ) : (
+                  <p className="m-0 mt-1 text-[11px] text-amber-100/80">
+                    Chưa có link tải về — cấu hình R2 hoặc dùng Google Drive để có bản gốc.
+                  </p>
+                )}
                 {result.storagePath ? (
                   <p className="m-0 mt-1 break-all font-mono text-[11px] text-emerald-100/60">
                     {result.storagePath}
@@ -1004,11 +1131,15 @@ export default function AdminPage() {
                                   </button>
                                 </div>
                               ) : (
-                                <p className="m-0 truncate text-sm">{doc.file_name}</p>
+                                <p className="m-0 truncate text-sm">
+                                  {doc.display_name || doc.file_name}
+                                </p>
                               )}
                               <p className="m-0 truncate text-[11px] text-white/45">
+                                {doc.mo_ta ? `${doc.mo_ta} · ` : ''}
                                 {doc.so_hieu || 'Chưa số hiệu'} · {sourceLabel(doc)} ·{' '}
                                 {doc.chunk_count || 0} chunks
+                                {doc.storage_url || doc.drive_web_view_link ? '' : ' · chưa có link'}
                               </p>
                             </div>
                             <select
@@ -1030,7 +1161,7 @@ export default function AdminPage() {
                               onClick={(e) => {
                                 e.stopPropagation()
                                 setEditingId(doc.id)
-                                setEditName(doc.file_name || '')
+                                setEditName(doc.display_name || doc.file_name || '')
                                 setEditSoHieu(doc.so_hieu || '')
                                 setEditTrangThai(doc.trang_thai || 'Còn hiệu lực')
                               }}
@@ -1077,7 +1208,12 @@ export default function AdminPage() {
 
             {detailDoc ? (
               <div className="mt-3 shrink-0 rounded-2xl border border-white/10 bg-black/20 p-3 text-xs text-white/70">
-                <p className="m-0 text-sm font-medium text-white">{detailDoc.file_name}</p>
+                <p className="m-0 text-sm font-medium text-white">
+                  {detailDoc.display_name || detailDoc.file_name}
+                </p>
+                {detailDoc.mo_ta ? (
+                  <p className="m-0 mt-1 text-[11px] text-white/60">{detailDoc.mo_ta}</p>
+                ) : null}
                 <dl className="m-0 mt-2 grid grid-cols-[7rem_1fr] gap-x-2 gap-y-1">
                   <dt className="text-white/40">Số hiệu</dt>
                   <dd className="m-0">
@@ -1129,7 +1265,9 @@ export default function AdminPage() {
                   >
                     Mở bản gốc
                   </a>
-                ) : null}
+                ) : (
+                  <p className="m-0 mt-2 text-[11px] text-amber-100/70">Chưa có link bản gốc</p>
+                )}
               </div>
             ) : null}
           </section>

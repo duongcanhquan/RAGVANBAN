@@ -25,6 +25,7 @@ const { getRagConfig, assertUploadSize, multerFileSizeCap, formatBytes } = requi
 const { getFlags } = require('../services/integrations');
 const { listenSseAbort } = require('../services/sseAbort');
 const { publicErrorMessage } = require('../services/publicError');
+const { assertOriginalStored } = require('../services/documentCatalog');
 
 const router = express.Router();
 
@@ -141,6 +142,8 @@ router.post('/', async (req, res) => {
       });
 
       const categoryId = String(req.body?.categoryId || '').trim() || null;
+      const displayName = String(req.body?.displayName || req.body?.title || '').trim();
+      const description = String(req.body?.description || req.body?.moTa || '').trim();
       assertCanUseCategory(req.admin, categoryId);
 
       let publicUrl = '';
@@ -162,28 +165,18 @@ router.post('/', async (req, res) => {
       const stored = await storeUploadedOriginal(req.file.buffer, fileName, mimeType, {
         folderPath,
       });
-      if (!stored.ok && !stored.skipped) {
-        throw new Error(stored.error || 'Lưu file gốc thất bại');
-      }
-      if (stored.ok) {
-        publicUrl = stored.publicUrl;
-        storagePath = stored.path;
-        source = stored.source || 'r2';
-        progress({
-          stage: 'storage',
-          percent: 18,
-          message:
-            stored.backend === 'r2'
-              ? 'Đã lưu bản gốc trên Cloudflare R2'
-              : 'Đã lưu bản gốc trên Supabase Storage',
-        });
-      } else {
-        progress({
-          stage: 'storage',
-          percent: 18,
-          message: 'Chưa cấu hình R2 — số hóa không kèm file tải về',
-        });
-      }
+      assertOriginalStored(stored);
+      publicUrl = stored.publicUrl;
+      storagePath = stored.path;
+      source = stored.source || 'r2';
+      progress({
+        stage: 'storage',
+        percent: 18,
+        message:
+          stored.backend === 'r2'
+            ? 'Đã lưu bản gốc trên Cloudflare R2'
+            : 'Đã lưu bản gốc trên Supabase Storage',
+      });
 
       const result = await ingestSingleFile(req.file.buffer, {
         fileName,
@@ -192,6 +185,8 @@ router.post('/', async (req, res) => {
         storagePath,
         source,
         categoryId,
+        displayName: displayName || undefined,
+        description: description || undefined,
         onProgress: (p) => {
           if (!closed()) progress(p);
         },
@@ -211,7 +206,14 @@ router.post('/', async (req, res) => {
         }
       }
 
-      done({ ...result, publicUrl, storagePath, storageBackend: stored.backend || null });
+      done({
+        ...result,
+        publicUrl,
+        storagePath,
+        storageBackend: stored.backend || null,
+        catalogId: result.id,
+        stored: true,
+      });
     });
   });
 });
@@ -219,6 +221,7 @@ router.post('/', async (req, res) => {
 router.post('/text', async (req, res) => {
   const text = String(req.body?.text || '').trim();
   const title = String(req.body?.title || 'van-ban-dan.txt').trim() || 'van-ban-dan.txt';
+  const description = String(req.body?.description || req.body?.moTa || '').trim();
   const categoryId = String(req.body?.categoryId || '').trim() || null;
   if (!text) {
     res.status(400).json({ error: 'Thiếu text' });
@@ -244,6 +247,8 @@ router.post('/text', async (req, res) => {
       source: 'paste',
       sourceKind: 'text',
       categoryId,
+      displayName: title,
+      description: description || undefined,
       onProgress: (p) => {
         if (!closed()) progress(p);
       },
@@ -255,6 +260,8 @@ router.post('/text', async (req, res) => {
 router.post('/url', async (req, res) => {
   const raw = String(req.body?.url || '').trim();
   const categoryId = String(req.body?.categoryId || '').trim() || null;
+  const displayName = String(req.body?.displayName || req.body?.title || '').trim();
+  const description = String(req.body?.description || req.body?.moTa || '').trim();
   if (!raw) {
     res.status(400).json({ error: 'Thiếu url' });
     return;
@@ -298,6 +305,8 @@ router.post('/url', async (req, res) => {
         } else {
           const one = await ingestDriveFile(parsed.id, {
             categoryId,
+            displayName: displayName || undefined,
+            description: description || undefined,
             onProgress: (p) => {
               if (!closed()) progress(p);
             },
@@ -335,6 +344,8 @@ router.post('/url', async (req, res) => {
       sourceKind: 'web',
       mimeType: 'text/html',
       categoryId,
+      displayName: displayName || page.title || undefined,
+      description: description || undefined,
       onProgress: (p) => {
         if (!closed()) progress(p);
       },

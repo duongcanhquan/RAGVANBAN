@@ -41,6 +41,8 @@ async function ingestDriveFile(fileId, options = {}) {
     driveWebViewLink: file.driveWebViewLink,
     source: 'google_drive',
     categoryId,
+    displayName: options.displayName,
+    description: options.description,
     onProgress,
   });
 

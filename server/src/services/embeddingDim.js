@@ -17,25 +17,28 @@ const MODEL_DIMS = {
 /** Chip trên console Pinecone (index gắn model sẵn) ≠ dimension tùy chọn của index dense. */
 const INDEX_PAIRINGS = [
   {
-    dim: 768,
+    dim: 1536,
     recommended: true,
+    provider: 'openai',
+    defaultModel: 'text-embedding-3-small',
+    pineconeUi: 'Custom settings, gõ 1536, cosine — ChatGPT / OpenAI',
+    models: ['OpenAI text-embedding-3-small', 'OpenRouter openai/text-embedding-3-small'],
+  },
+  {
+    dim: 768,
+    recommended: false,
     provider: 'gemini',
-    pineconeUi: 'Chọn 768 trên console (chip có sẵn)',
+    defaultModel: 'gemini-embedding-001',
+    pineconeUi: 'Chip 768 có sẵn trên console',
     models: ['Gemini gemini-embedding-001 (768 chiều)'],
   },
   {
     dim: 1024,
     recommended: false,
-    provider: null,
-    pineconeUi: 'Chip 1024',
-    models: ['mistral-embed'],
-  },
-  {
-    dim: 1536,
-    recommended: false,
-    provider: 'openai',
-    pineconeUi: 'Không có chip 1536 — Custom settings, gõ 1536, cosine',
-    models: ['OpenAI text-embedding-3-small', 'OpenRouter openai/text-embedding-3-small'],
+    provider: 'mistral',
+    defaultModel: 'mistral-embed',
+    pineconeUi: 'Chip 1024 có sẵn — khớp Mistral, không khớp OpenAI 1536',
+    models: ['Mistral mistral-embed (1024 chiều)'],
   },
 ];
 
@@ -50,11 +53,26 @@ function recommendEmbeddingForIndex(indexDim) {
 
 function pineconeCreateHint() {
   return (
-    'Console Pinecone thường hiện chip 384 / 512 / 768 / 1024 / 2048 (index gắn model sẵn của họ). ' +
-    'App này tự tạo vector rồi gửi lên — tạo index dense, metric cosine. ' +
-    'Cách dễ: chọn chip 768 rồi embedding Gemini gemini-embedding-001 (text-embedding-004 đã gỡ). ' +
-    'Muốn OpenAI: bấm Custom settings, gõ 1536, cosine — không cần chip 1536.'
+    'ChatGPT / OpenAI: Pinecone Custom settings, Dimensions 1536, cosine — embedding text-embedding-3-small. ' +
+    'Gemini: chip 768 + gemini-embedding-001. Mistral: chip 1024 + mistral-embed. ' +
+    'Không ghép OpenAI 1536 với index 768/1024, cũng không ghép Gemini 768 với index 1536.'
   );
+}
+
+function keepIndexFix(indexDim) {
+  const rec = recommendEmbeddingForIndex(indexDim);
+  if (!rec) {
+    return `Giữ index ${indexDim}: chọn embedding model đúng ${indexDim} chiều trên /quantri/bo-nao.`;
+  }
+  const who =
+    rec.provider === 'mistral'
+      ? 'tab Embedding chọn Mistral, model mistral-embed, dán key Mistral ở tab API key'
+      : rec.provider === 'gemini'
+        ? 'tab Embedding chọn Gemini, model gemini-embedding-001, dán key Gemini ở tab API key'
+        : rec.provider === 'openai'
+          ? 'tab Embedding chọn OpenAI, model text-embedding-3-small, dán key OpenAI ở tab API key'
+          : `chọn ${(rec.models || []).join(' / ')}`;
+  return `Giữ index ${indexDim} chiều: ${who}. Không để OpenAI/Gemini/Mistral khác chiều làm embedding dự phòng.`;
 }
 
 function expectedEmbeddingDim(model) {
@@ -97,9 +115,19 @@ function embeddingDimHint(model) {
 function dimensionMismatchMessage({ vectorDim: vDim, indexDim, model }) {
   return (
     `Embedding ra ${vDim} chiều (model ${model || '?'}) nhưng index Pinecone là ${indexDim} chiều. ` +
-    `Hai số phải giống nhau — không ghép được Gemini gemini-embedding-001 (768) với index 1536 của OpenAI text-embedding-3-small. ` +
-    `Cách xử lý: (1) dùng embedding khớp index hiện tại, hoặc (2) tạo index mới đúng chiều rồi số hóa lại toàn bộ tài liệu.`
+    `Hai số phải giống nhau — không ghép ${vDim} với ${indexDim}. ` +
+    `${keepIndexFix(indexDim)} ` +
+    `Hoặc tạo index mới đúng ${vDim} chiều (cosine) rồi số hóa lại toàn bộ tài liệu.`
   );
+}
+
+function mismatchFixHint({ expected, indexDim, model, ok }) {
+  if (ok || !indexDim) return '';
+  return dimensionMismatchMessage({
+    vectorDim: expected || '?',
+    indexDim,
+    model,
+  });
 }
 
 function assertEmbeddingFitsIndex({ vectors, indexDim, model } = {}) {
@@ -169,6 +197,11 @@ function embeddingAlignmentReport({ model, indexDim } = {}) {
   const index = Number(indexDim) || null;
   const ok = !expected || !index || expected === index;
   const rec = recommendEmbeddingForIndex(index);
+  const pairings = INDEX_PAIRINGS.map((p) => ({
+    ...p,
+    yours: index != null && p.dim === index,
+    recommended: index != null ? p.dim === index : Boolean(p.recommended),
+  }));
   return {
     model: model || '',
     expectedDim: expected,
@@ -176,8 +209,22 @@ function embeddingAlignmentReport({ model, indexDim } = {}) {
     ok,
     hint: embeddingDimHint(model),
     createHint: pineconeCreateHint(),
-    pairings: INDEX_PAIRINGS,
-    recommend: rec,
+    pairings,
+    recommend: rec
+      ? {
+          ...rec,
+          yours: true,
+          recommended: true,
+        }
+      : null,
+    fixHint: mismatchFixHint({ expected, indexDim: index, model, ok }),
+    action: rec?.provider
+      ? {
+          embeddingPrimary: rec.provider,
+          embeddingModel: rec.defaultModel || '',
+          tab: 'embed',
+        }
+      : null,
   };
 }
 
@@ -188,9 +235,11 @@ module.exports = {
   vectorDim,
   embeddingDimHint,
   pineconeCreateHint,
+  keepIndexFix,
   modelsForIndexDim,
   recommendEmbeddingForIndex,
   dimensionMismatchMessage,
+  mismatchFixHint,
   assertEmbeddingFitsIndex,
   assertExpectedFitsIndex,
   getPineconeIndexDimension,

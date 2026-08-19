@@ -161,6 +161,7 @@ const PROVIDER_CATALOG = [
     defaultBase: 'https://api.mistral.ai/v1',
     defaultChat: 'mistral-small-latest',
     defaultEmbed: 'mistral-embed',
+    note: 'Embedding mistral-embed = 1024 chiều. Khớp chip Pinecone 1024; không ghép OpenAI 1536 hay Gemini 768.',
   },
   {
     id: 'together',

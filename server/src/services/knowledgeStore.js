@@ -17,22 +17,7 @@ function ensureLocalFile() {
       LOCAL_PATH,
       JSON.stringify(
         {
-          scenarios: [
-            {
-              id: randomUUID(),
-              title: 'Xin cấp lại CCCD bị mất',
-              situation:
-                'Công dân mất căn cước công dân, cần biết hồ sơ, nơi nộp và thời hạn giải quyết theo quy định còn hiệu lực.',
-              suggested_question:
-                'Thủ tục cấp lại CCCD khi bị mất gồm những giấy tờ gì và nộp ở đâu?',
-              sample_answer: '',
-              tags: ['CCCD', 'căn cước', 'thủ tục'],
-              use_count: 0,
-              created_by: 'system',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            },
-          ],
+          scenarios: [],
         },
         null,
         2
@@ -40,6 +25,15 @@ function ensureLocalFile() {
       'utf8'
     );
   }
+}
+
+function isDemoScenario(s = {}) {
+  if (String(s.created_by || '') === 'system') return true;
+  return String(s.title || '').trim() === 'Xin cấp lại CCCD bị mất';
+}
+
+function withoutDemoScenarios(items) {
+  return (items || []).filter((s) => !isDemoScenario(s));
 }
 
 function readLocal() {
@@ -70,7 +64,7 @@ async function listScenarios({ limit = 100, q = '' } = {}) {
       );
     }
     const { data, error } = await query;
-    if (!error) return { ok: true, source: 'supabase', items: data || [] };
+    if (!error) return { ok: true, source: 'supabase', items: withoutDemoScenarios(data || []) };
     console.warn('[scenarios] supabase list:', error.message);
   }
 
@@ -84,7 +78,7 @@ async function listScenarios({ limit = 100, q = '' } = {}) {
         .includes(needle)
     );
   }
-  return { ok: true, source: 'local', items: items.slice(0, limit) };
+  return { ok: true, source: 'local', items: withoutDemoScenarios(items).slice(0, limit) };
 }
 
 async function createScenario(input) {

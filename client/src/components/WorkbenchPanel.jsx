@@ -166,28 +166,31 @@ export default function WorkbenchPanel({
                 Từ khóa tìm nhanh
               </p>
               <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-                {(quickKeywords?.length
-                  ? quickKeywords
-                  : (MODES[mode]?.examples || []).map((q) => ({ id: q, label: q, query: q }))
-                ).map((ex) => {
-                  const label = ex.label || ex.query
-                  const query = ex.query || ex.label
-                  return (
-                    <li key={ex.id || query}>
-                      <button
-                        type="button"
-                        disabled={streaming}
-                        onClick={() => onAsk?.(query)}
-                        className="w-full cursor-pointer rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-left text-xs leading-snug text-slate-100 transition hover:border-[var(--hcc-gold)] hover:bg-white/10 disabled:opacity-50"
-                      >
-                        <span className="font-medium">{label}</span>
-                        {label !== query ? (
-                          <span className="mt-0.5 block text-[11px] text-[var(--hcc-muted)]">{query}</span>
-                        ) : null}
-                      </button>
-                    </li>
-                  )
-                })}
+                {quickKeywords?.length ? (
+                  quickKeywords.map((ex) => {
+                    const label = ex.label || ex.query
+                    const query = ex.query || ex.label
+                    return (
+                      <li key={ex.id || query}>
+                        <button
+                          type="button"
+                          disabled={streaming}
+                          onClick={() => onAsk?.(query)}
+                          className="w-full cursor-pointer rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-left text-xs leading-snug text-slate-100 transition hover:border-[var(--hcc-gold)] hover:bg-white/10 disabled:opacity-50"
+                        >
+                          <span className="font-medium">{label}</span>
+                          {label !== query ? (
+                            <span className="mt-0.5 block text-[11px] text-[var(--hcc-muted)]">{query}</span>
+                          ) : null}
+                        </button>
+                      </li>
+                    )
+                  })
+                ) : (
+                  <li className="rounded-xl border border-dashed border-white/20 px-3 py-2.5 text-xs text-[var(--hcc-muted)]">
+                    Chưa có gợi ý. Chip lấy từ văn bản đã số hóa hoặc từ khóa bạn thêm ở Cài đặt.
+                  </li>
+                )}
               </ul>
             </div>
 

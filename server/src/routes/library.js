@@ -33,6 +33,7 @@ const { requireAdmin } = require('../middleware/requireAdmin');
 const { assertCanManageCategory } = require('../services/adminAccess');
 const { removeDocument, patchDocument, reorderDocuments, filterDocsForAdmin } = require('../services/documentAdmin');
 const { reingestDocument } = require('../services/reingest');
+const { hydrateDocument } = require('../services/documentCatalog');
 
 const router = express.Router();
 
@@ -73,28 +74,31 @@ function localPdfNodes() {
 }
 
 function normalizeDoc(d, catMap, flatCategories) {
+  const hydrated = hydrateDocument(d);
   const categoryId =
-    d.category_id || catMap[d.id] || d.metadata?.category_id || null;
+    hydrated.category_id || catMap[hydrated.id] || hydrated.metadata?.category_id || null;
   const folderPath =
-    d.folder_path ||
+    hydrated.folder_path ||
     (categoryId ? pathForCategory(flatCategories, categoryId) : '') ||
-    d.metadata?.folder_path ||
+    hydrated.metadata?.folder_path ||
     '';
   return {
-    id: d.id,
-    file_name: d.file_name,
-    so_hieu: d.so_hieu,
-    loai_van_ban: d.loai_van_ban || d.metadata?.loai_van_ban || null,
-    trang_thai: d.trang_thai || d.metadata?.trang_thai || null,
-    storage_url: d.storage_url || d.drive_web_view_link || d.metadata?.link_goc || null,
-    drive_web_view_link: d.drive_web_view_link || null,
-    chunk_count: d.chunk_count,
-    source: d.source || d.metadata?.source || 'upload',
+    id: hydrated.id,
+    file_name: hydrated.file_name,
+    display_name: hydrated.display_name,
+    mo_ta: hydrated.mo_ta,
+    so_hieu: hydrated.so_hieu,
+    loai_van_ban: hydrated.loai_van_ban || hydrated.metadata?.loai_van_ban || null,
+    trang_thai: hydrated.trang_thai || hydrated.metadata?.trang_thai || null,
+    storage_url: hydrated.storage_url,
+    drive_web_view_link: hydrated.drive_web_view_link || null,
+    chunk_count: hydrated.chunk_count,
+    source: hydrated.source || hydrated.metadata?.source || 'upload',
     category_id: categoryId,
-    chuyen_mon: d.chuyen_mon || d.metadata?.chuyen_mon || null,
+    chuyen_mon: hydrated.chuyen_mon || hydrated.metadata?.chuyen_mon || null,
     folder_path: folderPath,
-    created_at: d.created_at,
-    label: [d.so_hieu, d.file_name].filter(Boolean).join(' · ') || d.file_name,
+    created_at: hydrated.created_at,
+    label: hydrated.label,
     type: 'document',
   };
 }
@@ -255,6 +259,13 @@ router.post('/categories/reorder', requireAdmin, async (req, res, next) => {
 router.get('/documents', requireAdmin, async (req, res, next) => {
   try {
     const listed = await listDocuments({ limit: 800 });
+    if (listed.ok === false) {
+      res.status(503).json({
+        ok: false,
+        error: listed.error || 'Không đọc được danh mục tài liệu từ Supabase',
+      });
+      return;
+    }
     const items = filterDocsForAdmin(req.admin, listed.items || []);
     res.json({ ok: true, items, total: items.length, source: listed.source });
   } catch (err) {
@@ -384,7 +395,7 @@ router.get('/search', async (req, res, next) => {
     }
     if (q) {
       items = items.filter((d) =>
-        [d.file_name, d.so_hieu, d.loai_van_ban, d.trang_thai, d.folder_path, d.chuyen_mon]
+        [d.file_name, d.display_name, d.mo_ta, d.so_hieu, d.loai_van_ban, d.trang_thai, d.folder_path, d.chuyen_mon]
           .filter(Boolean)
           .join(' ')
           .toLowerCase()

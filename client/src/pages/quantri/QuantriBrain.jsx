@@ -3,17 +3,35 @@ import { useOutletContext } from 'react-router-dom'
 import { Brain, ExternalLink, FlaskConical, Save } from 'lucide-react'
 import { adminFetch } from '../../lib/adminApi'
 
-const FEATURED_PROVIDER_IDS = ['gemini', 'openai', 'openrouter', 'deepseek']
-
 const TABS = [
-  { id: 'pinecone', label: 'Pinecone · kho embed' },
-  { id: 'roles', label: 'Chọn Chat / Embedding' },
-  { id: 'gemini', label: 'Gemini · chat+embed' },
-  { id: 'openai', label: 'OpenAI · chat+embed' },
-  { id: 'openrouter', label: 'OpenRouter · chat+embed' },
-  { id: 'deepseek', label: 'DeepSeek · chỉ chat' },
-  { id: 'others', label: 'Chat khác' },
-  { id: 'goichat', label: 'Gói web ≠ API' },
+  { id: 'setup', label: 'Cách cài' },
+  { id: 'chat', label: 'Chat' },
+  { id: 'embed', label: 'Embedding' },
+  { id: 'keys', label: 'API key' },
+]
+
+const EMBED_RECIPES = [
+  {
+    dim: 1536,
+    use: 'ChatGPT / OpenAI',
+    model: 'text-embedding-3-small',
+    pinecone: 'Pinecone → Custom settings → Dimensions 1536 → cosine',
+    provider: 'openai',
+  },
+  {
+    dim: 768,
+    use: 'Gemini',
+    model: 'gemini-embedding-001',
+    pinecone: 'Pinecone → chip 768 → cosine',
+    provider: 'gemini',
+  },
+  {
+    dim: 1024,
+    use: 'Mistral',
+    model: 'mistral-embed',
+    pinecone: 'Pinecone → chip 1024 → cosine',
+    provider: 'mistral',
+  },
 ]
 
 function JobChip({ kind }) {
@@ -233,9 +251,8 @@ function ProviderFields({
               className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white"
             />
             <span className="mt-1 block text-[11px] text-white/45">
-              Gemini gemini-embedding-001 = 768 (chip Pinecone 768; text-embedding-004 đã gỡ). OpenAI
-              text-embedding-3-small = 1536.
-              Phải trùng chiều index.
+              ChatGPT / OpenAI text-embedding-3-small = 1536. Gemini gemini-embedding-001 = 768. Mistral
+              mistral-embed = 1024. Số chiều phải trùng index Pinecone.
             </span>
           </label>
           <button
@@ -257,7 +274,7 @@ function ProviderFields({
           <JobChip kind="chat-only" />
           <p className="m-0 mt-1.5">
             <strong>{spec.name}</strong> không tạo vector. Có thể dùng để trả lời, nhưng hệ thống vẫn cần
-            thêm Gemini / OpenAI / OpenRouter cho embedding (tab tương ứng + Pinecone).
+            thêm OpenAI (1536), Gemini (768) hoặc Mistral (1024) cho embedding + Pinecone.
           </p>
         </div>
       )}
@@ -302,8 +319,8 @@ export default function QuantriBrain() {
   const [testOut, setTestOut] = useState({})
   const [openId, setOpenId] = useState('')
   const [draftKeys, setDraftKeys] = useState({})
-  const [tab, setTab] = useState('pinecone')
-  const [seen, setSeen] = useState(() => new Set(['pinecone']))
+  const [tab, setTab] = useState('setup')
+  const [seen, setSeen] = useState(() => new Set(['setup']))
 
   const load = useCallback(async () => {
     const res = await adminFetch('/api/quantri/brain')
@@ -331,10 +348,6 @@ export default function QuantriBrain() {
 
   const chatIds = useMemo(() => catalog.filter((p) => p.supportsChat).map((p) => p.id), [catalog])
   const embedIds = useMemo(() => catalog.filter((p) => p.supportsEmbed).map((p) => p.id), [catalog])
-  const otherSpecs = useMemo(
-    () => catalog.filter((p) => !FEATURED_PROVIDER_IDS.includes(p.id)),
-    [catalog]
-  )
 
   function go(id) {
     setTab(id)
@@ -347,17 +360,18 @@ export default function QuantriBrain() {
   }
 
   function tabReady(id) {
-    if (id === 'pinecone') return Boolean(config?.pinecone?.hasKey)
-    if (id === 'roles') return ragReady
-    if (id === 'others') {
-      return otherSpecs.some((p) => {
+    if (id === 'setup') return ragReady && embeddingDim?.ok !== false
+    if (id === 'chat') return Boolean((status?.chat || []).length)
+    if (id === 'embed') {
+      return Boolean((status?.embedding || []).length && config?.pinecone?.hasKey && embeddingDim?.ok !== false)
+    }
+    if (id === 'keys') {
+      return catalog.some((p) => {
         const st = config?.providers?.[p.id]
         return st?.hasKey && st.enabled !== false
       })
     }
-    if (id === 'goichat') return false
-    const st = config?.providers?.[id]
-    return Boolean(st?.hasKey && st.enabled !== false)
+    return false
   }
 
   if (me?.role !== 'super_admin') {
@@ -376,6 +390,35 @@ export default function QuantriBrain() {
         [id]: { ...cur.providers[id], ...patch },
       },
     }))
+  }
+
+  function applyRecommendedEmbedding() {
+    const rec = embeddingDim?.recommend
+    const action = embeddingDim?.action
+    const provider = action?.embeddingPrimary || rec?.provider
+    if (!provider || !config) return
+    const model = action?.embeddingModel || rec?.defaultModel || ''
+    setConfig((c) => ({
+      ...c,
+      embeddingPrimary: provider,
+      embeddingFallback: [],
+      providers: {
+        ...c.providers,
+        [provider]: {
+          ...(c.providers[provider] || {}),
+          embeddingModel: model || c.providers[provider]?.embeddingModel,
+          enabled: true,
+        },
+      },
+    }))
+    go('embed')
+    setOpenId(provider)
+    setError('')
+    setOk(
+      `Đã chọn embedding ${catalog.find((p) => p.id === provider)?.name || provider}` +
+        (model ? ` · ${model}` : '') +
+        `. Dán API key nhà đó nếu chưa có, rồi Lưu. Không dùng OpenAI/Gemini khác chiều làm dự phòng.`
+    )
   }
 
   async function save() {
@@ -429,7 +472,15 @@ export default function QuantriBrain() {
       setMissing(Array.isArray(data.missing) ? data.missing : [])
       setEmbeddingDim(data.embeddingDim || null)
       setDraftKeys({})
-      setOk('Đã lưu toàn bộ bộ não (mọi tab). Chat và số hóa dùng ngay, không cần restart.')
+      if (data.embeddingDim && data.embeddingDim.ok === false) {
+        setOk('')
+        setError(
+          data.embeddingDim.fixHint ||
+            `Đã lưu key nhưng lệch chiều: embedding ${data.embeddingDim.expectedDim} ≠ index Pinecone ${data.embeddingDim.indexDim}. Chọn embedding khớp index rồi Lưu lại.`
+        )
+      } else {
+        setOk('Đã lưu toàn bộ bộ não (mọi tab). Chat và số hóa dùng ngay, không cần restart.')
+      }
     } catch (e) {
       setError(e.message)
     } finally {
@@ -448,41 +499,12 @@ export default function QuantriBrain() {
     const msg = data.ok
       ? purpose === 'embedding'
         ? data.mismatch
-          ? `Vector ${data.dims} chiều ≠ index Pinecone ${data.indexDim} — phải giống nhau`
+          ? data.fixHint ||
+            `Vector ${data.dims} chiều ≠ index Pinecone ${data.indexDim} — phải giống nhau`
           : `OK · ${data.dims} chiều${data.expectedDim ? ` (model ${data.expectedDim})` : ''}${data.indexDim ? ` · index ${data.indexDim}` : ''}`
         : `OK · ${data.sample || 'phản hồi nhận được'}`
       : data.error || 'Thất bại'
     setTestOut((cur) => ({ ...cur, [`${provider}:${purpose}`]: msg }))
-  }
-
-  function renderProviderTab(id) {
-    const spec = catalog.find((p) => p.id === id)
-    if (!spec || !config) return null
-    const st = config.providers[id] || {}
-    return (
-      <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
-        <SectionHead
-          title={spec.name}
-          hint={
-            spec.supportsEmbed
-              ? 'Một key dùng được cả Chat (khung xanh) và Embedding (khung tím). Hai việc khác nhau — đừng nhầm model chat với model vector.'
-              : 'Chỉ Chat. Không dùng nhà này cho số hóa / tìm trong kho — cần thêm Gemini hoặc OpenAI embedding.'
-          }
-          busy={busy}
-          onSave={save}
-        />
-        <ProviderFields
-          spec={spec}
-          st={st}
-          fromEnv={fromEnv}
-          draftKeys={draftKeys}
-          setDraftKeys={setDraftKeys}
-          patchProvider={patchProvider}
-          testProvider={testProvider}
-          testOut={testOut}
-        />
-      </section>
-    )
   }
 
   if (!config) {
@@ -498,8 +520,9 @@ export default function QuantriBrain() {
             Bộ não (API / LLM)
           </h1>
           <p className="m-0 mt-1 text-sm text-white/65">
-            Cần đủ <strong className="text-white">3 phần khác nhau</strong>: Chat (trả lời) ≠ Embedding
-            (tạo vector) ≠ Pinecone (kho vector). Chat không thay được embedding.
+            Hai việc tách nhau: <strong className="text-white">Chat</strong> trả lời câu hỏi,{' '}
+            <strong className="text-white">Embedding</strong> tạo vector. Số chiều embedding phải trùng
+            Pinecone. Bạn đang dùng ChatGPT → index <strong className="text-white">1536</strong>.
           </p>
         </div>
         <SaveBrainButton busy={busy} onSave={save} />
@@ -515,42 +538,82 @@ export default function QuantriBrain() {
               ? `Đang có: ${(status.chat || []).join(', ')}`
               : 'Cần Gemini / OpenAI / OpenRouter / DeepSeek / Groq…'
           }
-          onClick={() => {
-            const id = (status?.chat || [])[0]
-            if (FEATURED_PROVIDER_IDS.includes(id)) go(id)
-            else if (id) go('others')
-            else go('deepseek')
-          }}
+          onClick={() => go('chat')}
         />
         <NeedCard
-          ok={(status?.embedding || []).length > 0}
+          ok={(status?.embedding || []).length > 0 && embeddingDim?.ok !== false}
           title="Embedding"
           job="Biến văn bản thành vector để tìm"
           who={
-            (status?.embedding || []).length
-              ? `Đang có: ${(status.embedding || []).join(', ')}`
-              : 'Bắt buộc Gemini, OpenAI hoặc OpenRouter — DeepSeek/Groq không được'
+            embeddingDim?.ok === false
+              ? `Lệch chiều: ${embeddingDim.expectedDim || '?'} ≠ index ${embeddingDim.indexDim} — ${
+                  (embeddingDim.recommend?.models || ['đổi embedding cho khớp']).join(' / ')
+                }`
+              : (status?.embedding || []).length
+                ? `Đang có: ${(status.embedding || []).join(', ')}${
+                    embeddingDim?.indexDim ? ` · khớp index ${embeddingDim.indexDim}` : ''
+                  }`
+                : embeddingDim?.indexDim === 1024
+                  ? 'Index 1024 → cần Mistral mistral-embed (không dùng OpenAI 1536)'
+                  : embeddingDim?.indexDim === 768
+                    ? 'Index 768 → cần Gemini gemini-embedding-001'
+                    : embeddingDim?.indexDim === 1536
+                      ? 'Index 1536 → cần OpenAI text-embedding-3-small'
+                      : 'Bắt buộc Gemini (768), Mistral (1024) hoặc OpenAI (1536) — DeepSeek/Groq không được'
           }
-          onClick={() => {
-            const id = (status?.embedding || [])[0]
-            if (FEATURED_PROVIDER_IDS.includes(id)) go(id)
-            else if (id) go('others')
-            else go('gemini')
-          }}
+          onClick={() => go('embed')}
         />
         <NeedCard
           ok={Boolean(status?.pinecone)}
           title="Pinecone"
           job="Kho chứa vector embedding"
           who={status?.pinecone ? 'Đã có API key' : 'Chưa key / tên index — không phải LLM chat'}
-          onClick={() => go('pinecone')}
+          onClick={() => go('embed')}
         />
       </div>
       <p className="mb-4 text-xs text-white/60">
-        {ragReady
-          ? 'Đủ 3 phần. Tab «Chọn Chat / Embedding» quyết định nhà nào trả lời và nhà nào tạo vector.'
-          : `Chưa đủ: ${(missing.length ? missing : ['chat', 'embedding', 'pinecone']).join(', ')}. Bấm thẻ màu vàng phía trên để điền.`}
+        {ragReady && embeddingDim?.ok !== false
+          ? 'Đủ Chat + Embedding + Pinecone. Tab Cách cài ghi rõ số chiều và model.'
+          : `Chưa đủ: ${(missing.length ? missing : ['chat', 'embedding', 'pinecone']).join(', ')}${
+              embeddingDim?.ok === false ? ' · lệch chiều embedding/Pinecone' : ''
+            }. Bấm thẻ màu vàng phía trên để điền.`}
       </p>
+
+      {embeddingDim?.indexDim ? (
+        <div
+          className={`mb-4 rounded-2xl border px-4 py-3 text-sm ${
+            embeddingDim.ok === false
+              ? 'border-rose-400/40 bg-rose-500/15 text-rose-50'
+              : 'border-emerald-400/30 bg-emerald-500/10 text-emerald-50'
+          }`}
+        >
+          <p className="m-0 font-medium">
+            Index Pinecone đang {embeddingDim.indexDim} chiều
+            {embeddingDim.ok === false
+              ? ` — embedding hiện tại (${embeddingDim.model || config.embeddingPrimary || '?'}) ra ${
+                  embeddingDim.expectedDim || '?'
+                } chiều, không ghép được.`
+              : ` · đã khớp ${embeddingDim.model || 'model embedding'}.`}
+          </p>
+          <p className="m-0 mt-1 text-[13px] leading-relaxed text-white/80">
+            {embeddingDim.ok === false
+              ? embeddingDim.fixHint
+              : `Giữ index này thì embedding phải là ${(embeddingDim.recommend?.models || []).join(' / ') || `${embeddingDim.indexDim} chiều`}.`}
+          </p>
+          {embeddingDim.ok === false && embeddingDim.action?.embeddingPrimary ? (
+            <button
+              type="button"
+              onClick={applyRecommendedEmbedding}
+              className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-900"
+            >
+              Chọn{' '}
+              {catalog.find((p) => p.id === embeddingDim.action.embeddingPrimary)?.name ||
+                embeddingDim.action.embeddingPrimary}{' '}
+              cho khớp {embeddingDim.indexDim} chiều
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <nav className="mb-5 flex flex-wrap gap-1">
         {TABS.map((s) => (
@@ -562,12 +625,10 @@ export default function QuantriBrain() {
               tab === s.id ? 'bg-white text-[var(--hcc-red)]' : 'bg-white/10 text-white/80'
             }`}
           >
-            {s.id !== 'goichat' && s.id !== 'roles' ? (
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${tabReady(s.id) ? 'bg-emerald-400' : 'bg-white/30'}`}
-                aria-hidden
-              />
-            ) : null}
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${tabReady(s.id) ? 'bg-emerald-400' : 'bg-white/30'}`}
+              aria-hidden
+            />
             {s.label}
           </button>
         ))}
@@ -576,76 +637,240 @@ export default function QuantriBrain() {
       {error ? <p className="mb-3 text-sm text-rose-300">{error}</p> : null}
       {ok ? <p className="mb-3 text-sm text-emerald-200">{ok}</p> : null}
 
-      {seen.has('pinecone') ? (
-        <div hidden={tab !== 'pinecone'} inert={tab !== 'pinecone' ? true : undefined}>
+      {seen.has('setup') ? (
+        <div hidden={tab !== 'setup'} inert={tab !== 'setup' ? true : undefined}>
           <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
             <SectionHead
-              title="Kho embedding — Pinecone"
-              hint="Đây không phải Chat. Pinecone chỉ lưu vector do model embedding tạo ra. Chiều index phải trùng model embedding."
+              title="Cách cài — ChatGPT + Pinecone 1536"
+              hint="Chỉ cần khớp số chiều. Chat và embedding là hai ô khác nhau; cùng một key OpenAI dùng được cả hai."
               busy={busy}
               onSave={save}
             />
-            <div className="mb-3 overflow-x-auto rounded-xl border border-white/10 text-[11px]">
+            <ol className="m-0 space-y-3 pl-5 text-sm leading-relaxed text-white/80">
+              <li>
+                <strong className="text-white">Pinecone:</strong> tạo index{' '}
+                <span className="font-mono text-white">1536</span> chiều, metric cosine. Console không có
+                chip 1536 → <strong className="text-white">Custom settings</strong>, gõ 1536. Dán key + tên
+                index ở tab Embedding.
+              </li>
+              <li>
+                <strong className="text-white">Embedding:</strong> dùng{' '}
+                <strong className="text-white">OpenAI text-embedding-3-small</strong> (đúng 1536). Tab Chat →
+                Embedding chính = OpenAI. Dán key OpenAI (sk-…) ở tab API key. Không dùng Gemini 768 hay
+                Mistral 1024 với index này.
+              </li>
+              <li>
+                <strong className="text-white">Chat:</strong> chọn nhà trả lời (OpenAI cùng key, hoặc Gemini /
+                DeepSeek / Groq…). Chat không cần trùng số chiều. Gói ChatGPT Plus trên chatgpt.com không
+                phải API — phải lấy key tại platform.openai.com.
+              </li>
+            </ol>
+            <div className="mt-4 overflow-x-auto rounded-xl border border-white/10 text-[11px]">
               <table className="w-full border-collapse text-left text-white/75">
                 <thead className="bg-white/5 text-white/50">
                   <tr>
-                    <th className="px-2 py-1.5 font-medium">Index Pinecone</th>
-                    <th className="px-2 py-1.5 font-medium">Embedding trên /quantri</th>
+                    <th className="px-2 py-1.5 font-medium">Số chiều</th>
+                    <th className="px-2 py-1.5 font-medium">Dùng cái gì</th>
+                    <th className="px-2 py-1.5 font-medium">Model embedding</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(embeddingDim?.pairings || [
-                    {
-                      dim: 768,
-                      recommended: true,
-                      pineconeUi: 'Chip 768 có sẵn',
-                      models: ['Gemini gemini-embedding-001'],
-                    },
-                    {
-                      dim: 1536,
-                      recommended: false,
-                      pineconeUi: 'Custom settings, gõ 1536',
-                      models: ['OpenAI text-embedding-3-small'],
-                    },
-                  ]).map((row) => (
-                    <tr key={row.dim} className="border-t border-white/10">
-                      <td className="px-2 py-1.5 align-top">
-                        <span className="font-mono text-white">{row.dim}</span>
-                        {row.recommended ? (
-                          <span className="ml-1.5 rounded-full bg-emerald-400/20 px-1.5 py-0.5 text-[10px] text-emerald-100">
-                            nên dùng
-                          </span>
-                        ) : null}
-                        <div className="mt-0.5 text-white/45">{row.pineconeUi}</div>
-                      </td>
-                      <td className="px-2 py-1.5">{(row.models || []).join(' · ')}</td>
-                    </tr>
-                  ))}
+                  {EMBED_RECIPES.map((row) => {
+                    const yours = row.dim === embeddingDim?.indexDim
+                    return (
+                      <tr
+                        key={row.dim}
+                        className={`border-t border-white/10 ${yours ? 'bg-amber-400/10 text-white' : ''}`}
+                      >
+                        <td className="px-2 py-2 font-mono text-white">
+                          {row.dim}
+                          {yours ? (
+                            <span className="ml-1.5 rounded-full bg-amber-400/25 px-1.5 py-0.5 text-[10px] text-amber-50">
+                              index của bạn
+                            </span>
+                          ) : row.dim === 1536 ? (
+                            <span className="ml-1.5 rounded-full bg-sky-400/20 px-1.5 py-0.5 text-[10px] text-sky-100">
+                              ChatGPT
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="px-2 py-2">{row.use}</td>
+                        <td className="px-2 py-2">
+                          <span className="font-mono text-[11px] text-white">{row.model}</span>
+                          <div className="mt-0.5 text-white/45">{row.pinecone}</div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
-            {embeddingDim?.indexDim && embeddingDim.recommend ? (
-              <p className="mb-3 rounded-xl bg-amber-500/15 px-3 py-2 text-xs text-amber-50">
-                Index đang là {embeddingDim.indexDim} chiều → embedding phải là{' '}
-                {(embeddingDim.recommend.models || []).join(' / ')}. Tab «Vai trò» chọn đúng nhà cung
-                cấp đó rồi Lưu.
-              </p>
+            <p className="m-0 mt-3 text-xs text-white/50">
+              Đổi số chiều hoặc model embedding so với kho cũ thì phải số hóa lại tài liệu. Đổi Chat thì
+              không cần.
+            </p>
+          </section>
+        </div>
+      ) : null}
+
+      {seen.has('chat') ? (
+        <div hidden={tab !== 'chat'} inert={tab !== 'chat' ? true : undefined}>
+          <section className="rounded-3xl border border-sky-400/25 bg-sky-500/10 p-4">
+            <SectionHead
+              title="Chat — trả lời câu hỏi"
+              hint="Không tạo vector. Có thể OpenAI, Gemini, DeepSeek, Groq… Dán key ở tab API key."
+              busy={busy}
+              onSave={save}
+            />
+            <label className="text-xs text-white/70">
+              Chat chính
+              <select
+                value={config.chatPrimary}
+                onChange={(e) => setConfig((c) => ({ ...c, chatPrimary: e.target.value }))}
+                className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-2 py-2 text-sm"
+              >
+                {chatIds.map((id) => (
+                  <option key={id} value={id}>
+                    {catalog.find((p) => p.id === id)?.name}
+                    {catalog.find((p) => p.id === id)?.supportsEmbed ? '' : ' · chỉ chat'}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="mt-2 block text-xs text-white/70">
+              Chat dự phòng (hết quota thì thử tiếp)
+              <input
+                value={csv(config.chatFallback)}
+                onChange={(e) => setConfig((c) => ({ ...c, chatFallback: parseCsv(e.target.value) }))}
+                placeholder="groq, openai…"
+                className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-2 py-1.5 text-[11px]"
+              />
+            </label>
+            <label className="mt-3 block text-xs text-white/70">
+              Extract (bóc số hiệu, cơ quan…) — cũng là chat, không phải embedding
+              <select
+                value={config.extractPrimary}
+                onChange={(e) => setConfig((c) => ({ ...c, extractPrimary: e.target.value }))}
+                className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-2 py-2 text-sm"
+              >
+                {chatIds.map((id) => (
+                  <option key={id} value={id}>
+                    {catalog.find((p) => p.id === id)?.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <input
+              value={csv(config.extractFallback)}
+              onChange={(e) => setConfig((c) => ({ ...c, extractFallback: parseCsv(e.target.value) }))}
+              placeholder="fallback extract"
+              className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-2 py-1.5 text-[11px]"
+            />
+          </section>
+        </div>
+      ) : null}
+
+      {seen.has('embed') ? (
+        <div hidden={tab !== 'embed'} inert={tab !== 'embed' ? true : undefined}>
+          <section className="rounded-3xl border border-violet-400/25 bg-violet-500/10 p-4">
+            <SectionHead
+              title="Embedding + Pinecone"
+              hint="Số trên Pinecone = model embedding. Index 1536 → OpenAI text-embedding-3-small."
+              busy={busy}
+              onSave={save}
+            />
+            <div className="mb-4 grid gap-2 sm:grid-cols-3">
+              {EMBED_RECIPES.map((row) => {
+                const yours = row.dim === embeddingDim?.indexDim
+                return (
+                  <button
+                    key={row.dim}
+                    type="button"
+                    onClick={() => {
+                      setConfig((c) => ({
+                        ...c,
+                        embeddingPrimary: row.provider,
+                        embeddingFallback: [],
+                        providers: {
+                          ...c.providers,
+                          [row.provider]: {
+                            ...(c.providers[row.provider] || {}),
+                            embeddingModel: row.model,
+                            enabled: true,
+                          },
+                        },
+                      }))
+                      setOpenId(row.provider)
+                      go('keys')
+                      setOk(`Đã chọn embedding ${row.use} · ${row.model} (${row.dim} chiều). Dán API key rồi Lưu.`)
+                    }}
+                    className={`rounded-2xl border px-3 py-2.5 text-left text-xs ${
+                      yours
+                        ? 'border-amber-300/50 bg-amber-400/15 text-white'
+                        : 'border-white/15 bg-black/20 text-white/75'
+                    }`}
+                  >
+                    <p className="m-0 font-mono text-lg font-semibold text-white">{row.dim}</p>
+                    <p className="m-0 mt-1 font-medium text-white">{row.use}</p>
+                    <p className="m-0 mt-0.5 font-mono text-[11px] text-violet-100">{row.model}</p>
+                    <p className="m-0 mt-1 text-[11px] text-white/45">{row.pinecone}</p>
+                  </button>
+                )
+              })}
+            </div>
+            {embeddingDim?.ok === false ? (
+              <div className="mb-3 rounded-xl bg-rose-500/20 px-3 py-2 text-xs text-rose-50">
+                <p className="m-0">{embeddingDim.fixHint}</p>
+                {embeddingDim.action?.embeddingPrimary ? (
+                  <button
+                    type="button"
+                    onClick={applyRecommendedEmbedding}
+                    className="mt-2 rounded-lg bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-900"
+                  >
+                    Chọn nhà khớp index {embeddingDim.indexDim}
+                  </button>
+                ) : null}
+              </div>
             ) : null}
-            {embeddingDim && embeddingDim.ok === false ? (
-              <p className="mb-3 rounded-xl bg-rose-500/20 px-3 py-2 text-xs text-rose-100">
-                Lệch chiều: model {embeddingDim.model || 'embedding'} = {embeddingDim.expectedDim}{' '}
-                chiều, index Pinecone = {embeddingDim.indexDim} chiều. Đổi embedding cho khớp, hoặc
-                tạo index mới rồi số hóa lại toàn bộ.
-              </p>
-            ) : null}
+            <label className="text-xs text-white/70">
+              Embedding chính
+              {embeddingDim?.indexDim ? ` · index đang ${embeddingDim.indexDim} chiều` : ''}
+              <select
+                value={config.embeddingPrimary}
+                onChange={(e) => setConfig((c) => ({ ...c, embeddingPrimary: e.target.value }))}
+                className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-2 py-2 text-sm"
+              >
+                {embedIds.map((id) => (
+                  <option key={id} value={id}>
+                    {catalog.find((p) => p.id === id)?.name}
+                    {embeddingDim?.recommend?.provider === id
+                      ? ` · khớp index ${embeddingDim.indexDim}`
+                      : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="m-0 mt-2 text-[11px] text-white/50">
+              DeepSeek / Groq không embed. Embedding dự phòng chỉ dùng khi cùng số chiều — để trống nếu
+              chỉ OpenAI 1536.
+            </p>
+            <label className="mt-2 block text-xs text-white/70">
+              Embedding dự phòng (cùng số chiều, thường để trống)
+              <input
+                value={csv(config.embeddingFallback)}
+                onChange={(e) => setConfig((c) => ({ ...c, embeddingFallback: parseCsv(e.target.value) }))}
+                placeholder="để trống"
+                className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-2 py-1.5 text-[11px]"
+              />
+            </label>
             {fromEnv.pinecone ? (
-              <p className="mb-3 text-[11px] text-white/45">
+              <p className="mt-3 mb-0 text-[11px] text-white/45">
                 Đã có key Pinecone trong .env — để trống ô key nếu giữ nguyên.
               </p>
             ) : null}
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <label className="text-xs text-white/60">
-                API key {config.pinecone?.hasKey ? `(${config.pinecone.apiKeyHint})` : ''}
+                API key Pinecone {config.pinecone?.hasKey ? `(${config.pinecone.apiKeyHint})` : ''}
                 <input
                   type="password"
                   autoComplete="off"
@@ -656,7 +881,7 @@ export default function QuantriBrain() {
                 />
               </label>
               <label className="text-xs text-white/60">
-                Index
+                Tên index
                 {embeddingDim?.indexDim ? ` (${embeddingDim.indexDim} chiều)` : ''}
                 <input
                   value={config.pinecone?.indexName || ''}
@@ -666,7 +891,7 @@ export default function QuantriBrain() {
                   className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white"
                 />
               </label>
-              <label className="text-xs text-white/60">
+              <label className="text-xs text-white/60 sm:col-span-2">
                 Namespace (tuỳ chọn)
                 <input
                   value={config.pinecone?.namespace || ''}
@@ -681,135 +906,35 @@ export default function QuantriBrain() {
         </div>
       ) : null}
 
-      {seen.has('roles') ? (
-        <div hidden={tab !== 'roles'} inert={tab !== 'roles' ? true : undefined}>
+      {seen.has('keys') ? (
+        <div hidden={tab !== 'keys'} inert={tab !== 'keys' ? true : undefined}>
           <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
             <SectionHead
-              title="Chọn ai Chat / ai Embedding"
-              hint="Hai ô này độc lập. Chat = trả lời. Embedding = tạo vector (danh sách dưới chỉ nhà có embed — không có DeepSeek/Groq)."
+              title="API key"
+              hint="Dán key developer. Gói ChatGPT Plus / Gemini Advanced trên web không dùng được. Một key OpenAI dùng được cả Chat lẫn Embedding."
               busy={busy}
               onSave={save}
             />
-            <div className="grid gap-3 lg:grid-cols-2">
-              <div className="rounded-2xl border border-sky-400/25 bg-sky-500/10 p-4">
-                <p className="m-0 mb-1 flex items-center gap-2 text-sm font-semibold text-white">
-                  <JobChip kind="chat" />
-                  Trả lời & bóc metadata
-                </p>
-                <p className="m-0 mb-3 text-[11px] text-white/50">
-                  Câu hỏi người dùng + extract khi số hóa. Có thể DeepSeek/Groq. Không dùng ô này để tạo
-                  vector.
-                </p>
-                <label className="text-xs text-white/70">
-                  Chat chính
-                  <select
-                    value={config.chatPrimary}
-                    onChange={(e) => setConfig((c) => ({ ...c, chatPrimary: e.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-2 py-2 text-sm"
-                  >
-                    {chatIds.map((id) => (
-                      <option key={id} value={id}>
-                        {catalog.find((p) => p.id === id)?.name}
-                        {catalog.find((p) => p.id === id)?.supportsEmbed ? '' : ' · chỉ chat'}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="mt-2 block text-xs text-white/70">
-                  Chat dự phòng (hết quota thì thử tiếp)
-                  <input
-                    value={csv(config.chatFallback)}
-                    onChange={(e) => setConfig((c) => ({ ...c, chatFallback: parseCsv(e.target.value) }))}
-                    placeholder="groq, openai…"
-                    className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-2 py-1.5 text-[11px]"
-                  />
-                </label>
-                <label className="mt-3 block text-xs text-white/70">
-                  Extract (bóc số hiệu, cơ quan…) — cũng là chat, không phải embedding
-                  <select
-                    value={config.extractPrimary}
-                    onChange={(e) => setConfig((c) => ({ ...c, extractPrimary: e.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-2 py-2 text-sm"
-                  >
-                    {chatIds.map((id) => (
-                      <option key={id} value={id}>
-                        {catalog.find((p) => p.id === id)?.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <input
-                  value={csv(config.extractFallback)}
-                  onChange={(e) =>
-                    setConfig((c) => ({ ...c, extractFallback: parseCsv(e.target.value) }))
-                  }
-                  placeholder="fallback extract"
-                  className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-2 py-1.5 text-[11px]"
-                />
-              </div>
-              <div className="rounded-2xl border border-violet-400/25 bg-violet-500/10 p-4">
-                <p className="m-0 mb-1 flex items-center gap-2 text-sm font-semibold text-white">
-                  <JobChip kind="embed" />
-                  Tạo vector (số hóa + tìm)
-                </p>
-                <p className="m-0 mb-3 text-[11px] text-white/50">
-                  Bắt buộc. Khớp chiều Pinecone. Nên một model cố định — đổi model phải số hóa lại.
-                </p>
-                <label className="text-xs text-white/70">
-                  Embedding chính
-                  {embeddingDim?.expectedDim ? ` · ${embeddingDim.expectedDim} chiều` : ''}
-                  <select
-                    value={config.embeddingPrimary}
-                    onChange={(e) => setConfig((c) => ({ ...c, embeddingPrimary: e.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-2 py-2 text-sm"
-                  >
-                    {embedIds.map((id) => (
-                      <option key={id} value={id}>
-                        {catalog.find((p) => p.id === id)?.name} · có embedding
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="mt-2 block text-xs text-white/70">
-                  Embedding dự phòng (cùng số chiều)
-                  <input
-                    value={csv(config.embeddingFallback)}
-                    onChange={(e) =>
-                      setConfig((c) => ({ ...c, embeddingFallback: parseCsv(e.target.value) }))
-                    }
-                    placeholder="openai, gemini…"
-                    className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-2 py-1.5 text-[11px]"
-                  />
-                </label>
-                <p className="m-0 mt-3 rounded-xl bg-black/20 px-2 py-2 text-[11px] text-violet-50/90">
-                  Không có DeepSeek / Groq / xAI / Fireworks trong danh sách này vì chúng không embed.
-                  {embeddingDim?.indexDim
-                    ? ` Index Pinecone hiện ${embeddingDim.indexDim} chiều.`
-                    : ''}
-                </p>
-              </div>
-            </div>
-          </section>
-        </div>
-      ) : null}
-
-      {FEATURED_PROVIDER_IDS.filter((id) => seen.has(id)).map((id) => (
-        <div key={id} hidden={tab !== id} inert={tab !== id ? true : undefined}>
-          {renderProviderTab(id)}
-        </div>
-      ))}
-
-      {seen.has('others') ? (
-        <div hidden={tab !== 'others'} inert={tab !== 'others' ? true : undefined}>
-          <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
-            <SectionHead
-              title="Chat khác"
-              hint="Hầu hết chỉ Chat. Mistral/Together/custom mới có embedding — xem nhãn trên từng dòng."
-              busy={busy}
-              onSave={save}
-            />
+            <p className="m-0 mb-3 text-xs text-white/50">
+              Lấy key:{' '}
+              <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-[var(--hcc-gold-bright)] underline">
+                OpenAI
+              </a>
+              {' · '}
+              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="text-[var(--hcc-gold-bright)] underline">
+                Gemini
+              </a>
+              {' · '}
+              <a href="https://console.mistral.ai/api-keys" target="_blank" rel="noreferrer" className="text-[var(--hcc-gold-bright)] underline">
+                Mistral
+              </a>
+              {' · '}
+              <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer" className="text-[var(--hcc-gold-bright)] underline">
+                OpenRouter
+              </a>
+            </p>
             <div className="space-y-2">
-              {otherSpecs.map((spec) => {
+              {catalog.map((spec) => {
                 const st = config.providers[spec.id] || {}
                 const open = openId === spec.id
                 return (
@@ -856,72 +981,6 @@ export default function QuantriBrain() {
                 )
               })}
             </div>
-          </section>
-        </div>
-      ) : null}
-
-      {seen.has('goichat') ? (
-        <div hidden={tab !== 'goichat'} inert={tab !== 'goichat' ? true : undefined}>
-          <section className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm leading-relaxed text-white/75">
-            <h2 className="m-0 text-base font-semibold text-white">Không đăng nhập gói ChatGPT / Gemini web</h2>
-            <p className="mt-2 mb-3">
-              <strong className="text-white">Không làm được</strong> nút «Kết nối tài khoản đã mua Plus /
-              Advanced / Pro». Những gói đó là chat trên trình duyệt, OpenAI / Google / Anthropic{' '}
-              <strong className="text-white">không cấp API</strong> từ mật khẩu web. Lách cookie hoặc giả
-              trình duyệt là trái điều khoản và dễ gãy.
-            </p>
-            <p className="mb-3">
-              Cách đúng: tạo <strong className="text-white">API key</strong> trên trang developer. Một key
-              Gemini/OpenAI dùng được <strong className="text-white">cả Chat lẫn Embedding</strong> (hai
-              model khác nhau trên cùng key). DeepSeek chỉ Chat.
-            </p>
-            <ul className="mb-0 space-y-2 pl-4">
-              <li>
-                <a
-                  href="https://aistudio.google.com/apikey"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[var(--hcc-gold-bright)] underline"
-                >
-                  Gemini — Google AI Studio
-                </a>
-                {' · '}
-                embedding 768 chiều, khớp chip Pinecone 768. Gemini Advanced trên gemini.google.com không
-                dùng được.
-              </li>
-              <li>
-                <a
-                  href="https://platform.openai.com/api-keys"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[var(--hcc-gold-bright)] underline"
-                >
-                  OpenAI — platform.openai.com
-                </a>
-                {' · '}
-                ChatGPT Plus trên chatgpt.com không phải API.
-              </li>
-              <li>
-                <a
-                  href="https://openrouter.ai/keys"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[var(--hcc-gold-bright)] underline"
-                >
-                  OpenRouter
-                </a>
-                {' · '}
-                một key, nhiều model, có tầng <code className="text-[11px]">:free</code>.
-              </li>
-              <li>
-                Google Antigravity dùng cùng key Gemini nhưng là agent code/web — app này chỉ gọi Gemini
-                Flash (`gemini-3.6-flash`) để trả lời văn bản.
-              </li>
-              <li>
-                Đổi <strong className="text-white">embedding</strong> (model/vector) lệch kho cũ — phải số
-                hóa lại tài liệu. Chat/extract đổi tự do.
-              </li>
-            </ul>
           </section>
         </div>
       ) : null}

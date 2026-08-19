@@ -43,6 +43,15 @@ test('workflow n8n production không trỏ localhost', () => {
   assert.equal(drive?.parameters?.event, 'fileCreated');
 });
 
+test('Vercel cron đồng bộ Drive không phụ thuộc n8n Active', () => {
+  const vercel = JSON.parse(
+    require('fs').readFileSync(require('path').resolve(__dirname, '../../vercel.json'), 'utf8')
+  );
+  const cron = (vercel.crons || []).find((c) => c.path === '/api/cron/drive-sync');
+  assert.ok(cron, 'thiếu cron /api/cron/drive-sync');
+  assert.match(String(cron.schedule), /\*/);
+});
+
 test('policy app_settings không đọc secret cho anon', () => {
   const sql = require('fs').readFileSync(
     require('path').resolve(__dirname, '../../supabase/migrations/006_app_settings.sql'),

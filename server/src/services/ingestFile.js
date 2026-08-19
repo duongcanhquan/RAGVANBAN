@@ -19,7 +19,11 @@ const {
   ensureBrain,
   brainNotReadyMessage,
 } = require('./clients');
-const { insertDocument, getDocumentByFileName, updateDocument } = require('./supabase');
+const { insertDocument, getDocumentByFileName, updateDocument, getDocument, isConfigured } = require('./supabase');
+const {
+  catalogFieldsFromIngest,
+  assertCatalogPersisted,
+} = require('./documentCatalog');
 const { providerCreds } = require('./llmConfig');
 const { assertExpectedFitsIndex, getPineconeIndexDimension } = require('./embeddingDim');
 const {
@@ -86,6 +90,15 @@ async function ingestTextContent(text, options = {}) {
     useLlm: Boolean(llm),
   });
   const metadata = enrichMetadataFromFullText(extractedMeta, cleaned);
+
+  const names = catalogFieldsFromIngest({
+    fileName,
+    displayName: options.displayName,
+    description: options.description,
+  });
+  metadata.display_name = names.display_name;
+  metadata.mo_ta = names.mo_ta;
+  metadata.ten_hien_thi = names.display_name;
 
   if (publicUrl) {
     metadata.link_goc = publicUrl;
@@ -163,6 +176,8 @@ async function ingestTextContent(text, options = {}) {
 
     const catalogPayload = {
       fileName,
+      displayName: names.display_name,
+      description: names.mo_ta,
       soHieu: metadata.so_hieu,
       loaiVanBan: metadata.loai_van_ban,
       trangThai: metadata.trang_thai,
@@ -180,9 +195,12 @@ async function ingestTextContent(text, options = {}) {
     };
 
     const replaceId = options.replaceDocumentId || existing?.id || existing?.item?.id || null;
+    let persisted;
     if (replaceId) {
-      const updated = await updateDocument(replaceId, {
+      persisted = await updateDocument(replaceId, {
         file_name: fileName,
+        display_name: names.display_name,
+        mo_ta: names.mo_ta,
         so_hieu: metadata.so_hieu,
         loai_van_ban: metadata.loai_van_ban,
         trang_thai: metadata.trang_thai,
@@ -192,13 +210,34 @@ async function ingestTextContent(text, options = {}) {
         chunk_count: chunks.length,
       });
       insertedId = replaceId;
-      if (!updated?.ok) {
-        const inserted = await insertDocument({ ...catalogPayload, id: replaceId });
-        insertedId = inserted?.id || replaceId;
+      if (!persisted?.ok) {
+        persisted = await insertDocument({ ...catalogPayload, id: replaceId });
+        insertedId = persisted?.id || replaceId;
+      } else {
+        persisted = { ok: true, id: replaceId, source: persisted.source };
       }
     } else {
-      const inserted = await insertDocument(catalogPayload);
-      insertedId = inserted?.id || null;
+      persisted = await insertDocument(catalogPayload);
+      insertedId = persisted?.id || null;
+    }
+    assertCatalogPersisted(
+      { ...persisted, id: insertedId },
+      { supabaseConfigured: isConfigured() }
+    );
+    const verified = await getDocument(insertedId);
+    if (!verified?.ok || !verified.item) {
+      const err = new Error(
+        'Số hóa vector xong nhưng không đọc lại được dòng danh mục. Kiểm tra bảng documents trên Supabase.'
+      );
+      err.code = 'CATALOG_VERIFY_FAILED';
+      throw err;
+    }
+    if (isConfigured() && verified.source !== 'supabase') {
+      const err = new Error(
+        'Danh mục chỉ ghi được file local — thư viện trên server không thấy. Kiểm tra SUPABASE_SERVICE_ROLE_KEY.'
+      );
+      err.code = 'CATALOG_VERIFY_FAILED';
+      throw err;
     }
 
     if (insertedId && categoryId) {
@@ -211,6 +250,8 @@ async function ingestTextContent(text, options = {}) {
   return {
     id: insertedId,
     fileName,
+    displayName: names.display_name,
+    moTa: names.mo_ta,
     pageCount: 0,
     kind: sourceKind,
     metadata,

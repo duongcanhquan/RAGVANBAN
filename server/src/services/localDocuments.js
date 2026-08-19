@@ -37,6 +37,8 @@ function upsertLocalDocument(row) {
   const item = {
     id,
     file_name: row.fileName,
+    display_name: row.displayName || row.display_name || row.fileName,
+    mo_ta: row.description || row.mo_ta || null,
     so_hieu: row.soHieu || null,
     loai_van_ban: row.loaiVanBan || null,
     trang_thai: row.trangThai || null,
@@ -115,6 +117,8 @@ function updateLocalDocument(id, patch) {
   data.items[idx] = {
     ...cur,
     file_name: patch.file_name != null ? patch.file_name : cur.file_name,
+    display_name: patch.display_name !== undefined ? patch.display_name : cur.display_name,
+    mo_ta: patch.mo_ta !== undefined ? patch.mo_ta : cur.mo_ta,
     so_hieu: patch.so_hieu !== undefined ? patch.so_hieu : cur.so_hieu,
     loai_van_ban: patch.loai_van_ban !== undefined ? patch.loai_van_ban : cur.loai_van_ban,
     trang_thai: patch.trang_thai !== undefined ? patch.trang_thai : cur.trang_thai,
@@ -127,6 +131,8 @@ function updateLocalDocument(id, patch) {
     metadata: {
       ...(cur.metadata || {}),
       ...(patch.metadata || {}),
+      ...(patch.display_name !== undefined ? { display_name: patch.display_name } : {}),
+      ...(patch.mo_ta !== undefined ? { mo_ta: patch.mo_ta } : {}),
       ...(patch.sort_order !== undefined ? { sort_order: Number(patch.sort_order) || 0 } : {}),
     },
   };

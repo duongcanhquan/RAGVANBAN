@@ -34,22 +34,29 @@ export default function ChatWindow({
             {modeConfig?.hint ||
               'Hỏi bên trái · dùng bàn làm việc bên phải để chọn VB, mẫu, lịch sử.'}
           </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {(modeConfig?.examples || []).map((ex) => {
-              const label = typeof ex === 'string' ? ex : ex.label || ex.query
-              const query = typeof ex === 'string' ? ex : ex.query || ex.label
-              return (
-                <button
-                  key={ex.id || query}
-                  type="button"
-                  onClick={() => onExampleClick(query)}
-                  className="cursor-pointer rounded-full border border-white/15 bg-white/10 px-3 py-2 text-left text-xs text-slate-100 transition hover:border-[var(--hcc-gold)] hover:text-[var(--hcc-gold-bright)] sm:text-sm"
-                >
-                  {label}
-                </button>
-              )
-            })}
-          </div>
+          {(modeConfig?.examples || []).length ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(modeConfig?.examples || []).map((ex) => {
+                const label = typeof ex === 'string' ? ex : ex.label || ex.query
+                const query = typeof ex === 'string' ? ex : ex.query || ex.label
+                return (
+                  <button
+                    key={ex.id || query}
+                    type="button"
+                    onClick={() => onExampleClick(query)}
+                    className="cursor-pointer rounded-full border border-white/15 bg-white/10 px-3 py-2 text-left text-xs text-slate-100 transition hover:border-[var(--hcc-gold)] hover:text-[var(--hcc-gold-bright)] sm:text-sm"
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="m-0 mt-3 text-xs text-[var(--hcc-muted)]">
+              Gợi ý nhanh lấy từ văn bản đã số hóa. Chưa có tài liệu thì ô gợi ý để trống — hỏi theo
+              tên hoặc số hiệu văn bản bạn đã tải lên.
+            </p>
+          )}
         </section>
       )}
 
