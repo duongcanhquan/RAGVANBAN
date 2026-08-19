@@ -479,10 +479,10 @@ export default function ChatPage() {
     <div className={`${shellH} flex w-full overflow-hidden`}>
       {/* Cột chính: hỏi đáp */}
       <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-transparent">
-        <div className="flex shrink-0 flex-col gap-2 border-b border-white/10 bg-black/20 px-3 py-2 backdrop-blur-md sm:px-4 xl:flex-row xl:items-center xl:justify-between xl:px-6">
-          <div className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+        <div className="flex shrink-0 flex-row items-center justify-between gap-1.5 border-b border-white/10 bg-black/20 px-3 py-1.5 backdrop-blur-md sm:px-4 xl:px-6">
+          <div className="flex min-w-0 flex-1 items-center">
             <div
-              className="grid w-full grid-cols-2 gap-1 rounded-2xl border border-white/15 bg-white/10 p-1 sm:inline-flex sm:w-auto sm:rounded-full"
+              className="inline-flex gap-1 rounded-2xl border border-white/15 bg-white/10 p-1 sm:rounded-full"
               role="tablist"
               aria-label="Chế độ"
             >
@@ -494,7 +494,7 @@ export default function ChatPage() {
                   aria-selected={mode === m.id}
                   disabled={streaming}
                   onClick={() => setMode(m.id)}
-                  className={`inline-flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-semibold transition sm:min-h-9 sm:rounded-full sm:text-xs ${
+                  className={`inline-flex min-h-9 cursor-pointer items-center justify-center gap-1 rounded-xl px-2.5 text-xs font-semibold transition sm:min-h-9 sm:rounded-full sm:px-3 sm:text-xs ${
                     mode === m.id
                       ? m.id === 'advise'
                         ? 'btn-gold'
@@ -546,7 +546,7 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={newChat}
-              className="inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-1 rounded-xl px-2.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white sm:min-h-9"
+              className="inline-flex min-h-9 min-w-9 cursor-pointer items-center justify-center gap-1 rounded-xl px-1.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white sm:min-h-9"
               aria-label="Chat mới"
             >
               <Plus className="h-4 w-4" />
@@ -555,16 +555,17 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={() => setHistoryOpen(true)}
-              className="inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-xl px-2.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white sm:min-h-9 xl:hidden"
+              className="inline-flex min-h-9 min-w-9 cursor-pointer items-center justify-center gap-1 rounded-xl px-1.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white xl:hidden"
+              aria-label="Lịch sử phiên này"
             >
               <History className="h-4 w-4" />
-              Phiên này
             </button>
             <button
               type="button"
               onClick={endSession}
-              className="inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-xl px-2.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white sm:min-h-9"
+              className="inline-flex min-h-9 min-w-9 cursor-pointer items-center justify-center gap-1 rounded-xl px-1.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white"
               title="Xóa lịch sử trên máy và bắt đầu phiên mới"
+              aria-label="Hết phiên"
             >
               <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline">Hết phiên</span>
@@ -586,7 +587,10 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain" aria-live="polite">
+        <main
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[var(--chat-composer-h)] xl:pb-0"
+          aria-live="polite"
+        >
           <ChatWindow
             messages={messages}
             streaming={streaming}
@@ -597,41 +601,46 @@ export default function ChatPage() {
           />
         </main>
 
-        {error && (
-          <div role="alert" className="px-4 py-1 text-sm text-[var(--color-destructive)] xl:px-6">
-            {error}
+        {/* Mobile: ghim ô gõ ngay trên tab bar — luôn thấy đầy đủ, không bị lấp */}
+        <div className="chat-composer fixed inset-x-0 bottom-[var(--bottom-nav-h)] z-30 shrink-0 border-t border-white/10 bg-[#1a080c]/95 backdrop-blur-xl xl:static xl:bottom-auto xl:z-auto xl:border-t-0 xl:bg-transparent">
+          {error && (
+            <div role="alert" className="px-4 py-1 text-sm text-[var(--color-destructive)] xl:px-6">
+              {error}
+            </div>
+          )}
+
+          <div className="hidden xl:block">
+            <CategoryScopePicker
+              selectedIds={categoryIds}
+              onChange={setCategoryScope}
+              disabled={streaming}
+            />
           </div>
-        )}
 
-        <CategoryScopePicker
-          selectedIds={categoryIds}
-          onChange={setCategoryScope}
-          disabled={streaming}
-        />
-
-        <ChatInput
-          value={input}
-          onChange={(next) => {
-            transcriptRef.current = next
-            setInput(next)
-          }}
-          onSubmit={() => sendMessage(transcriptRef.current || input)}
-          disabled={streaming}
-          streaming={streaming}
-          onStop={stopGeneration}
-          placeholder={
-            listening
-              ? 'Đang thu… nói câu hỏi, bấm Dừng hoặc Gửi khi xong'
-              : talkCfg?.enabled === true
-                ? `${modeConfig.placeholder} · hoặc bấm mic`
-                : modeConfig.placeholder
-          }
-          wide
-          voiceEnabled={talkCfg?.enabled === true}
-          listening={listening}
-          onMicClick={handleMic}
-          onStopListen={stopListening}
-        />
+          <ChatInput
+            value={input}
+            onChange={(next) => {
+              transcriptRef.current = next
+              setInput(next)
+            }}
+            onSubmit={() => sendMessage(transcriptRef.current || input)}
+            disabled={streaming}
+            streaming={streaming}
+            onStop={stopGeneration}
+            placeholder={
+              listening
+                ? 'Đang thu… nói câu hỏi, bấm Dừng hoặc Gửi khi xong'
+                : talkCfg?.enabled === true
+                  ? `${modeConfig.placeholder} · hoặc bấm mic`
+                  : modeConfig.placeholder
+            }
+            wide
+            voiceEnabled={talkCfg?.enabled === true}
+            listening={listening}
+            onMicClick={handleMic}
+            onStopListen={stopListening}
+          />
+        </div>
       </section>
 
       {/* Cột phải: bàn làm việc — desktop */}

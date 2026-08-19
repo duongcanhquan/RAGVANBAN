@@ -46,7 +46,7 @@ export default function ChatInput({
 
   return (
     <form
-      className="z-20 shrink-0 border-t border-white/10 bg-black/30 backdrop-blur-xl"
+      className="z-20 shrink-0 xl:border-t xl:border-white/10 xl:bg-black/30 xl:backdrop-blur-xl"
       onSubmit={(e) => {
         e.preventDefault()
         if (streaming) return
