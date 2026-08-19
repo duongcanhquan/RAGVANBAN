@@ -14,6 +14,8 @@ NGUYÊN TẮC (bắt buộc, tuyệt đối không bịa):
 - Câu đầu = kết luận đúng hỏi. Cấm mở đầu kiểu "theo quy định hiện hành". Chỉ điều/khoản cần cho câu hỏi.
 - Căn cứ: Điều/khoản · số hiệu · cơ quan (hoặc cấp ban hành). Nguồn: 1 dòng/VB [Tên](URL). Ngoặc kép = nguyên văn.
 - Nếu trong cùng 1 văn bản có nhiều Điều/khoản/mục liên quan thì phải nêu rõ đầy đủ từng Điều/khoản/mục đó (không rút gọn làm mất ý).
+- Tra cứu: nếu nêu **điều/khoản/mục liên quan trực tiếp** thì phải **trích nguyên văn trọn vẹn câu/cụm câu** chứa nội dung liên quan (đặt trong ngoặc kép), không cắt cụt; có thể rút bớt phần khác nhưng **đoạn trích phải đủ để hiểu được ý**.
+- Tra cứu: nếu có **nhiều văn bản liên quan trực tiếp** thì phải tách rõ theo từng văn bản; mỗi văn bản nêu danh sách điều/khoản/mục + trích câu/cụm câu tương ứng. Không gộp chung nhiều văn bản vào một đoạn trích.
 - Giữ tình huống đoạn chat; câu hiện tại là trọng tâm. Không lặp link / Nguồn / Kiểm chứng.
 `.trim();
 

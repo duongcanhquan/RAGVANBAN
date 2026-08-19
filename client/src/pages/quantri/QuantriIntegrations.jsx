@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Check, Copy, Plus, Trash2 } from 'lucide-react'
 import { adminFetch } from '../../lib/adminApi'
-import { apiUrl, publicApiUrl } from '../../lib/apiBase'
+import { publicApiUrl } from '../../lib/apiBase'
 
 function StatusPill({ on, reason, missingLabel }) {
   const label = on ? 'ON' : reason === 'disabled' ? 'TẮT' : missingLabel
@@ -289,12 +289,16 @@ export default function QuantriIntegrations() {
           </form>
         ) : null}
 
-        <h3 className="m-0 mb-2 text-sm font-semibold">Thư mục Drive theo người / chuyên mục</h3>
+        <h3 className="m-0 mb-1 text-sm font-semibold">Nguồn Drive theo cán bộ + chuyên mục mặc định</h3>
+        <p className="m-0 mb-3 text-xs text-white/60">
+          Mỗi <strong>nguồn Drive</strong> là 1 thư mục Drive của 1 cán bộ. Khi App quét thư mục này,
+          <strong> file mới</strong> sẽ tự được gắn vào <strong>chuyên mục mặc định</strong> (nếu bạn chọn).
+        </p>
         <form onSubmit={addFolder} className="mb-3 grid gap-2 sm:grid-cols-2">
           <input
             value={draft.label}
             onChange={(e) => setDraft({ ...draft, label: e.target.value })}
-            placeholder="Tên gợi nhớ (CCCD của Phòng HC)"
+            placeholder="Tên gợi nhớ (tên cán bộ/đơn vị) — tuỳ chọn"
             className="rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm"
           />
           <input
@@ -346,15 +350,19 @@ export default function QuantriIntegrations() {
           <select
             value={draft.categoryId}
             onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}
+            required={!isSuper}
             className="rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm"
           >
-            <option value="">— Gắn chuyên mục khi có file mới —</option>
+            {isSuper ? <option value="">— (tuỳ chọn) Không gắn chuyên mục —</option> : null}
             {allowedCats.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
           </select>
+          <p className="sm:col-span-2 m-0 -mt-1 text-[11px] text-white/45">
+            Chuyên mục này chỉ là mặc định để tự gắn khi số hóa từ thư mục Drive. Bạn vẫn có thể đổi chuyên mục tài liệu sau khi đã vào danh mục.
+          </p>
           {isSuper ? (
             <label className="flex items-center gap-2 text-xs text-white/70">
               <input
@@ -373,7 +381,7 @@ export default function QuantriIntegrations() {
             className="inline-flex items-center justify-center gap-1 rounded-xl bg-[var(--hcc-red)] px-3 py-2 text-sm font-semibold sm:col-span-2 disabled:opacity-40"
           >
             <Plus className="h-4 w-4" />
-            Thêm thư mục
+            Thêm nguồn Drive
           </button>
         </form>
 
