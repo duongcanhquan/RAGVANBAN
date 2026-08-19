@@ -132,6 +132,11 @@ function buildSourceList(matches) {
       if (!bits.includes(String(m.dieu))) bits.push(String(m.dieu));
       row.dieu = bits.join(',');
     }
+    if (m.khoan) {
+      const bits = row.khoan ? String(row.khoan).split(',') : [];
+      if (!bits.includes(String(m.khoan))) bits.push(String(m.khoan));
+      row.khoan = bits.join(',');
+    }
   }
 
   return [...seen.values()];
@@ -300,7 +305,19 @@ Trả lời đúng hỏi. Thiếu thì nói thiếu.`;
 
   if (sources.length && !/nguồn\s*:/i.test(answer)) {
     const appendix =
-      '\n\nNguồn:\n' + sources.map((s) => `- [${s.title}](${s.url || '#'})`).join('\n');
+      '\n\nNguồn:\n' +
+      sources
+        .map((s) => {
+          const metaBits = [];
+          if (s.trang_thai) metaBits.push(String(s.trang_thai));
+          const dieuBits = s.dieu ? String(s.dieu).trim() : '';
+          const khoanBits = s.khoan ? String(s.khoan).trim() : '';
+          if (dieuBits && dieuBits !== 'mo_dau') metaBits.push(`Điều ${dieuBits}`);
+          if (khoanBits) metaBits.push(`khoản ${khoanBits}`);
+          const meta = metaBits.length ? ` · ${metaBits.join(' · ')}` : '';
+          return `- [${s.title}](${s.url || '#'})${meta}`;
+        })
+        .join('\n');
     answer += appendix;
     if (onToken) onToken(appendix);
   }
