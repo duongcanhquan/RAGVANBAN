@@ -6,6 +6,19 @@ const { extractSoHieuList } = require('../ingestion/legalChunker');
 
 const TTL_MS = 12 * 60 * 1000;
 const store = new Map();
+const seqBySession = new Map();
+
+function sessionKey(sessionId) {
+  return String(sessionId || '').trim();
+}
+
+function beginSessionRequest(sessionId) {
+  const key = sessionKey(sessionId);
+  if (!key || key === 'anonymous') return 0;
+  const n = (seqBySession.get(key) || 0) + 1;
+  seqBySession.set(key, n);
+  return n;
+}
 
 function isFollowUpQuestion(question, previousQuestion) {
   const s = String(question || '').trim();
@@ -22,18 +35,27 @@ function isFollowUpQuestion(question, previousQuestion) {
   return false;
 }
 
-function remember(sessionId, payload) {
-  const key = String(sessionId || '').trim();
-  if (!key || key === 'anonymous') return;
-  store.set(key, { ...payload, at: Date.now() });
+function remember(sessionId, payload, seq) {
+  const key = sessionKey(sessionId);
+  if (!key || key === 'anonymous') return false;
+  if (seq != null) {
+    const latest = seqBySession.get(key) || 0;
+    if (Number(seq) !== latest) return false;
+  }
+  store.set(key, {
+    ...payload,
+    at: Date.now(),
+    seq: seq != null ? Number(seq) : undefined,
+  });
   if (store.size > 400) {
     const oldest = store.keys().next().value;
     store.delete(oldest);
   }
+  return true;
 }
 
 function recall(sessionId) {
-  const key = String(sessionId || '').trim();
+  const key = sessionKey(sessionId);
   if (!key || key === 'anonymous') return null;
   const row = store.get(key);
   if (!row) return null;
@@ -46,6 +68,7 @@ function recall(sessionId) {
 
 function invalidateSessionCache() {
   store.clear();
+  seqBySession.clear();
 }
 
 function mergeMatches(prev, next, max = 16) {
@@ -61,4 +84,12 @@ function mergeMatches(prev, next, max = 16) {
   return out;
 }
 
-module.exports = { isFollowUpQuestion, remember, recall, mergeMatches, invalidateSessionCache, TTL_MS };
+module.exports = {
+  isFollowUpQuestion,
+  remember,
+  recall,
+  mergeMatches,
+  invalidateSessionCache,
+  beginSessionRequest,
+  TTL_MS,
+};

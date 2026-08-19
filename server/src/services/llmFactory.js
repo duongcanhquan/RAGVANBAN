@@ -12,6 +12,7 @@ const {
   pineconeCreds,
 } = require('./llmConfig');
 const { FAST_CHAT_ORDER } = require('./voiceTalk');
+const { isAbortError } = require('./abortControl');
 
 function hasProviderKey(provider) {
   return Boolean(providerCreds(provider).hasKey);
@@ -32,6 +33,7 @@ function parseProviderList(envValue, fallbackList) {
 }
 
 function isFallbackableError(err) {
+  if (isAbortError(err)) return false;
   const msg = String(err?.message || err || '').toLowerCase();
   const status = err?.status || err?.response?.status || err?.statusCode;
   if (status === 429 || status === 500 || status === 502 || status === 503 || status === 504) {
@@ -197,17 +199,22 @@ async function withProviderFallback(purpose, fn, options = {}) {
       return { result, provider };
     } catch (err) {
       lastError = err;
-      if (err?.noFallback) break;
-      const canFallback = isFallbackableError(err) || chain.indexOf(provider) < chain.length - 1;
+      const hasMore = chain.indexOf(provider) < chain.length - 1;
+      if (!shouldAttemptNextProvider(err, hasMore)) break;
       console.warn(
-        `[llmFactory] ${purpose}/${provider} thất bại: ${err.message || err}` +
-          (canFallback ? ' → thử provider tiếp theo' : '')
+        `[llmFactory] ${purpose}/${provider} thất bại: ${err.message || err} → thử provider tiếp theo`
       );
-      if (!canFallback) break;
     }
   }
 
   throw lastError || new Error(`Tất cả provider cho "${purpose}" đều thất bại`);
+}
+
+function shouldAttemptNextProvider(err, hasMoreProviders) {
+  if (!err) return false;
+  if (err.noFallback) return false;
+  if (isAbortError(err)) return false;
+  return isFallbackableError(err) || Boolean(hasMoreProviders);
 }
 
 function hasLiveKeys() {
@@ -233,6 +240,7 @@ module.exports = {
   hasLiveKeys,
   listAvailableProviders,
   isFallbackableError,
+  shouldAttemptNextProvider,
   resolveProviderChain,
   preferFastChatChain,
   ensureBrain,

@@ -9,6 +9,7 @@ const {
   confidenceFromVerify,
 } = require('./citationVerify');
 const { buildConflictBrief } = require('./conflictBrief');
+const { throwIfAborted, raceAbort, abortableAsyncIter } = require('./abortControl');
 
 function getSystemPrompt(mode = 'lookup', voice) {
   return composeSystemPrompt(mode, voice || defaultVoice());
@@ -102,10 +103,11 @@ function confidenceFromSources(sources, report) {
 }
 
 async function streamAnswer(question, matches, deps, onToken) {
-  const { llm, scenarioContext = '', mode = 'lookup', voice, spoken = false } = deps;
+  const { llm, scenarioContext = '', mode = 'lookup', voice, spoken = false, signal } = deps;
   if (!llm?.stream) {
     throw new Error('streamAnswer: cần llm.stream');
   }
+  throwIfAborted(signal);
 
   const context = formatContext(matches);
   const sources = buildSourceList(matches);
@@ -139,12 +141,26 @@ ${context}
 Hãy trả lời theo đúng quy tắc hệ thống. Nếu hai đoạn mâu thuẫn, nêu cả hai và chỉ rõ bản nào còn hiệu lực theo trạng thái/ngày trong context.`;
 
   let answer = '';
-  const stream = await llm.stream([
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: userPrompt },
-  ]);
+  const streamOpts = signal ? { signal } : undefined;
+  const stream = await raceAbort(
+    Promise.resolve(
+      streamOpts
+        ? llm.stream(
+            [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+            streamOpts
+          )
+        : llm.stream([
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ])
+    ),
+    signal
+  );
 
-  for await (const chunk of stream) {
+  for await (const chunk of abortableAsyncIter(stream, signal)) {
     const token =
       typeof chunk?.content === 'string'
         ? chunk.content

@@ -10,6 +10,7 @@ const {
   soHieuFilterValues,
 } = require('../ingestion/legalChunker');
 const { rerankLegal } = require('./rerank');
+const { raceAbort, throwIfAborted } = require('./abortControl');
 
 function buildMetadataFilter(intent = {}) {
   const onlyActive = intent.onlyActive !== false;
@@ -102,13 +103,17 @@ function dedupeAndRank(matches) {
   return rankMatches(matches, { maxPerDoc: 4, maxTotal: 24 });
 }
 
-async function queryIndex(target, vector, topK, filter) {
-  const result = await target.query({
-    vector,
-    topK,
-    includeMetadata: true,
-    filter,
-  });
+async function queryIndex(target, vector, topK, filter, signal) {
+  throwIfAborted(signal);
+  const result = await raceAbort(
+    target.query({
+      vector,
+      topK,
+      includeMetadata: true,
+      filter,
+    }),
+    signal
+  );
   return (result.matches || []).map(normalizeMatch).filter((m) => m.text);
 }
 
@@ -121,21 +126,25 @@ async function hybridSearch(question, intent, deps) {
     topK = 16,
     maxPerDoc = 4,
     maxTotal = 12,
+    signal,
   } = deps;
 
   if (!embeddings || !pinecone || !indexName) {
     throw new Error('hybridSearch: thiếu embeddings / pinecone / indexName');
   }
 
+  throwIfAborted(signal);
+
   const anchors = parseQuestionAnchors(question);
-  const vector = await embeddings.embedQuery(question);
+  const vector = await raceAbort(embeddings.embedQuery(question), signal);
+  throwIfAborted(signal);
   const onlyActive = intent?.onlyActive !== false && anchors.onlyActive !== false;
   const filter = buildMetadataFilter({ ...intent, onlyActive });
 
   const index = pinecone.Index(indexName);
   const target = namespace ? index.namespace(namespace) : index;
 
-  const queries = [queryIndex(target, vector, topK, filter)];
+  const queries = [queryIndex(target, vector, topK, filter, signal)];
 
   if (anchors.soHieu.length) {
     queries.push(
@@ -147,7 +156,8 @@ async function hybridSearch(question, intent, deps) {
           onlyActive,
           so_hieu_in: anchors.soHieu,
           dieu: anchors.dieu || undefined,
-        })
+        }),
+        signal
       )
     );
     if (anchors.dieu) {
@@ -156,13 +166,15 @@ async function hybridSearch(question, intent, deps) {
           target,
           vector,
           8,
-          buildMetadataFilter({ onlyActive, so_hieu_in: anchors.soHieu })
+          buildMetadataFilter({ onlyActive, so_hieu_in: anchors.soHieu }),
+          signal
         )
       );
     }
   }
 
   const batches = await Promise.all(queries);
+  throwIfAborted(signal);
   let matches = batches.flat();
 
   if (matches.length === 0 && intent?.linh_vuc && intent.linh_vuc !== 'Chung') {
@@ -170,7 +182,8 @@ async function hybridSearch(question, intent, deps) {
       target,
       vector,
       topK,
-      buildMetadataFilter({ onlyActive })
+      buildMetadataFilter({ onlyActive }),
+      signal
     );
   }
 
@@ -188,7 +201,8 @@ async function hybridSearch(question, intent, deps) {
         buildMetadataFilter({
           onlyActive,
           so_hieu_in: relatedIds,
-        })
+        }),
+        signal
       ),
     ];
     if (dieuFromHits) {
@@ -201,7 +215,8 @@ async function hybridSearch(question, intent, deps) {
             onlyActive,
             so_hieu_in: relatedIds,
             dieu: dieuFromHits,
-          })
+          }),
+          signal
         )
       );
     }
@@ -209,6 +224,7 @@ async function hybridSearch(question, intent, deps) {
     matches = matches.concat(extra.map((m) => ({ ...m, related: true })));
   }
 
+  throwIfAborted(signal);
   const reranked = rerankLegal(question, matches, intent);
   return rankMatches(reranked, { maxPerDoc, maxTotal });
 }

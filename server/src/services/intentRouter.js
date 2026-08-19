@@ -2,6 +2,8 @@
  * Intent Router — phân loại lĩnh vực + mục đích (tra cứu / tư vấn).
  */
 
+const { raceAbort, throwIfAborted } = require('./abortControl');
+
 const DEFAULT_LINH_VUC = 'Chung';
 
 function parseIntentResponse(raw) {
@@ -71,10 +73,11 @@ function heuristicIntent(question, preferredMode) {
 
 /**
  * @param {string} question
- * @param {{ llm?: { invoke: Function }, useLlm?: boolean, mode?: string }} options
+ * @param {{ llm?: { invoke: Function }, useLlm?: boolean, mode?: string, signal?: AbortSignal }} options
  */
 async function routeIntent(question, options = {}) {
-  const { llm = null, useLlm = true, mode = 'lookup' } = options;
+  const { llm = null, useLlm = true, mode = 'lookup', signal } = options;
+  throwIfAborted(signal);
 
   if (!question || !String(question).trim()) {
     return {
@@ -104,7 +107,10 @@ Chế độ UI người dùng đang chọn: ${mode === 'advise' ? 'tu_van' : 'tr
 
 Câu hỏi: """${String(question).trim()}"""`;
 
-  const response = await llm.invoke(prompt);
+  const response = await raceAbort(
+    Promise.resolve(signal ? llm.invoke(prompt, { signal }) : llm.invoke(prompt)),
+    signal
+  );
   const content =
     typeof response?.content === 'string'
       ? response.content
