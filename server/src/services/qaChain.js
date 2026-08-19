@@ -252,10 +252,10 @@ async function streamAnswer(question, matches, deps, onToken) {
 
   const modeHint =
     mode === 'advise'
-      ? 'TƯ VẤN: áp quy định trong context vào việc đang hỏi. Có điều liên quan thì kết luận cách áp dụng.'
+      ? 'TƯ VẤN: phân tích sâu theo context; kết luận cách áp dụng nhanh vào tình huống; chỉ rõ nên đọc mục/điều nào trước và tham khảo thêm mục nào liên quan.'
       : mode === 'compare'
         ? 'SO SÁNH: tách bản còn hiệu lực và điểm đã sửa.'
-        : 'TRA CỨU: kết luận đúng hỏi + căn cứ + hiệu lực.';
+        : 'TRA CỨU: chỉ định hướng văn bản liên quan để người dùng tự đọc (không phân tích sâu); chỉ rõ điều/khoản/mục và hiệu lực.';
 
   const spokenHint = spoken ? ' Giọng nói: câu ngắn, không bảng dài.' : '';
 
