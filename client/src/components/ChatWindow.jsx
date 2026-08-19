@@ -25,29 +25,17 @@ export default function ChatWindow({
         wide ? 'max-w-none px-3 sm:px-4 xl:px-6' : 'safe-x max-w-3xl'
       }`}
     >
+      {/* Desktop: hướng dẫn + gợi ý bấm nhanh. Mobile: ẩn hết để chat rộng, nhập trực tiếp ở ô dưới. */}
       {empty && (
-        <section className="glass-panel rounded-2xl px-3 py-3 sm:px-5 sm:py-4">
+        <section className="glass-panel hidden rounded-2xl px-3 py-3 sm:px-5 sm:py-4 xl:block">
           <h1 className="m-0 text-base font-semibold tracking-tight text-[var(--hcc-ink)] sm:text-xl">
             {modeConfig?.id === 'advise'
               ? 'Tư vấn tình huống theo văn bản'
               : 'Tra cứu văn bản nhanh'}
           </h1>
           <p className="m-0 mt-1 max-w-3xl text-sm text-[var(--hcc-muted)]">
-            {modeConfig?.id === 'lookup' ? (
-              <>
-                {/* Mobile: tránh nội dung hướng dẫn tra cứu nhanh quá dài/chiếm chỗ */}
-                <span className="hidden lg:inline">
-                  {modeConfig?.hint ||
-                    'Hỏi bên trái · dùng bàn làm việc bên phải để chọn VB, mẫu, lịch sử.'}
-                </span>
-                <span className="lg:hidden">Nhập câu hỏi để tra cứu văn bản.</span>
-              </>
-            ) : (
-              modeConfig?.hint || 'Hỏi bên trái · dùng bàn làm việc bên phải để chọn VB, mẫu, lịch sử.'
-            )}
-          </p>
-          <p className="m-0 mt-1.5 text-[11px] text-white/40 xl:hidden">
-            Lịch sử chỉ trên phiên đang mở. Đóng tab hoặc bấm Hết phiên để xóa.
+            {modeConfig?.hint ||
+              'Hỏi bên trái · dùng bàn làm việc bên phải để chọn VB, mẫu, lịch sử.'}
           </p>
           {(modeConfig?.examples || []).length ? (
             <div className="mt-3 flex flex-wrap gap-2">
@@ -69,17 +57,8 @@ export default function ChatWindow({
             </div>
           ) : (
             <p className="m-0 mt-3 text-xs text-[var(--hcc-muted)]">
-              {modeConfig?.id === 'lookup' ? (
-                <>
-                  <span className="hidden lg:inline">
-                    Gợi ý nhanh lấy từ văn bản đã số hóa. Chưa có tài liệu thì ô gợi ý để trống — hỏi theo
-                    tên hoặc số hiệu văn bản bạn đã tải lên.
-                  </span>
-                  <span className="lg:hidden">Nhập câu hỏi của bạn.</span>
-                </>
-              ) : (
-                'Gợi ý nhanh lấy từ văn bản đã số hóa. Chưa có tài liệu thì ô gợi ý để trống — hỏi theo tên hoặc số hiệu văn bản bạn đã tải lên.'
-              )}
+              Gợi ý nhanh lấy từ văn bản đã số hóa. Chưa có tài liệu thì ô gợi ý để trống — hỏi theo
+              tên hoặc số hiệu văn bản bạn đã tải lên.
             </p>
           )}
         </section>
