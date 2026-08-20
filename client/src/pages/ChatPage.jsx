@@ -1,9 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { History, LogOut, PanelRightClose, PanelRightOpen, Plus, Scale, Sparkles, Volume2, VolumeX } from 'lucide-react'
+import { History, LogOut, PanelRightClose, PanelRightOpen, Plus, Volume2, VolumeX } from 'lucide-react'
 import ChatWindow from '../components/ChatWindow'
 import ChatInput from '../components/ChatInput'
 import CategoryScopePicker from '../components/CategoryScopePicker'
+import MainSectionNav from '../components/MainSectionNav'
+import ChatModeSwitcher from '../components/ChatModeSwitcher'
 const HistoryPanel = lazy(() => import('../components/HistoryPanel'))
 import WorkbenchPanel from '../components/WorkbenchPanel'
 import { streamChat } from '../lib/streamChat'
@@ -13,7 +15,7 @@ import {
   conversationHistoryFromMessages,
   threadToMessages,
 } from '../lib/conversationHistory'
-import { getMode, MODES } from '../lib/modes'
+import { getMode } from '../lib/modes'
 import { createSpeakAhead, unlockSpeech } from '../lib/speakAhead'
 import { speechRecognitionSupported, startSpeechListen } from '../lib/speechListen'
 import { apiUrl } from '../lib/apiBase'
@@ -306,7 +308,16 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (mode !== 'lookup') return
-    setSideOpen((open) => (open ? false : open))
+    setSideOpen((open) => {
+      if (open) return open
+      if (typeof window === 'undefined') return open
+      try {
+        if (!window.matchMedia('(min-width: 1280px)').matches) return open
+        return localStorage.getItem('hcc_side_open') !== '0'
+      } catch {
+        return open
+      }
+    })
   }, [mode])
 
   async function submitFeedback(logId, rating) {
@@ -507,46 +518,13 @@ export default function ChatPage() {
     <div className={`${shellH} flex w-full overflow-hidden`}>
       {/* Cột chính: hỏi đáp */}
       <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-transparent">
-        <div className="flex shrink-0 flex-row items-center justify-between gap-1.5 border-b border-white/10 bg-black/20 px-3 py-1.5 backdrop-blur-md sm:px-4 xl:px-6">
-          <div className="flex min-w-0 flex-1 items-center">
-            <div
-              className="inline-flex gap-1 rounded-2xl border border-white/15 bg-white/10 p-1 sm:rounded-full"
-              role="tablist"
-              aria-label="Chế độ"
-            >
-              {Object.values(MODES).map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={mode === m.id}
-                  disabled={streaming}
-                  onClick={() => setMode(m.id)}
-                  className={`inline-flex min-h-9 cursor-pointer items-center justify-center gap-1 rounded-xl px-2.5 text-xs font-semibold transition sm:min-h-9 sm:rounded-full sm:px-3 sm:text-xs ${
-                    mode === m.id
-                      ? m.id === 'advise'
-                        ? 'btn-gold'
-                        : 'bg-[var(--hcc-red)] text-white'
-                      : 'text-white/60 hover:text-white'
-                  } disabled:opacity-50`}
-                >
-                  {m.id === 'advise' ? (
-                    <Sparkles className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-                  ) : (
-                    <Scale className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-                  )}
-                  {m.label}
-                </button>
-              ))}
+        <div className="flex shrink-0 flex-col border-b border-white/10 bg-black/20 backdrop-blur-md">
+          <div className="flex flex-row items-center justify-between gap-1.5 px-3 py-1.5 sm:px-4 xl:px-6">
+            <div className="hidden min-w-0 flex-1 items-center lg:flex">
+              <MainSectionNav />
             </div>
-            {disclaimer ? (
-              <p className="m-0 hidden max-w-xl truncate text-[10px] text-white/40 xl:block" title={disclaimer}>
-                {disclaimer}
-              </p>
-            ) : null}
-          </div>
 
-          <div className="flex shrink-0 items-center justify-end gap-0.5">
+            <div className="flex min-w-0 flex-1 items-center justify-end gap-0.5 lg:flex-none">
             {talkCfg?.enabled === true ? (
               <button
                 type="button"
@@ -598,11 +576,7 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={toggleSide}
-              className={`hidden min-h-9 cursor-pointer items-center gap-1 rounded-xl px-2.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white xl:inline-flex ${
-                mode === 'lookup' ? 'pointer-events-none opacity-0' : ''
-              }`}
-              aria-hidden={mode === 'lookup'}
-              tabIndex={mode === 'lookup' ? -1 : 0}
+              className="hidden min-h-9 cursor-pointer items-center gap-1 rounded-xl px-2.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white xl:inline-flex"
               aria-pressed={sideOpen}
               title={sideOpen ? 'Ẩn bàn làm việc' : 'Hiện bàn làm việc'}
             >
@@ -613,6 +587,20 @@ export default function ChatPage() {
               )}
               {sideOpen ? 'Thu panel' : 'Bàn việc'}
             </button>
+          </div>
+          </div>
+
+          <div className="flex flex-row items-center justify-between gap-2 border-t border-white/5 px-3 py-2 sm:px-4 xl:px-6">
+            {disclaimer ? (
+              <p className="m-0 hidden max-w-xl truncate text-[10px] text-white/40 xl:block" title={disclaimer}>
+                {disclaimer}
+              </p>
+            ) : (
+              <span className="hidden xl:block" aria-hidden="true" />
+            )}
+            <div className="ml-auto flex shrink-0 justify-end">
+              <ChatModeSwitcher mode={mode} onChange={setMode} disabled={streaming} />
+            </div>
           </div>
         </div>
 
@@ -672,18 +660,19 @@ export default function ChatPage() {
       </section>
 
       {/* Cột phải: bàn làm việc — desktop */}
-      {sideOpen && mode !== 'lookup' && (
+      {sideOpen ? (
         <div className="hidden min-h-0 w-[360px] shrink-0 xl:flex 2xl:w-[400px]">
           <WorkbenchPanel
             mode={mode}
             onModeChange={setMode}
+            onAsk={(query, opts) => sendMessage(query, opts)}
             onRestore={restoreFromHistory}
             sessionId={sessionId}
             streaming={streaming}
             refreshKey={historyTick}
           />
         </div>
-      )}
+      ) : null}
 
       {historyOpen ? (
         <Suspense fallback={null}>

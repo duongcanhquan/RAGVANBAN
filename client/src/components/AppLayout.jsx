@@ -1,20 +1,10 @@
 import { Link, NavLink, Outlet } from 'react-router-dom'
-import {
-  FolderTree,
-  Lightbulb,
-  MessageSquareText,
-} from 'lucide-react'
 import logoVietmy from '../assets/logo-vietmy.png'
 import logoEquest from '../assets/logo-equest.png'
-
-const NAV = [
-  { to: '/', end: true, label: 'Hỏi đáp', short: 'Hỏi', Icon: MessageSquareText },
-  { to: '/thu-vien', label: 'Thư viện', short: 'Cây', Icon: FolderTree },
-  { to: '/tinh-huong', label: 'Tình huống', short: 'Mẫu', Icon: Lightbulb },
-]
+import { MAIN_SECTION_NAV } from '../lib/mainNav'
 
 /**
- * Header: Việt Mỹ trái · menu giữa · EQuest phải.
+ * Header: Việt Mỹ trái · EQuest phải.
  */
 export default function AppLayout() {
   return (
@@ -43,38 +33,6 @@ export default function AppLayout() {
             />
           </Link>
 
-          <p className="relative z-10 m-0 min-w-0 flex-1 truncate px-1 text-center text-[11px] font-medium leading-tight text-white/90 lg:hidden">
-            Hệ thống tra cứu văn bản thông minh
-          </p>
-
-          <div className="pointer-events-none absolute inset-0 hidden flex-col items-center justify-center gap-0.5 lg:flex">
-            <p className="m-0 text-[12px] font-semibold tracking-wide text-white">
-              Hệ thống tra cứu văn bản thông minh
-            </p>
-            <nav
-              className="pointer-events-auto flex items-center gap-0.5 rounded-full bg-white/10 p-0.5"
-              aria-label="Điều hướng chính"
-            >
-              {NAV.map(({ to, end, label, Icon }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  end={end}
-                  className={({ isActive }) =>
-                    `inline-flex min-h-8 cursor-pointer items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-medium transition duration-200 ${
-                      isActive
-                        ? 'bg-[var(--hcc-gold)] text-[#0a1628] shadow-sm'
-                        : 'text-white/85 hover:bg-white/10 hover:text-white'
-                    }`
-                  }
-                >
-                  <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  {label}
-                </NavLink>
-              ))}
-            </nav>
-          </div>
-
           <div className="relative z-10 flex h-full max-w-[42%] shrink-0 items-center justify-end sm:max-w-[30%]">
             <img
               src={logoEquest}
@@ -101,7 +59,7 @@ export default function AppLayout() {
         aria-label="Tab điện thoại"
       >
         <div className="mx-auto grid max-w-lg grid-cols-3 px-1 pt-0.5">
-          {NAV.map(({ to, end, short, Icon }) => (
+          {MAIN_SECTION_NAV.map(({ to, end, short, Icon }) => (
             <NavLink
               key={to}
               to={to}

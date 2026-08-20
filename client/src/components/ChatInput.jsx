@@ -70,7 +70,7 @@ export default function ChatInput({
         }`}
       >
         <label htmlFor="chat-input" className="sr-only">
-          Câu hỏi hệ thống văn bản thông minh
+          Nhập câu hỏi
         </label>
         <textarea
           id="chat-input"

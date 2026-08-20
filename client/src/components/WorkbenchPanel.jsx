@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  FileText,
   FolderTree,
   History,
   Lightbulb,
@@ -20,20 +24,30 @@ import { cachedJson } from '../lib/apiCache'
 export default function WorkbenchPanel({
   mode,
   onModeChange,
+  onAsk,
   onRestore,
   sessionId,
   streaming,
   refreshKey = 0,
 }) {
-  const [tab, setTab] = useState('quick')
+  const [tab, setTab] = useState('docs')
+  const [tree, setTree] = useState([])
   const [scenarios, setScenarios] = useState([])
   const [history, setHistory] = useState([])
+  const [openNodes, setOpenNodes] = useState({})
   const [loading, setLoading] = useState(false)
 
   const loadSideData = useCallback(async () => {
     setLoading(true)
     try {
-      const scRes = await cachedJson(apiUrl('/api/scenarios?limit=30'))
+      const [libRes, scRes] = await Promise.all([
+        cachedJson(apiUrl('/api/library/tree')),
+        cachedJson(apiUrl('/api/scenarios?limit=30')),
+      ])
+      setTree(libRes.tree || [])
+      const init = {}
+      for (const n of libRes.tree || []) init[n.id] = false
+      setOpenNodes((prev) => ({ ...init, ...prev }))
       setScenarios(scRes.items || [])
       const local = loadLocalHistory(sessionId)
       setHistory(groupHistoryIntoThreads(local).slice(0, 24))
@@ -46,7 +60,12 @@ export default function WorkbenchPanel({
     loadSideData()
   }, [loadSideData, refreshKey])
 
+  function toggle(id) {
+    setOpenNodes((p) => ({ ...p, [id]: !p[id] }))
+  }
+
   const tabs = [
+    { id: 'docs', label: 'Văn bản', Icon: FolderTree },
     { id: 'quick', label: 'Nhanh', Icon: Zap },
     { id: 'cases', label: 'Mẫu', Icon: Lightbulb },
     { id: 'hist', label: 'Gần đây', Icon: History },
@@ -79,6 +98,44 @@ export default function WorkbenchPanel({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        {tab === 'docs' && (
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="m-0 text-[11px] font-semibold uppercase tracking-wider text-[var(--hcc-muted)]">
+                Cây văn bản
+              </p>
+              <button
+                type="button"
+                onClick={loadSideData}
+                className="cursor-pointer text-[11px] text-[var(--hcc-red)]"
+              >
+                Làm mới
+              </button>
+            </div>
+            {loading && !tree.length ? (
+              <p className="text-xs text-[var(--hcc-muted)]">Đang tải…</p>
+            ) : null}
+            {!loading && !tree.length ? (
+              <p className="rounded-xl border border-dashed border-white/20 p-3 text-xs text-[var(--hcc-muted)]">
+                Chưa có văn bản. Vào Quản trị để nạp dữ liệu.
+              </p>
+            ) : null}
+            <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+              {tree.map((loai) => (
+                <CategoryBranch
+                  key={loai.id}
+                  node={loai}
+                  depth={0}
+                  openNodes={openNodes}
+                  toggle={toggle}
+                  streaming={streaming}
+                  onAsk={onAsk}
+                />
+              ))}
+            </ul>
+          </div>
+        )}
+
         {tab === 'quick' && (
           <div className="space-y-4">
             <div>
@@ -143,11 +200,11 @@ export default function WorkbenchPanel({
             {loading && !scenarios.length ? (
               <p className="text-xs text-[var(--hcc-muted)]">Đang tải…</p>
             ) : null}
-            {!loading && !scenarios.length && (
+            {!loading && !scenarios.length ? (
               <p className="text-xs text-[var(--hcc-muted)]">
                 Chưa có tình huống. Admin thêm tại Quản trị → Tình huống.
               </p>
-            )}
+            ) : null}
             {scenarios.map((s) => (
               <article key={s.id} className="glass-panel rounded-2xl p-3">
                 <h3 className="m-0 text-sm font-semibold text-[var(--hcc-ink)]">
@@ -172,9 +229,9 @@ export default function WorkbenchPanel({
             <p className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--hcc-muted)]">
               Phiên này (xóa khi đóng tab)
             </p>
-            {!history.length && (
+            {!history.length ? (
               <p className="text-xs text-[var(--hcc-muted)]">Chưa hỏi trong phiên đang mở.</p>
-            )}
+            ) : null}
             {history.map((h) => (
               <button
                 key={h.id}
@@ -196,5 +253,92 @@ export default function WorkbenchPanel({
         )}
       </div>
     </aside>
+  )
+}
+
+function CategoryBranch({ node, depth, openNodes, toggle, streaming, onAsk }) {
+  const isOpen = openNodes[node.id]
+  const pad = Math.min(depth, 4) * 8
+  return (
+    <li
+      className={
+        depth === 0
+          ? 'glass-panel overflow-hidden rounded-xl'
+          : 'border-t border-[var(--hcc-line)]/70'
+      }
+    >
+      <button
+        type="button"
+        onClick={() => toggle(node.id)}
+        className={`flex w-full cursor-pointer items-center gap-1.5 py-2 text-left hover:bg-[var(--hcc-red-soft)]/30 ${
+          depth === 0
+            ? 'px-2.5 text-xs font-semibold text-[var(--hcc-ink)]'
+            : 'pr-2 text-[11px] font-medium text-[var(--hcc-muted)]'
+        }`}
+        style={depth > 0 ? { paddingLeft: `${10 + pad}px` } : undefined}
+      >
+        {isOpen ? (
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--hcc-red)]" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+        )}
+        <span className="min-w-0 flex-1 break-words">{node.label}</span>
+        <span className="tabular-nums">{node.docCount ?? 0}</span>
+      </button>
+      {isOpen ? (
+        <>
+          {(node.children || []).map((child) => (
+            <ul key={child.id} className="m-0 list-none p-0">
+              <CategoryBranch
+                node={child}
+                depth={depth + 1}
+                openNodes={openNodes}
+                toggle={toggle}
+                streaming={streaming}
+                onAsk={onAsk}
+              />
+            </ul>
+          ))}
+          {(node.documents || []).slice(0, 40).map((doc) => (
+            <div
+              key={doc.id}
+              className="flex items-start gap-2 border-t border-[var(--hcc-line)]/50 bg-[var(--hcc-canvas)] px-3 py-2"
+              style={{ paddingLeft: `${14 + pad}px` }}
+            >
+              <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--hcc-red)]" />
+              <div className="min-w-0 flex-1">
+                <p className="m-0 break-words text-[11px] leading-snug text-[var(--hcc-ink)]">
+                  {doc.label}
+                </p>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {doc.storage_url ? (
+                    <a
+                      href={doc.storage_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex cursor-pointer items-center gap-0.5 rounded-md bg-[var(--hcc-red)] px-1.5 py-0.5 text-[10px] font-medium text-white"
+                    >
+                      Đọc <ExternalLink className="h-2.5 w-2.5" />
+                    </a>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={streaming}
+                    onClick={() =>
+                      onAsk?.(`Tóm tắt nội dung và quy định chính của văn bản: ${doc.label}`, {
+                        documentIds: [doc.id],
+                      })
+                    }
+                    className="cursor-pointer rounded-md border border-white/15 bg-white/10 px-1.5 py-0.5 text-[10px] text-[var(--hcc-muted)] hover:text-[var(--hcc-gold-bright)] disabled:opacity-40"
+                  >
+                    Hỏi về VB này
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </>
+      ) : null}
+    </li>
   )
 }

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { FolderPlus, GripVertical, Pencil, Trash2 } from 'lucide-react'
+import { FolderPlus, ChevronDown, ChevronUp, GripVertical, Pencil, Trash2 } from 'lucide-react'
 import { adminFetch } from '../../lib/adminApi'
+import { invalidateApiCache } from '../../lib/apiCache'
 
 const KIND_LABEL = {
   chuyen_muc: 'Chuyên mục',
@@ -68,7 +69,34 @@ function buildMovePayload(items, fromId, toId, asChild) {
   return payload
 }
 
-function CategoryRow({ node, depth, onCreate, onUpdate, onDelete, onMove }) {
+function siblingReorderPayload(items, nodeId, delta) {
+  const node = items.find((c) => c.id === nodeId)
+  if (!node) return null
+  const parentId = node.parent_id || null
+  const siblings = items
+    .filter((c) => (c.parent_id || null) === parentId)
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || String(a.name).localeCompare(b.name, 'vi'))
+  const idx = siblings.findIndex((c) => c.id === nodeId)
+  const newIdx = idx + delta
+  if (idx < 0 || newIdx < 0 || newIdx >= siblings.length) return null
+  const reordered = [...siblings]
+  const [moved] = reordered.splice(idx, 1)
+  reordered.splice(newIdx, 0, moved)
+  return reordered.map((c, i) => ({ id: c.id, parentId, sortOrder: i }))
+}
+
+function siblingShiftFlags(items, nodeId) {
+  const node = items.find((c) => c.id === nodeId)
+  if (!node) return { canUp: false, canDown: false }
+  const parentId = node.parent_id || null
+  const siblings = items
+    .filter((c) => (c.parent_id || null) === parentId)
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || String(a.name).localeCompare(b.name, 'vi'))
+  const idx = siblings.findIndex((c) => c.id === nodeId)
+  return { canUp: idx > 0, canDown: idx >= 0 && idx < siblings.length - 1 }
+}
+
+function CategoryRow({ node, depth, items, onCreate, onUpdate, onDelete, onMove, onShift }) {
   const [editing, setEditing] = useState(false)
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState(node.name || '')
@@ -79,6 +107,7 @@ function CategoryRow({ node, depth, onCreate, onUpdate, onDelete, onMove }) {
   const [over, setOver] = useState('')
 
   const pad = Math.min(depth, 6) * 14
+  const { canUp, canDown } = siblingShiftFlags(items, node.id)
 
   async function saveEdit() {
     const next = name.trim()
@@ -195,6 +224,24 @@ function CategoryRow({ node, depth, onCreate, onUpdate, onDelete, onMove }) {
           <div className="flex gap-1">
             <button
               type="button"
+              title="Lên trên"
+              disabled={!canUp || busy}
+              onClick={() => onShift?.(node.id, -1)}
+              className="inline-flex items-center rounded-full bg-white/10 px-2 py-1 text-[11px] disabled:opacity-30"
+            >
+              <ChevronUp className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              title="Xuống dưới"
+              disabled={!canDown || busy}
+              onClick={() => onShift?.(node.id, 1)}
+              className="inline-flex items-center rounded-full bg-white/10 px-2 py-1 text-[11px] disabled:opacity-30"
+            >
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
               title="Sửa tên / loại"
               onClick={() => setEditing(true)}
               className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[11px]"
@@ -262,10 +309,12 @@ function CategoryRow({ node, depth, onCreate, onUpdate, onDelete, onMove }) {
               key={child.id}
               node={child}
               depth={depth + 1}
+              items={items}
               onCreate={onCreate}
               onUpdate={onUpdate}
               onDelete={onDelete}
               onMove={onMove}
+              onShift={onShift}
             />
           ))}
         </ul>
@@ -310,6 +359,7 @@ export default function CategoryTreeEditor() {
       return false
     }
     await load()
+    invalidateApiCache('/api/library')
     return true
   }
 
@@ -326,6 +376,7 @@ export default function CategoryTreeEditor() {
       throw new Error(data.error || 'Không sửa được')
     }
     await load()
+    invalidateApiCache('/api/library')
   }
 
   async function deleteCategory(node) {
@@ -346,10 +397,10 @@ export default function CategoryTreeEditor() {
       return
     }
     await load()
+    invalidateApiCache('/api/library')
   }
 
-  async function moveNode(fromId, toId, asChild) {
-    const payload = buildMovePayload(items, fromId, toId, asChild)
+  async function applyReorder(payload) {
     if (!payload?.length) return
     setError('')
     const res = await adminFetch('/api/library/categories/reorder', {
@@ -362,7 +413,18 @@ export default function CategoryTreeEditor() {
       setError(data.error || 'Không đổi vị trí được')
       return
     }
+    invalidateApiCache('/api/library')
     await load()
+  }
+
+  async function moveNode(fromId, toId, asChild) {
+    const payload = buildMovePayload(items, fromId, toId, asChild)
+    await applyReorder(payload)
+  }
+
+  async function shiftNode(nodeId, delta) {
+    const payload = siblingReorderPayload(items, nodeId, delta)
+    await applyReorder(payload)
   }
 
   async function createRoot(e) {
@@ -381,6 +443,9 @@ export default function CategoryTreeEditor() {
   return (
     <section>
       <h2 className="m-0 text-lg font-semibold">Chuyên mục</h2>
+      <p className="mb-4 text-xs text-white/55">
+        Thứ tự hiển thị trên trang Thư viện: kéo thả hoặc dùng nút ↑ ↓ cùng cấp (chuyên mục / chuyên môn / thư mục).
+      </p>
       {error ? <p className="mb-4 text-sm text-red-200">{error}</p> : null}
 
       {isSuper ? (
@@ -420,10 +485,12 @@ export default function CategoryTreeEditor() {
               key={node.id}
               node={node}
               depth={0}
+              items={items}
               onCreate={createCategory}
               onUpdate={updateCategory}
               onDelete={deleteCategory}
               onMove={moveNode}
+              onShift={shiftNode}
             />
           ))}
         </ul>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronDown, Lightbulb, Search } from 'lucide-react'
+import PageSectionBar from '../components/PageSectionBar'
 import { apiUrl } from '../lib/apiBase'
 import { cachedJson } from '../lib/apiCache'
 
@@ -60,7 +61,9 @@ export default function ScenariosPage() {
   }, [load])
 
   return (
-    <div className="safe-x mx-auto h-full min-h-0 w-full max-w-6xl overflow-y-auto py-4 xl:px-6">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <PageSectionBar />
+      <div className="safe-x mx-auto h-full min-h-0 w-full max-w-6xl overflow-y-auto py-4 xl:px-6">
       <header className="mb-4">
         <p className="m-0 mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--hcc-gold-bright)]">
           <Lightbulb className="h-3.5 w-3.5" />
@@ -180,6 +183,7 @@ export default function ScenariosPage() {
           Chưa có tình huống trong phạm vi này. Quản trị thêm tại /quantri → Tình huống.
         </p>
       ) : null}
+      </div>
     </div>
   )
 }
