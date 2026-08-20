@@ -361,7 +361,7 @@ function buildNoContextAnswer(mode = 'lookup', extras = {}) {
   const labels = (extras.scopeLabels || []).filter(Boolean);
   if (labels.length) {
     return {
-      answer: `Không tìm thấy thông tin phù hợp trong phạm vi đã chọn (${labels.join(', ')}).\n\nBỏ chọn mục để tìm cả kho, hoặc chọn mục khác.\n\nNguồn: (không có)`,
+      answer: `Không tìm thấy thông tin phù hợp trong phạm vi đã chọn (${labels.join(', ')}).\n\nBỏ chọn mục để tìm toàn bộ, hoặc chọn mục khác.\n\nNguồn: (không có)`,
       sources: [],
       confidence: confidenceFromSources([]),
       mode,

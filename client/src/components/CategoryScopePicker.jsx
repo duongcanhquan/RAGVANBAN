@@ -32,7 +32,7 @@ function walkCheck(nodes, depth, selected, toggle, disabled) {
 }
 
 /**
- * Phạm vi Tra cứu / Tư vấn: không chọn = cả kho; chọn mục cha gồm mục con (server mở rộng).
+ * Phạm vi Tra cứu / Tư vấn: không chọn = toàn bộ; chọn mục cha gồm mục con (server mở rộng cây con).
  */
 export default function CategoryScopePicker({ selectedIds, onChange, disabled = false }) {
   const [open, setOpen] = useState(false)
@@ -80,7 +80,7 @@ export default function CategoryScopePicker({ selectedIds, onChange, disabled = 
   const menu = (
     <>
       <p className="m-0 px-2 pb-1 text-[11px] text-white/45">
-        Chọn mục cha thì hệ thống tìm cả mục con. Không chọn = cả kho.
+        Chọn mục cha thì hệ thống tìm cả mục con. Không chọn = toàn bộ.
       </p>
       {tree.length ? (
         <ul className="m-0 list-none p-0">{walkCheck(tree, 0, selected, toggle, disabled)}</ul>
@@ -107,7 +107,7 @@ export default function CategoryScopePicker({ selectedIds, onChange, disabled = 
               : 'border-white/15 text-white/55 hover:bg-white/10 hover:text-white'
           }`}
         >
-          Cả kho
+          Toàn bộ
         </button>
         {chips.map((name, i) => (
           <button

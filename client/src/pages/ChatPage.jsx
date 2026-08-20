@@ -525,6 +525,14 @@ export default function ChatPage() {
             </div>
 
             <div className="flex min-w-0 flex-1 items-center justify-end gap-0.5 lg:flex-none">
+            {messages.length > 0 ? (
+              <ChatModeSwitcher
+                mode={mode}
+                onChange={setMode}
+                disabled={streaming}
+                className="mr-1 shrink-0"
+              />
+            ) : null}
             {talkCfg?.enabled === true ? (
               <button
                 type="button"
@@ -587,21 +595,16 @@ export default function ChatPage() {
               )}
               {sideOpen ? 'Thu panel' : 'Bàn việc'}
             </button>
-          </div>
-          </div>
-
-          <div className="flex flex-row items-center justify-between gap-2 border-t border-white/5 px-3 py-2 sm:px-4 xl:px-6">
-            {disclaimer ? (
-              <p className="m-0 hidden max-w-xl truncate text-[10px] text-white/40 xl:block" title={disclaimer}>
-                {disclaimer}
-              </p>
-            ) : (
-              <span className="hidden xl:block" aria-hidden="true" />
-            )}
-            <div className="ml-auto flex shrink-0 justify-end">
-              <ChatModeSwitcher mode={mode} onChange={setMode} disabled={streaming} />
             </div>
           </div>
+          {disclaimer ? (
+            <p
+              className="m-0 hidden max-w-xl truncate border-t border-white/5 px-3 py-1 text-[10px] text-white/40 xl:block xl:px-6"
+              title={disclaimer}
+            >
+              {disclaimer}
+            </p>
+          ) : null}
         </div>
 
         <main
@@ -612,6 +615,8 @@ export default function ChatPage() {
             messages={messages}
             streaming={streaming}
             onExampleClick={sendMessage}
+            mode={mode}
+            onModeChange={setMode}
             modeConfig={{ ...modeConfig, examples: mode === 'lookup' ? [] : chipExamples }}
             statusText={streaming ? statusText : ''}
             wide

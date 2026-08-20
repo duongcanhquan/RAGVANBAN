@@ -4,7 +4,7 @@ import logoEquest from '../assets/logo-equest.png'
 import { MAIN_SECTION_NAV } from '../lib/mainNav'
 
 /**
- * Header: Việt Mỹ trái · EQuest phải.
+ * Header: logo Việt Mỹ · EQuest ở giữa.
  */
 export default function AppLayout() {
   return (
@@ -18,31 +18,29 @@ export default function AppLayout() {
       </a>
 
       <header className="site-header safe-top relative z-40 shrink-0 border-b border-white/10 bg-black/25 backdrop-blur-xl">
-        <div className="relative flex h-[var(--nav-h)] items-center justify-between gap-2 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] sm:gap-4 sm:px-4">
+        <div className="relative flex h-[var(--nav-h)] items-center justify-center px-[max(0.75rem,env(safe-area-inset-left))] sm:px-4">
           <Link
             to="/"
-            className="relative z-10 flex h-full max-w-[42%] shrink-0 items-center sm:max-w-[30%]"
+            className="relative z-10 flex max-w-[min(100%,28rem)] items-center justify-center gap-3 sm:gap-5"
           >
             <img
               src={logoVietmy}
               alt="Cao đẳng Việt Mỹ Hà Nội"
-              className="h-8 w-auto max-w-full object-contain object-left sm:h-10 lg:h-12"
+              className="h-8 w-auto max-w-[46%] object-contain sm:h-10 lg:h-11"
               width={180}
               height={48}
               decoding="async"
             />
-          </Link>
-
-          <div className="relative z-10 flex h-full max-w-[42%] shrink-0 items-center justify-end sm:max-w-[30%]">
+            <span className="h-7 w-px shrink-0 bg-white/15 sm:h-9" aria-hidden="true" />
             <img
               src={logoEquest}
               alt="EQuest — The Quest for Excellence"
-              className="h-8 w-auto max-w-full object-contain object-right sm:h-10 lg:h-12"
+              className="h-8 w-auto max-w-[46%] object-contain sm:h-10 lg:h-11"
               width={160}
               height={48}
               decoding="async"
             />
-          </div>
+          </Link>
         </div>
       </header>
 

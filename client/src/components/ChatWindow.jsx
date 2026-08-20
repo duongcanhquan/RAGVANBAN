@@ -1,5 +1,9 @@
 import { useEffect, useRef } from 'react'
 import MessageBubble from './MessageBubble'
+import ChatModeSwitcher from './ChatModeSwitcher'
+
+const EMPTY_HINT =
+  'Nhập thông tin để tra cứu văn bản liên quan hoặc nhận thông tin tư vấn tham khảo văn bản theo tình huống.'
 
 /**
  * ChatWindow — empty state gọn; tra cứu = thuần chat, không chip VB.
@@ -9,6 +13,8 @@ export default function ChatWindow({
   streaming,
   onExampleClick,
   modeConfig,
+  mode,
+  onModeChange,
   statusText,
   wide = false,
   onFeedback,
@@ -33,9 +39,7 @@ export default function ChatWindow({
           <h1 className="m-0 text-lg font-semibold tracking-tight text-[var(--hcc-ink)] sm:text-xl">
             {isLookup ? 'Tra cứu văn bản' : 'Tư vấn tình huống'}
           </h1>
-          <p className="m-0 mt-2 text-sm text-[var(--hcc-muted)]">
-            Nhập câu hỏi bên dưới — hệ thống trả lời kèm nguồn trích dẫn.
-          </p>
+          <p className="m-0 mt-2 text-sm text-[var(--hcc-muted)]">{EMPTY_HINT}</p>
 
           {!isLookup && examples.length > 0 ? (
             <div className="mt-4 flex flex-wrap gap-2">
@@ -54,6 +58,12 @@ export default function ChatWindow({
                   </button>
                 )
               })}
+            </div>
+          ) : null}
+
+          {onModeChange ? (
+            <div className="mt-4 flex justify-end">
+              <ChatModeSwitcher mode={mode} onChange={onModeChange} disabled={streaming} />
             </div>
           ) : null}
         </section>

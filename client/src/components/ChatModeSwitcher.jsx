@@ -2,12 +2,12 @@ import { Scale, Sparkles } from 'lucide-react'
 import { MODES } from '../lib/modes'
 
 /**
- * Tra cứu / Tư vấn — hàng dưới, căn phải, màu nổi bật.
+ * Tra cứu / Tư vấn — segment gọn, hai nút liền nhau (toggle).
  */
-export default function ChatModeSwitcher({ mode, onChange, disabled = false }) {
+export default function ChatModeSwitcher({ mode, onChange, disabled = false, className = '' }) {
   return (
     <div
-      className="inline-flex gap-2 rounded-2xl border border-white/25 bg-gradient-to-r from-black/50 to-black/30 p-1.5 shadow-[0_4px_24px_rgba(0,0,0,0.45)] backdrop-blur-sm"
+      className={`inline-flex gap-1 rounded-2xl border border-white/15 bg-white/10 p-1 sm:rounded-full ${className}`}
       role="tablist"
       aria-label="Chế độ xử lý"
     >
@@ -22,20 +22,18 @@ export default function ChatModeSwitcher({ mode, onChange, disabled = false }) {
             aria-selected={active}
             disabled={disabled}
             onClick={() => onChange(m.id)}
-            className={`inline-flex min-h-10 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold tracking-wide transition disabled:opacity-50 sm:min-h-11 sm:px-5 ${
+            className={`inline-flex min-h-9 cursor-pointer items-center justify-center gap-1 rounded-xl px-2.5 text-xs font-semibold transition disabled:opacity-50 sm:min-h-9 sm:rounded-full sm:px-3 sm:text-xs ${
               active
                 ? isAdvise
-                  ? 'btn-gold scale-[1.02] shadow-[0_0_20px_rgba(212,175,55,0.45)] ring-2 ring-[var(--hcc-gold-bright)]/60'
-                  : 'scale-[1.02] bg-[var(--hcc-red)] text-white shadow-[0_0_20px_rgba(185,28,28,0.5)] ring-2 ring-red-300/50'
-                : isAdvise
-                  ? 'border border-amber-400/25 bg-amber-500/10 text-amber-100/90 hover:bg-amber-500/20'
-                  : 'border border-red-400/25 bg-red-500/10 text-red-100/90 hover:bg-red-500/20'
+                  ? 'btn-gold'
+                  : 'bg-[var(--hcc-red)] text-white'
+                : 'text-white/60 hover:text-white'
             }`}
           >
             {isAdvise ? (
-              <Sparkles className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <Sparkles className="h-3.5 w-3.5 sm:h-3.5 sm:w-3.5" aria-hidden="true" />
             ) : (
-              <Scale className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <Scale className="h-3.5 w-3.5 sm:h-3.5 sm:w-3.5" aria-hidden="true" />
             )}
             {m.label}
           </button>
