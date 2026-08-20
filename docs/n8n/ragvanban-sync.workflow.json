@@ -12,7 +12,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Production (Vercel)\n\nApp **không chạy n8n**. Bật webhook chỉ mở cổng nhận.\n\nCách chắc: /quantri → Cài đặt → **Đồng bộ Drive ngay** (không cần n8n).\nCron Vercel `/api/cron/drive-sync` mỗi 15 phút — chỉ số hóa file chưa có trong kho.\n\nn8n Cloud (tuỳ chọn):\n1. Copy URL webhook + X-N8N-Secret\n2. Dán vào node HTTP (không localhost)\n3. Drive trigger: Folder ID + OAuth\n4. Bật **Active** (file import mặc định tắt)\n\nHealth: `…/api/webhooks/n8n/health` · thử `{ \"action\": \"ping\" }`",
+        "content": "## Production (Vercel)\n\nApp **không chạy n8n**. Bật webhook chỉ mở cổng nhận.\n\nCách chắc: /quantri → Cài đặt → **Đồng bộ Drive ngay** (không cần n8n).\nCron Vercel `/api/cron/drive-sync` mỗi 15 phút — chỉ số hóa file chưa có trong kho.\n\nn8n Cloud (tuỳ chọn):\n1. Copy URL webhook + secret (Value)\n2. Node HTTP: Name header = `X-N8N-Secret` (không ghi chữ «header»), Value = secret\n3. Drive trigger: Folder ID + OAuth\n4. Bật **Active** (file import mặc định tắt)\n\nLỗi `Header name must be a valid HTTP token`: ô Name đang sai — chỉ để `X-N8N-Secret`.\n\nHealth: `…/api/webhooks/n8n/health` · thử `{ \"action\": \"ping\" }`",
         "height": 420,
         "width": 380,
         "color": 7
@@ -102,7 +102,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json) }}",
+        "jsonBody": "={{ $json }}",
         "options": {
           "timeout": 280000,
           "redirect": {
@@ -117,7 +117,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1000, 280],
-      "notes": "Dán URL copy từ /quantri trên Vercel. Không dùng máy local. Timeout 280s < maxDuration 300s."
+      "notes": "Body JSON = {{ $json }} (KHÔNG JSON.stringify). Name header = X-N8N-Secret. Xem response: ingested=true mới vào kho; processed=0 = không có file mới."
     }
   ],
   "connections": {

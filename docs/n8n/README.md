@@ -52,13 +52,14 @@ Dùng **n8n Cloud** (n8n.io) hoặc n8n self-host **có internet ra Vercel**. Kh
 1. **Workflows → ⋮ → Import from File** → `docs/n8n/ragvanban-sync.workflow.json`
 2. Mở node **Gọi RAG webhook (Vercel)**
    - **URL** = URL vừa copy ở `/quantri` (thay `https://YOUR-APP.vercel.app/api/webhooks/n8n`)
-   - Header `X-N8N-Secret` = secret vừa copy (thay `PASTE_N8N_SECRET`)
+   - Header Name = `X-N8N-Secret`, Value = secret (thay `PASTE_N8N_SECRET`)
+   - Body → JSON: biểu thức `{{ $json }}` — **không** dùng `JSON.stringify($json)` (sẽ làm app không đọc được fileId)
 3. Thử **Chạy tay (thử 1 lần)** → Execute Workflow  
-   Thành công: JSON `ok: true`, `action: sync_folder`.
-   - `401` = sai secret  
-   - `403` = công tắc n8n/Drive tắt  
-   - `503` = chưa tạo secret  
-   - `504` / timeout = Vercel cắt giờ; giảm `limit` hoặc gói Pro
+   Trong **Executions** mở output HTTP, xem:
+   - `ingested: true` + `processed` > 0 → đã vào kho
+   - `ingested: false`, `processed: 0`, `skipped` lớn → file đã có / thư mục trống / chưa Share SA
+   - `duplicate: true` → file trùng, không số hóa lại
+   - `401` = sai secret · `403` = tắt công tắc · `503` = chưa secret · timeout = Pro / 1 file
 
 ---
 
@@ -102,8 +103,24 @@ Header bắt buộc: `X-N8N-Secret` (cũng nhận `X-Webhook-Secret`).
 
 | Hiện tượng | Nguyên nhân |
 |------------|-------------|
+| **Kết nối OK (`ok: true`) nhưng app không có tài liệu mới** | Xem field `ingested` / `processed` / `message` trong Executions. Thường: (1) Body n8n dùng `JSON.stringify` → sửa thành `{{ $json }}`; (2) `processed: 0` = không có file mới hoặc đã trùng; (3) chưa **Share Viewer** folder cho email service account; (4) chưa thêm **Nguồn Drive** trên `/quantri`; (5) file không phải PDF/Word/Excel. Cách chắc: `/quantri` → **Đồng bộ Drive ngay** |
+| **`Header name must be a valid HTTP token ["header x-n8n-secret"]`** | Ô **Name** của header bị dán nhầm (có chữ `header` + khoảng trắng). Sửa: Name = `X-N8N-Secret` (không dấu cách, không chữ “header”); Value = secret copy từ `/quantri` |
 | n8n báo connection refused / ECONNREFUSED | Còn URL `127.0.0.1` hoặc `localhost` — đổi sang Vercel |
 | 401 | Secret n8n ≠ secret trên `/quantri` (tạo lại rồi dán lại) |
 | File mới không chạy | Workflow chưa Active, hoặc chưa gắn Google OAuth, hoặc sai Folder ID |
 | `Định dạng Drive chưa hỗ trợ` / không tải được | Chưa Share folder cho **email service account** |
 | Timeout | PDF quá nặng / OCR; để Drive trigger 1 file; nâng Pro |
+
+### Sửa nhanh node «Gọi RAG webhook (Vercel)»
+
+1. Mở node → **Send Headers** = bật  
+2. Dòng header **chỉ** như sau (2 ô riêng):
+
+| Name (tên) | Value (giá trị) |
+|------------|-----------------|
+| `X-N8N-Secret` | *(dán secret, không có khoảng trắng thừa)* |
+| `Content-Type` | `application/json` |
+
+3. **Không** ghi `Header X-N8N-Secret`, `header x-n8n-secret`, hay `X-N8N-Secret: xxx` vào ô Name.  
+4. URL = `https://<app>.vercel.app/api/webhooks/n8n` (không localhost).  
+5. Chạy lại **Chạy tay (thử 1 lần)**.

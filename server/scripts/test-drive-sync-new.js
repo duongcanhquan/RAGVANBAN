@@ -46,6 +46,23 @@ test('webhook nhận fileId hoặc id thô từ Google Drive Trigger', () => {
   );
   assert.equal(driveFileIdFromWebhookBody({ action: 'sync_folder', limit: 8 }), '');
   assert.equal(driveFileIdFromWebhookBody({ action: 'ping' }), '');
+  assert.equal(
+    driveFileIdFromWebhookBody('{"fileId":"1abcDEF-xyz0123456789abcd"}'),
+    '1abcDEF-xyz0123456789abcd',
+    'n8n JSON.stringify nhầm vẫn parse được'
+  );
+});
+
+test('workflow n8n body không dùng JSON.stringify (tránh body string)', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const wf = JSON.parse(
+    fs.readFileSync(path.resolve(__dirname, '../../docs/n8n/ragvanban-sync.workflow.json'), 'utf8')
+  );
+  const http = (wf.nodes || []).find((n) => n.type === 'n8n-nodes-base.httpRequest');
+  const body = String(http?.parameters?.jsonBody || '');
+  assert.match(body, /\$json/);
+  assert.doesNotMatch(body, /JSON\.stringify/);
 });
 
 test('tóm tắt số hóa folder Drive có tên file, chunks và link bản gốc', () => {

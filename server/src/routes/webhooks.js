@@ -8,7 +8,7 @@
 
 const express = require('express');
 const crypto = require('crypto');
-const { ingestDriveFile, syncDriveFolder, driveFileIdFromWebhookBody } = require('../services/driveIngest');
+const { ingestDriveFile, syncDriveFolder, driveFileIdFromWebhookBody, coerceWebhookBody } = require('../services/driveIngest');
 const { ingestSingleFile } = require('../services/ingestFile');
 const { storeUploadedOriginal } = require('../services/originalStore');
 const { parseDriveResource, getFileParentIds } = require('../services/googleDrive');
@@ -72,9 +72,10 @@ async function categoryForFile(fileId, folderIdHint) {
 router.post('/n8n', async (req, res) => {
   if (!(await assertSecret(req, res))) return;
   const started = Date.now();
+  const body = coerceWebhookBody(req.body);
 
   try {
-    const action = String(req.body?.action || 'ingest_file').trim();
+    const action = String(body.action || 'ingest_file').trim();
     const flags = await getFlags();
 
     if (action === 'ping') {
@@ -93,32 +94,65 @@ router.post('/n8n', async (req, res) => {
         return;
       }
       const result = await syncDriveFolder({
-        limit: syncFolderLimit(req.body?.limit),
-        folderId: req.body?.folderId || null,
-        categoryId: req.body?.categoryId || null,
+        limit: syncFolderLimit(body.limit),
+        folderId: body.folderId || null,
+        categoryId: body.categoryId || null,
       });
-      res.json({ ok: true, action, durationMs: Date.now() - started, ...result });
+      const message =
+        result.processed > 0
+          ? `Đã số hóa ${result.processed} file mới vào kho.`
+          : result.skipped > 0
+            ? `Không có file mới — ${result.skipped}/${result.totalListed} file Drive đã có trong kho.`
+            : result.totalListed === 0
+              ? 'Thư mục không có PDF/Word/Excel (hoặc service account chưa được Share Viewer).'
+              : 'Không có file mới để số hóa.';
+      res.json({
+        ok: true,
+        action,
+        ingested: result.processed > 0,
+        message,
+        durationMs: Date.now() - started,
+        ...result,
+      });
       return;
     }
 
-    const driveFileId = driveFileIdFromWebhookBody(req.body);
+    const driveFileId = driveFileIdFromWebhookBody(body);
     if (driveFileId) {
       if (!flags.driveEnabled) {
         res.status(403).json({ error: 'Google Drive đang tắt trong Cài đặt' });
         return;
       }
-      const categoryId =
-        req.body?.categoryId || (await categoryForFile(driveFileId, req.body?.folderId));
+      const categoryId = body.categoryId || (await categoryForFile(driveFileId, body.folderId));
       const result = await ingestDriveFile(driveFileId, { categoryId });
+      if (result?.duplicate || result?.skipped) {
+        res.json({
+          ok: true,
+          action: 'ingest_file',
+          ingested: false,
+          duplicate: true,
+          message: result.message || 'File đã có trong kho — không số hóa lại.',
+          durationMs: Date.now() - started,
+          ...result,
+        });
+        return;
+      }
       if (!result?.id) {
         throw new Error('Số hóa Drive xong nhưng không ghi được danh mục tài liệu.');
       }
-      res.json({ ok: true, action: 'ingest_file', durationMs: Date.now() - started, ...result });
+      res.json({
+        ok: true,
+        action: 'ingest_file',
+        ingested: true,
+        message: `Đã số hóa «${result.displayName || result.fileName || result.id}» (${result.chunks || 0} chunks).`,
+        durationMs: Date.now() - started,
+        ...result,
+      });
       return;
     }
 
-    if (req.body?.fileUrl) {
-      const url = String(req.body.fileUrl);
+    if (body.fileUrl) {
+      const url = String(body.fileUrl);
       const driveParsed = parseDriveResource(url);
       if (driveParsed && !flags.driveEnabled) {
         res.status(403).json({ error: 'Google Drive đang tắt trong Cài đặt' });
@@ -128,17 +162,34 @@ router.post('/n8n', async (req, res) => {
         const src = await findSourceForFolder(driveParsed.id);
         const result = await syncDriveFolder({
           folderId: driveParsed.id,
-          limit: syncFolderLimit(req.body?.limit),
-          categoryId: req.body?.categoryId || src?.categoryId || null,
+          limit: syncFolderLimit(body.limit),
+          categoryId: body.categoryId || src?.categoryId || null,
         });
-        res.json({ ok: true, action: 'ingest_drive_folder', durationMs: Date.now() - started, ...result });
+        res.json({
+          ok: true,
+          action: 'ingest_drive_folder',
+          ingested: result.processed > 0,
+          message:
+            result.processed > 0
+              ? `Đã số hóa ${result.processed} file.`
+              : 'Không có file mới trong thư mục.',
+          durationMs: Date.now() - started,
+          ...result,
+        });
         return;
       }
       if (driveParsed?.id) {
         const categoryId =
-          req.body?.categoryId || (await categoryForFile(driveParsed.id, req.body?.folderId));
+          body.categoryId || (await categoryForFile(driveParsed.id, body.folderId));
         const result = await ingestDriveFile(driveParsed.id, { categoryId });
-        res.json({ ok: true, action: 'ingest_drive', durationMs: Date.now() - started, ...result });
+        res.json({
+          ok: true,
+          action: 'ingest_drive',
+          ingested: !(result?.duplicate || result?.skipped),
+          message: result?.message,
+          durationMs: Date.now() - started,
+          ...result,
+        });
         return;
       }
 
@@ -146,7 +197,7 @@ router.post('/n8n', async (req, res) => {
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`Không tải được fileUrl: HTTP ${resp.status}`);
       const buffer = Buffer.from(await resp.arrayBuffer());
-      const fileName = String(req.body.fileName || 'n8n-upload.pdf');
+      const fileName = String(body.fileName || 'n8n-upload.pdf');
       let publicUrl = url;
       let storagePath = '';
       const stored = await storeUploadedOriginal(
@@ -163,14 +214,22 @@ router.post('/n8n', async (req, res) => {
         publicUrl,
         storagePath,
         source: stored.source || 'upload',
-        categoryId: req.body?.categoryId || null,
+        categoryId: body.categoryId || null,
       });
-      res.json({ ok: true, action: 'ingest_url', durationMs: Date.now() - started, ...result });
+      res.json({
+        ok: true,
+        action: 'ingest_url',
+        ingested: Boolean(result?.id),
+        durationMs: Date.now() - started,
+        ...result,
+      });
       return;
     }
 
     res.status(400).json({
       error: 'Body cần fileId, fileUrl, hoặc action=sync_folder',
+      receivedType: typeof req.body,
+      hint: 'Trong n8n HTTP Request: Body → JSON, dùng biểu thức {{ $json }} (không JSON.stringify). Xem Executions → output node Gói body.',
       examples: [
         { action: 'ping' },
         { fileId: '1abc...' },
@@ -182,6 +241,7 @@ router.post('/n8n', async (req, res) => {
     console.error('[n8n webhook]', err);
     res.status(500).json({
       ok: false,
+      ingested: false,
       error: publicErrorMessage(err, 'Số hóa thất bại'),
       durationMs: Date.now() - started,
     });

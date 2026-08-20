@@ -89,7 +89,7 @@ function pickNewDriveFiles(files, ingestedIds, limit) {
 }
 
 function driveFileIdFromWebhookBody(body) {
-  const b = body && typeof body === 'object' && !Array.isArray(body) ? body : {};
+  const b = coerceWebhookBody(body);
   const direct = String(b.fileId || b.file_id || '').trim();
   if (direct) return direct;
   const id = String(b.id || '').trim();
@@ -97,6 +97,22 @@ function driveFileIdFromWebhookBody(body) {
   if (b.name || b.fileName || b.mimeType || Array.isArray(b.parents)) return id;
   if (/^[a-zA-Z0-9_-]{20,}$/.test(id) && !b.action) return id;
   return '';
+}
+
+/** n8n đôi khi gửi JSON đã stringify thành chuỗi — ép về object. */
+function coerceWebhookBody(raw) {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    const s = raw.trim();
+    if (!s) return {};
+    try {
+      const parsed = JSON.parse(s);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+    } catch {
+      /* ignore */
+    }
+  }
+  return {};
 }
 
 function skippedDriveResult(doc, extra = {}) {
@@ -326,5 +342,6 @@ module.exports = {
   shouldMirrorToSupabase,
   pickNewDriveFiles,
   driveFileIdFromWebhookBody,
+  coerceWebhookBody,
   summarizeDriveUrlJob,
 };

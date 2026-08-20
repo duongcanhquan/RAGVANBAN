@@ -449,29 +449,40 @@ export default function QuantriIntegrations() {
             <code className="min-w-0 flex-1 break-all text-xs">{webhookUrl}</code>
             <CopyBtn text={webhookUrl} />
           </div>
-          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
-            <span className="text-white/55">Header</span>
-            <code className="text-xs">X-N8N-Secret</code>
-            {data.n8n.secret ? (
-              <>
-                <code className="min-w-0 flex-1 truncate text-xs">{data.n8n.secret}</code>
-                <CopyBtn text={data.n8n.secret} />
-              </>
-            ) : (
-              <span className="flex-1 text-xs text-white/50">
-                {isSuper ? 'Chưa có secret' : 'Super-admin tạo secret rồi gửi cho bạn'}
-              </span>
-            )}
-            {isSuper ? (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={makeSecret}
-                className="rounded-full bg-white/10 px-2.5 py-1 text-[11px]"
-              >
-                {data.n8n.secretConfigured ? 'Tạo lại' : 'Tạo secret'}
-              </button>
-            ) : null}
+          <div className="space-y-2 rounded-2xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm">
+            <p className="m-0 text-[11px] text-white/50">
+              Trong n8n HTTP Request → Send Headers: ô <strong className="text-white/80">Name</strong> chỉ ghi{' '}
+              <code className="text-white/90">X-N8N-Secret</code> (không thêm chữ «header»), ô{' '}
+              <strong className="text-white/80">Value</strong> dán secret.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="w-14 shrink-0 text-[11px] text-white/45">Name</span>
+              <code className="text-xs">X-N8N-Secret</code>
+              <CopyBtn text="X-N8N-Secret" />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="w-14 shrink-0 text-[11px] text-white/45">Value</span>
+              {data.n8n.secret ? (
+                <>
+                  <code className="min-w-0 flex-1 truncate text-xs">{data.n8n.secret}</code>
+                  <CopyBtn text={data.n8n.secret} />
+                </>
+              ) : (
+                <span className="flex-1 text-xs text-white/50">
+                  {isSuper ? 'Chưa có secret' : 'Super-admin tạo secret rồi gửi cho bạn'}
+                </span>
+              )}
+              {isSuper ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={makeSecret}
+                  className="rounded-full bg-white/10 px-2.5 py-1 text-[11px]"
+                >
+                  {data.n8n.secretConfigured ? 'Tạo lại' : 'Tạo secret'}
+                </button>
+              ) : null}
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
             <span className="text-white/55">Health</span>

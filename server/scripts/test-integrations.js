@@ -39,6 +39,11 @@ test('workflow n8n production không trỏ localhost', () => {
     Number(http.parameters?.options?.timeout) >= 240000,
     'n8n HTTP timeout phải gần maxDuration 300s của Vercel, không cắt sớm 120s'
   );
+  assert.doesNotMatch(
+    String(http.parameters?.jsonBody || ''),
+    /JSON\.stringify/,
+    'jsonBody phải là {{ $json }}, không JSON.stringify'
+  );
   const drive = (wf.nodes || []).find((n) => n.type === 'n8n-nodes-base.googleDriveTrigger');
   assert.equal(drive?.parameters?.event, 'fileCreated');
 });
