@@ -1,10 +1,11 @@
+import { memo } from 'react'
 import { Scale, Sparkles } from 'lucide-react'
 import { MODES } from '../lib/modes'
 
 /**
  * Tra cứu / Tư vấn — segment gọn, hai nút liền nhau (toggle).
  */
-export default function ChatModeSwitcher({ mode, onChange, disabled = false, className = '' }) {
+function ChatModeSwitcher({ mode, onChange, disabled = false, className = '' }) {
   return (
     <div
       className={`inline-flex gap-1 rounded-2xl border border-white/15 bg-white/10 p-1 sm:rounded-full ${className}`}
@@ -22,7 +23,7 @@ export default function ChatModeSwitcher({ mode, onChange, disabled = false, cla
             aria-selected={active}
             disabled={disabled}
             onClick={() => onChange(m.id)}
-            className={`inline-flex min-h-9 cursor-pointer items-center justify-center gap-1 rounded-xl px-2.5 text-xs font-semibold transition disabled:opacity-50 sm:min-h-9 sm:rounded-full sm:px-3 sm:text-xs ${
+            className={`inline-flex min-h-9 cursor-pointer items-center justify-center gap-1 rounded-xl px-2.5 text-xs font-semibold transition active:scale-95 active:brightness-90 disabled:opacity-50 sm:min-h-9 sm:rounded-full sm:px-3 sm:text-xs ${
               active
                 ? isAdvise
                   ? 'btn-gold'
@@ -42,3 +43,5 @@ export default function ChatModeSwitcher({ mode, onChange, disabled = false, cla
     </div>
   )
 }
+
+export default memo(ChatModeSwitcher)

@@ -4,7 +4,7 @@ import { History, LogOut, PanelRightClose, PanelRightOpen, Plus, Volume2, Volume
 import ChatWindow from '../components/ChatWindow'
 import ChatInput from '../components/ChatInput'
 import CategoryScopePicker from '../components/CategoryScopePicker'
-import MainSectionNav from '../components/MainSectionNav'
+import AppSectionBar from '../components/AppSectionBar'
 import ChatModeSwitcher from '../components/ChatModeSwitcher'
 const HistoryPanel = lazy(() => import('../components/HistoryPanel'))
 import WorkbenchPanel from '../components/WorkbenchPanel'
@@ -518,13 +518,81 @@ export default function ChatPage() {
     <div className={`${shellH} flex w-full overflow-hidden`}>
       {/* Cột chính: hỏi đáp */}
       <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-transparent">
-        <div className="flex shrink-0 flex-col border-b border-white/10 bg-black/20 backdrop-blur-md">
-          <div className="flex flex-row items-center justify-between gap-1.5 px-3 py-1.5 sm:px-4 xl:px-6">
-            <div className="hidden min-w-0 flex-1 items-center lg:flex">
-              <MainSectionNav />
-            </div>
+        <AppSectionBar
+          trailing={
+            <>
+              {messages.length > 0 ? (
+                <ChatModeSwitcher
+                  mode={mode}
+                  onChange={setMode}
+                  disabled={streaming}
+                  className="mr-1 shrink-0"
+                />
+              ) : null}
+              {talkCfg?.enabled === true ? (
+                <button
+                  type="button"
+                  onClick={toggleSpeak}
+                  className="inline-flex min-h-9 min-w-9 cursor-pointer items-center justify-center gap-1 rounded-xl px-2.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white"
+                  aria-pressed={speakOn}
+                  aria-label={speakOn ? 'Tắt đọc' : 'Bật đọc'}
+                  title={
+                    !ttsSupported
+                      ? 'Trình duyệt không hỗ trợ đọc thoại'
+                      : speakOn
+                        ? 'Tắt đọc câu trả lời'
+                        : 'Bật đọc ngay khi AI viết'
+                  }
+                >
+                  {speakOn && ttsSupported ? (
+                    <Volume2 className="h-4 w-4 text-emerald-300" />
+                  ) : (
+                    <VolumeX className="h-4 w-4" />
+                  )}
+                  <span className="hidden md:inline">
+                    {!ttsSupported ? 'Không TTS' : speakOn ? 'Đang nói' : 'Im lặng'}
+                  </span>
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={newChat}
+                className="inline-flex min-h-9 min-w-9 cursor-pointer items-center justify-center gap-1 rounded-xl px-1.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white"
+                aria-label="Chat mới"
+              >
+                <Plus className="h-4 w-4" />
+                <span className="hidden sm:inline">Mới</span>
+              </button>
+              <button
+                type="button"
+                onClick={endSession}
+                className="inline-flex min-h-9 min-w-9 cursor-pointer items-center justify-center gap-1 rounded-xl px-1.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white"
+                title="Xóa lịch sử trên máy và bắt đầu phiên mới"
+                aria-label="Hết phiên"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Hết phiên</span>
+              </button>
+              <button
+                type="button"
+                onClick={toggleSide}
+                className="hidden min-h-9 cursor-pointer items-center gap-1 rounded-xl px-2.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white xl:inline-flex"
+                aria-pressed={sideOpen}
+                title={sideOpen ? 'Ẩn bàn làm việc' : 'Hiện bàn làm việc'}
+              >
+                {sideOpen ? (
+                  <PanelRightClose className="h-4 w-4" />
+                ) : (
+                  <PanelRightOpen className="h-4 w-4" />
+                )}
+                {sideOpen ? 'Thu panel' : 'Bàn việc'}
+              </button>
+            </>
+          }
+        />
 
-            <div className="flex min-w-0 flex-1 items-center justify-end gap-0.5 lg:flex-none">
+        <div className="toolbar-blur flex shrink-0 flex-col border-b border-white/10 bg-black/20 backdrop-blur-md lg:hidden">
+          <div className="flex flex-row items-center justify-end gap-0.5 px-3 py-1.5 sm:px-4">
             {messages.length > 0 ? (
               <ChatModeSwitcher
                 mode={mode}
@@ -595,11 +663,10 @@ export default function ChatPage() {
               )}
               {sideOpen ? 'Thu panel' : 'Bàn việc'}
             </button>
-            </div>
           </div>
           {disclaimer ? (
             <p
-              className="m-0 hidden max-w-xl truncate border-t border-white/5 px-3 py-1 text-[10px] text-white/40 xl:block xl:px-6"
+              className="m-0 max-w-full truncate border-t border-white/5 px-3 py-1 text-[10px] text-white/40 sm:px-4"
               title={disclaimer}
             >
               {disclaimer}

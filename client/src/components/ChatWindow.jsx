@@ -36,9 +36,14 @@ export default function ChatWindow({
     >
       {empty && (
         <section className="rounded-2xl border border-white/10 bg-black/15 px-4 py-5 sm:px-6 sm:py-6">
-          <h1 className="m-0 text-lg font-semibold tracking-tight text-[var(--hcc-ink)] sm:text-xl">
-            {isLookup ? 'Tra cứu văn bản' : 'Tư vấn tình huống'}
-          </h1>
+          <div className="flex flex-wrap items-center justify-between gap-2 gap-y-2">
+            <h1 className="m-0 min-w-0 flex-1 text-lg font-semibold tracking-tight text-[var(--hcc-ink)] sm:text-xl">
+              {isLookup ? 'Tra cứu văn bản' : 'Tư vấn tình huống'}
+            </h1>
+            {onModeChange ? (
+              <ChatModeSwitcher mode={mode} onChange={onModeChange} disabled={streaming} className="shrink-0" />
+            ) : null}
+          </div>
           <p className="m-0 mt-2 text-sm text-[var(--hcc-muted)]">{EMPTY_HINT}</p>
 
           {!isLookup && examples.length > 0 ? (
@@ -58,12 +63,6 @@ export default function ChatWindow({
                   </button>
                 )
               })}
-            </div>
-          ) : null}
-
-          {onModeChange ? (
-            <div className="mt-4 flex justify-end">
-              <ChatModeSwitcher mode={mode} onChange={onModeChange} disabled={streaming} />
             </div>
           ) : null}
         </section>

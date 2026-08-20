@@ -4,7 +4,7 @@ import logoEquest from '../assets/logo-equest.png'
 import { MAIN_SECTION_NAV } from '../lib/mainNav'
 
 /**
- * Header: logo Việt Mỹ · EQuest ở giữa.
+ * Header mobile: logo giữa. Desktop: logo + nav ở AppSectionBar trong từng trang.
  */
 export default function AppLayout() {
   return (
@@ -17,25 +17,25 @@ export default function AppLayout() {
         Bỏ qua đến nội dung
       </a>
 
-      <header className="site-header safe-top relative z-40 shrink-0 border-b border-white/10 bg-black/25 backdrop-blur-xl">
+      <header className="site-header safe-top relative z-40 shrink-0 border-b border-white/10 bg-black/25 backdrop-blur-xl lg:hidden">
         <div className="relative flex h-[var(--nav-h)] items-center justify-center px-[max(0.75rem,env(safe-area-inset-left))] sm:px-4">
           <Link
             to="/"
-            className="relative z-10 flex max-w-[min(100%,28rem)] items-center justify-center gap-3 sm:gap-5"
+            className="relative z-10 flex max-w-[min(100%,24rem)] items-center justify-center gap-2.5 sm:gap-4"
           >
             <img
               src={logoVietmy}
               alt="Cao đẳng Việt Mỹ Hà Nội"
-              className="h-8 w-auto max-w-[46%] object-contain sm:h-10 lg:h-11"
+              className="h-8 w-auto max-w-[46%] object-contain"
               width={180}
               height={48}
               decoding="async"
             />
-            <span className="h-7 w-px shrink-0 bg-white/15 sm:h-9" aria-hidden="true" />
+            <span className="h-7 w-px shrink-0 bg-white/15" aria-hidden="true" />
             <img
               src={logoEquest}
               alt="EQuest — The Quest for Excellence"
-              className="h-8 w-auto max-w-[46%] object-contain sm:h-10 lg:h-11"
+              className="h-8 w-auto max-w-[46%] object-contain"
               width={160}
               height={48}
               decoding="async"

@@ -16,7 +16,7 @@ export default function MainSectionNav({ className = '' }) {
           to={to}
           end={end}
           className={({ isActive }) =>
-            `inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-xl px-2.5 py-1 text-xs font-semibold transition sm:min-h-9 sm:rounded-full sm:px-3 sm:text-sm ${
+            `inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-xl px-2.5 py-1 text-xs font-semibold transition active:scale-95 active:brightness-90 sm:min-h-9 sm:rounded-full sm:px-3 sm:text-sm ${
               isActive
                 ? 'bg-[var(--hcc-gold)] text-[#0a1628] shadow-sm'
                 : 'text-white/70 hover:bg-white/10 hover:text-white'

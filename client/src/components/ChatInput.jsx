@@ -90,7 +90,7 @@ export default function ChatInput({
             onClick={onMicClick}
             disabled={disabled}
             aria-label="Bật mic, nói câu hỏi"
-            className="relative inline-flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white/85 transition hover:bg-white/15 disabled:opacity-40"
+            className="relative inline-flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white/85 transition active:scale-95 active:bg-white/20 disabled:opacity-40"
           >
             <Mic className="h-5 w-5" aria-hidden="true" />
           </button>
@@ -100,7 +100,7 @@ export default function ChatInput({
             type="button"
             onClick={() => onStopListen?.({ send: false })}
             aria-label="Dừng thu giọng"
-            className="relative inline-flex h-12 min-w-12 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-2xl border border-amber-300/50 bg-amber-500/30 px-3 text-amber-50"
+            className="relative inline-flex h-12 min-w-12 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-2xl border border-amber-300/50 bg-amber-500/30 px-3 text-amber-50 transition active:scale-95 active:brightness-90"
           >
             <Square className="h-4 w-4 fill-current" aria-hidden="true" />
             <span className="hidden text-xs font-semibold sm:inline">Dừng</span>

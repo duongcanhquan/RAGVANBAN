@@ -52,7 +52,7 @@
 }
 
 html {
-  -webkit-tap-highlight-color: transparent;
+  -webkit-tap-highlight-color: rgba(255, 213, 74, 0.28);
   touch-action: manipulation;
 }
 
@@ -236,6 +236,31 @@ body {
   box-shadow: 0 8px 22px rgba(196, 30, 58, 0.35);
 }
 
+.btn-red:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.btn-red:active:not(:disabled) {
+  transform: scale(0.95);
+  filter: brightness(0.9);
+  box-shadow: 0 4px 14px rgba(196, 30, 58, 0.28);
+  transition-duration: 0.05s;
+}
+
+.btn-red:not(:disabled),
+.btn-gold:not(:disabled) {
+  transition:
+    transform 0.14s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.14s ease,
+    box-shadow 0.14s ease;
+}
+
+.btn-gold:active:not(:disabled) {
+  transform: scale(0.95);
+  filter: brightness(0.92);
+  transition-duration: 0.05s;
+}
+
 /* Admin — glass đỏ–vàng */
 .admin-shell {
   background:
@@ -277,6 +302,71 @@ body {
 .bottom-tab {
   min-height: 44px;
   min-width: 64px;
+}
+
+/* Phản hồi bấm / chạm — tức thì, rõ ràng */
+button,
+[role="tab"],
+.bottom-tab,
+nav[aria-label="Điều hướng chính"] a,
+nav[aria-label="Tab điện thoại"] a {
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+button:not(:disabled),
+[role="tab"]:not(:disabled),
+.bottom-tab,
+nav[aria-label="Điều hướng chính"] a,
+nav[aria-label="Tab điện thoại"] a {
+  transition:
+    transform 0.14s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.14s ease,
+    background-color 0.14s ease,
+    color 0.14s ease,
+    opacity 0.14s ease,
+    box-shadow 0.14s ease;
+}
+
+button:not(:disabled):active,
+[role="tab"]:not(:disabled):active,
+.bottom-tab:active,
+nav[aria-label="Điều hướng chính"] a:active,
+nav[aria-label="Tab điện thoại"] a:active {
+  transform: scale(0.96);
+  filter: brightness(0.9);
+  transition-duration: 0.05s;
+}
+
+button:disabled:active,
+[role="tab"]:disabled:active {
+  transform: none;
+  filter: none;
+}
+
+/* Mobile: giảm blur / animation — phản hồi nhanh hơn */
+@media (max-width: 1023px) {
+  .site-header,
+  .chat-composer,
+  nav[aria-label="Tab điện thoại"],
+  .toolbar-blur {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  .glass-panel {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(26, 18, 20, 0.78);
+  }
+
+  .admin-aurora {
+    animation: none;
+    opacity: 0.42;
+    filter: blur(20px);
+  }
 }
 
 @media (min-width: 1024px) {

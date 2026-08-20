@@ -101,7 +101,7 @@ export default function CategoryScopePicker({ selectedIds, onChange, disabled = 
           type="button"
           disabled={disabled}
           onClick={clear}
-          className={`min-h-11 rounded-full border px-3 text-[11px] font-semibold transition disabled:opacity-40 sm:min-h-8 sm:py-0.5 ${
+          className={`min-h-11 rounded-full border px-3 text-[11px] font-semibold transition active:scale-95 active:brightness-90 disabled:opacity-40 sm:min-h-8 sm:py-0.5 ${
             selected.size === 0
               ? 'border-[var(--hcc-gold-bright)]/50 bg-[var(--hcc-gold-bright)]/15 text-[var(--hcc-gold-bright)]'
               : 'border-white/15 text-white/55 hover:bg-white/10 hover:text-white'
@@ -115,7 +115,7 @@ export default function CategoryScopePicker({ selectedIds, onChange, disabled = 
             type="button"
             disabled={disabled}
             onClick={() => toggle(selectedIds[i])}
-            className="inline-flex min-h-11 max-w-[10rem] items-center gap-1 rounded-full border border-white/20 bg-white/10 px-3 text-[11px] text-white/90 disabled:opacity-40 sm:min-h-8"
+            className="inline-flex min-h-11 max-w-[10rem] items-center gap-1 rounded-full border border-white/20 bg-white/10 px-3 text-[11px] text-white/90 transition active:scale-95 active:bg-white/20 disabled:opacity-40 sm:min-h-8"
             title="Bỏ mục này"
           >
             <span className="truncate">{name}</span>
@@ -127,7 +127,7 @@ export default function CategoryScopePicker({ selectedIds, onChange, disabled = 
           disabled={disabled}
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
-          className="inline-flex min-h-11 items-center gap-1 rounded-full border border-white/15 px-3 text-[11px] font-medium text-white/70 hover:bg-white/10 hover:text-white disabled:opacity-40 sm:min-h-8"
+          className="inline-flex min-h-11 items-center gap-1 rounded-full border border-white/15 px-3 text-[11px] font-medium text-white/70 transition active:scale-95 active:bg-white/15 active:text-white disabled:opacity-40 sm:min-h-8"
         >
           Chọn mục
           <ChevronDown className={`h-3 w-3 transition ${open ? 'rotate-180' : ''}`} />
