@@ -1,11 +1,13 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { History, LogOut, PanelRightClose, PanelRightOpen, Plus, Volume2, VolumeX } from 'lucide-react'
 import ChatWindow from '../components/ChatWindow'
 import ChatInput from '../components/ChatInput'
 import CategoryScopePicker from '../components/CategoryScopePicker'
 import AppSectionBar from '../components/AppSectionBar'
 import ChatModeSwitcher from '../components/ChatModeSwitcher'
+import logoVietmy from '../assets/logo-vietmy.png'
+import logoEquest from '../assets/logo-equest.png'
 const HistoryPanel = lazy(() => import('../components/HistoryPanel'))
 import WorkbenchPanel from '../components/WorkbenchPanel'
 import { streamChat } from '../lib/streamChat'
@@ -565,6 +567,14 @@ export default function ChatPage() {
               </button>
               <button
                 type="button"
+                onClick={() => setHistoryOpen(true)}
+                className="inline-flex min-h-9 min-w-9 cursor-pointer items-center justify-center gap-1 rounded-xl px-1.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white xl:hidden"
+                aria-label="Lịch sử phiên này"
+              >
+                <History className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
                 onClick={endSession}
                 className="inline-flex min-h-9 min-w-9 cursor-pointer items-center justify-center gap-1 rounded-xl px-1.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white"
                 title="Xóa lịch sử trên máy và bắt đầu phiên mới"
@@ -591,50 +601,66 @@ export default function ChatPage() {
           }
         />
 
-        <div className="toolbar-blur flex shrink-0 flex-col border-b border-white/10 bg-black/20 backdrop-blur-md lg:hidden">
-          <div className="flex flex-row items-center justify-end gap-0.5 px-3 py-1.5 sm:px-4">
+        <div className="toolbar-blur safe-top flex shrink-0 items-center gap-2 border-b border-white/10 bg-black/20 px-2.5 py-1.5 backdrop-blur-md sm:px-3 lg:hidden">
+          <Link
+            to="/"
+            className="flex min-w-0 shrink items-center gap-1.5"
+            aria-label="Trang chủ — Hỏi đáp"
+          >
+            <img
+              src={logoVietmy}
+              alt="Cao đẳng Việt Mỹ Hà Nội"
+              className="h-7 w-auto max-w-[38vw] object-contain object-left"
+              width={120}
+              height={28}
+              decoding="async"
+            />
+            <span className="h-5 w-px shrink-0 bg-white/15" aria-hidden="true" />
+            <img
+              src={logoEquest}
+              alt="EQuest"
+              className="h-6 w-auto max-w-[28vw] object-contain object-left"
+              width={100}
+              height={24}
+              decoding="async"
+            />
+          </Link>
+          <div className="ml-auto flex shrink-0 items-center justify-end gap-0.5">
             {messages.length > 0 ? (
               <ChatModeSwitcher
                 mode={mode}
                 onChange={setMode}
                 disabled={streaming}
-                className="mr-1 shrink-0"
+                className="mr-0.5 max-w-[42vw] shrink overflow-hidden sm:max-w-none"
               />
             ) : null}
             {talkCfg?.enabled === true ? (
               <button
                 type="button"
                 onClick={toggleSpeak}
-                className="inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-1 rounded-xl px-2.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white sm:min-h-9"
+                className="inline-flex min-h-9 min-w-9 cursor-pointer items-center justify-center rounded-xl px-1.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white"
                 aria-pressed={speakOn}
                 aria-label={speakOn ? 'Tắt đọc' : 'Bật đọc'}
-                title={
-                  !ttsSupported
-                    ? 'Trình duyệt không hỗ trợ đọc thoại'
-                    : speakOn
-                      ? 'Tắt đọc câu trả lời'
-                      : 'Bật đọc ngay khi AI viết'
-                }
               >
-                {speakOn && ttsSupported ? <Volume2 className="h-4 w-4 text-emerald-300" /> : <VolumeX className="h-4 w-4" />}
-                <span className="hidden md:inline">
-                  {!ttsSupported ? 'Không TTS' : speakOn ? 'Đang nói' : 'Im lặng'}
-                </span>
+                {speakOn && ttsSupported ? (
+                  <Volume2 className="h-4 w-4 text-emerald-300" />
+                ) : (
+                  <VolumeX className="h-4 w-4" />
+                )}
               </button>
             ) : null}
             <button
               type="button"
               onClick={newChat}
-              className="inline-flex min-h-9 min-w-9 cursor-pointer items-center justify-center gap-1 rounded-xl px-1.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white sm:min-h-9"
+              className="inline-flex min-h-9 min-w-9 cursor-pointer items-center justify-center rounded-xl px-1.5 text-white/60 hover:bg-white/10 hover:text-white"
               aria-label="Chat mới"
             >
               <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Mới</span>
             </button>
             <button
               type="button"
               onClick={() => setHistoryOpen(true)}
-              className="inline-flex min-h-9 min-w-9 cursor-pointer items-center justify-center gap-1 rounded-xl px-1.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white xl:hidden"
+              className="inline-flex min-h-9 min-w-9 cursor-pointer items-center justify-center rounded-xl px-1.5 text-white/60 hover:bg-white/10 hover:text-white"
               aria-label="Lịch sử phiên này"
             >
               <History className="h-4 w-4" />
@@ -642,36 +668,13 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={endSession}
-              className="inline-flex min-h-9 min-w-9 cursor-pointer items-center justify-center gap-1 rounded-xl px-1.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white"
+              className="inline-flex min-h-9 min-w-9 cursor-pointer items-center justify-center rounded-xl px-1.5 text-white/60 hover:bg-white/10 hover:text-white"
               title="Xóa lịch sử trên máy và bắt đầu phiên mới"
               aria-label="Hết phiên"
             >
               <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Hết phiên</span>
-            </button>
-            <button
-              type="button"
-              onClick={toggleSide}
-              className="hidden min-h-9 cursor-pointer items-center gap-1 rounded-xl px-2.5 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white xl:inline-flex"
-              aria-pressed={sideOpen}
-              title={sideOpen ? 'Ẩn bàn làm việc' : 'Hiện bàn làm việc'}
-            >
-              {sideOpen ? (
-                <PanelRightClose className="h-4 w-4" />
-              ) : (
-                <PanelRightOpen className="h-4 w-4" />
-              )}
-              {sideOpen ? 'Thu panel' : 'Bàn việc'}
             </button>
           </div>
-          {disclaimer ? (
-            <p
-              className="m-0 max-w-full truncate border-t border-white/5 px-3 py-1 text-[10px] text-white/40 sm:px-4"
-              title={disclaimer}
-            >
-              {disclaimer}
-            </p>
-          ) : null}
         </div>
 
         <main
@@ -728,6 +731,14 @@ export default function ChatPage() {
             onMicClick={handleMic}
             onStopListen={stopListening}
           />
+          {disclaimer ? (
+            <p
+              className="m-0 px-3 pb-1.5 text-center text-[10px] leading-snug text-white/40 sm:px-4 xl:px-6 xl:text-left"
+              title={disclaimer}
+            >
+              {disclaimer}
+            </p>
+          ) : null}
         </div>
       </section>
 

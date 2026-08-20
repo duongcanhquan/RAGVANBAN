@@ -35,19 +35,19 @@ export default function ChatWindow({
       }`}
     >
       {empty && (
-        <section className="rounded-2xl border border-white/10 bg-black/15 px-4 py-5 sm:px-6 sm:py-6">
-          <div className="flex flex-wrap items-center justify-between gap-2 gap-y-2">
-            <h1 className="m-0 min-w-0 flex-1 text-lg font-semibold tracking-tight text-[var(--hcc-ink)] sm:text-xl">
+        <section className="rounded-xl border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h1 className="m-0 min-w-0 flex-1 text-sm font-semibold tracking-tight text-[var(--hcc-ink)] sm:text-base">
               {isLookup ? 'Tra cứu văn bản' : 'Tư vấn tình huống'}
             </h1>
             {onModeChange ? (
               <ChatModeSwitcher mode={mode} onChange={onModeChange} disabled={streaming} className="shrink-0" />
             ) : null}
           </div>
-          <p className="m-0 mt-2 text-sm text-[var(--hcc-muted)]">{EMPTY_HINT}</p>
+          <p className="m-0 mt-1.5 text-xs leading-snug text-[var(--hcc-muted)]">{EMPTY_HINT}</p>
 
           {!isLookup && examples.length > 0 ? (
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               {examples.map((ex) => {
                 const label = typeof ex === 'string' ? ex : ex.label || ex.query
                 const query = typeof ex === 'string' ? ex : ex.query || ex.label

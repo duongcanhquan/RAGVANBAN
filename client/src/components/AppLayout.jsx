@@ -1,12 +1,16 @@
-import { Link, NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import logoVietmy from '../assets/logo-vietmy.png'
 import logoEquest from '../assets/logo-equest.png'
 import { MAIN_SECTION_NAV } from '../lib/mainNav'
 
 /**
- * Header mobile: logo giữa. Desktop: logo + nav ở AppSectionBar trong từng trang.
+ * Header mobile: logo (ẩn trên Hỏi đáp — logo nằm cùng hàng nút trong ChatPage).
+ * Desktop: logo + nav ở AppSectionBar.
  */
 export default function AppLayout() {
+  const { pathname } = useLocation()
+  const chatHome = pathname === '/'
+
   return (
     <div className="app-canvas relative flex h-dvh max-h-dvh flex-col overflow-hidden text-slate-100">
       <div className="pointer-events-none absolute inset-0 admin-aurora" aria-hidden="true" />
@@ -17,32 +21,34 @@ export default function AppLayout() {
         Bỏ qua đến nội dung
       </a>
 
-      <header className="site-header safe-top relative z-40 shrink-0 border-b border-white/10 bg-black/25 backdrop-blur-xl lg:hidden">
-        <div className="relative flex h-[var(--nav-h)] items-center justify-center px-[max(0.75rem,env(safe-area-inset-left))] sm:px-4">
-          <Link
-            to="/"
-            className="relative z-10 flex max-w-[min(100%,24rem)] items-center justify-center gap-2.5 sm:gap-4"
-          >
-            <img
-              src={logoVietmy}
-              alt="Cao đẳng Việt Mỹ Hà Nội"
-              className="h-8 w-auto max-w-[46%] object-contain"
-              width={180}
-              height={48}
-              decoding="async"
-            />
-            <span className="h-7 w-px shrink-0 bg-white/15" aria-hidden="true" />
-            <img
-              src={logoEquest}
-              alt="EQuest — The Quest for Excellence"
-              className="h-8 w-auto max-w-[46%] object-contain"
-              width={160}
-              height={48}
-              decoding="async"
-            />
-          </Link>
-        </div>
-      </header>
+      {!chatHome ? (
+        <header className="site-header safe-top relative z-40 shrink-0 border-b border-white/10 bg-black/25 backdrop-blur-xl lg:hidden">
+          <div className="relative flex h-[var(--nav-h)] items-center justify-center px-[max(0.75rem,env(safe-area-inset-left))] sm:px-4">
+            <Link
+              to="/"
+              className="relative z-10 flex max-w-[min(100%,24rem)] items-center justify-center gap-2.5 sm:gap-4"
+            >
+              <img
+                src={logoVietmy}
+                alt="Cao đẳng Việt Mỹ Hà Nội"
+                className="h-8 w-auto max-w-[46%] object-contain"
+                width={180}
+                height={48}
+                decoding="async"
+              />
+              <span className="h-7 w-px shrink-0 bg-white/15" aria-hidden="true" />
+              <img
+                src={logoEquest}
+                alt="EQuest — The Quest for Excellence"
+                className="h-8 w-auto max-w-[46%] object-contain"
+                width={160}
+                height={48}
+                decoding="async"
+              />
+            </Link>
+          </div>
+        </header>
+      ) : null}
 
       <div
         id="main-content"

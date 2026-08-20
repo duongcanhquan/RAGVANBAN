@@ -40,8 +40,8 @@
   --bottom-nav-h: calc(5rem + max(0.75rem, env(safe-area-inset-bottom, 0px)));
   --composer-lift: 0.5rem;
   --composer-bottom: calc(var(--bottom-nav-h) + var(--composer-lift));
-  /* Composer: Phạm vi + ô gõ cao hơn; padding đáy vùng chat để không bị che */
-  --chat-composer-h: calc(12rem + max(0.75rem, env(safe-area-inset-bottom, 0px)));
+  /* Composer: Phạm vi + ô gõ + disclaimer; padding đáy vùng chat để không bị che */
+  --chat-composer-h: calc(13.25rem + max(0.75rem, env(safe-area-inset-bottom, 0px)));
   --workbench-w: 0px;
 }
 
