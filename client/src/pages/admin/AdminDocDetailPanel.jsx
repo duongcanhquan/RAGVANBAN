@@ -19,6 +19,8 @@ export default function AdminDocDetailPanel({
   scheduleCatalogPatch,
   saveValidityFields,
   openDocDetail,
+  reindexIds,
+  uploading,
 }) {
   if (!detailDoc) return null
 
@@ -30,6 +32,21 @@ export default function AdminDocDetailPanel({
       </p>
       {detailDoc.mo_ta ? (
         <p className="m-0 mt-1 text-[11px] text-white/60">{detailDoc.mo_ta}</p>
+      ) : null}
+      {!Number(detailDoc.chunk_count || 0) ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-50">
+          <span>Chưa có chunks/vector — chat không tìm được nội dung file này.</span>
+          {typeof reindexIds === 'function' ? (
+            <button
+              type="button"
+              disabled={uploading}
+              onClick={() => reindexIds([detailDoc.id])}
+              className="rounded-full bg-white/15 px-2.5 py-1 font-semibold disabled:opacity-40"
+            >
+              Số hóa lại ngay
+            </button>
+          ) : null}
+        </div>
       ) : null}
       <dl className="m-0 mt-2 grid grid-cols-[7rem_1fr] gap-x-2 gap-y-1">
         <dt className="text-white/40">Số hiệu</dt>

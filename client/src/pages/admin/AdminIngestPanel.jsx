@@ -418,6 +418,15 @@ export default function AdminIngestPanel(props) {
                     .join(' ')}
                   {result.chunks != null && result.chunks !== '' ? ` · ${result.chunks} chunks` : ''}
                 </p>
+                {result.ingested !== false &&
+                result.chunks != null &&
+                Number(result.chunks) === 0 &&
+                !result.duplicate &&
+                !result.skipped ? (
+                  <p className="m-0 mt-1 text-xs text-amber-100/90">
+                    File vào danh mục nhưng 0 chunks — mở danh mục → «Số hóa lại», hoặc kiểm tra OCR/định dạng.
+                  </p>
+                ) : null}
                 {Array.isArray(result.files) && result.files.length > 0 ? (
                   <ul className="m-0 mt-2 list-none space-y-1 p-0 text-xs">
                     {result.files.map((f) => (

@@ -199,6 +199,11 @@ export default function AdminDocCatalog({
                           chunks
                           {doc.storage_url || doc.drive_web_view_link ? '' : ' · chưa có link'}
                         </p>
+                        {!Number(doc.chunk_count || 0) ? (
+                          <p className="m-0 mt-0.5 text-[11px] text-amber-200/90">
+                            Chưa có vector — bấm «Số hóa lại» hoặc tải lại file/link Drive.
+                          </p>
+                        ) : null}
                       </div>
                       <select
                         value={doc.category_id || ''}
@@ -230,14 +235,18 @@ export default function AdminDocCatalog({
                       </button>
                       <button
                         type="button"
-                        title="Số hóa lại"
+                        title={!Number(doc.chunk_count || 0) ? 'Số hóa lại (chưa có vector)' : 'Số hóa lại'}
                         aria-label={`Số hóa lại ${doc.display_name || doc.file_name}`}
                         disabled={uploading}
                         onClick={(e) => {
                           e.stopPropagation()
                           reindexIds([doc.id])
                         }}
-                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full bg-white/10"
+                        className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-full ${
+                          !Number(doc.chunk_count || 0)
+                            ? 'bg-amber-500/25 text-amber-50 ring-1 ring-amber-400/40'
+                            : 'bg-white/10'
+                        }`}
                       >
                         <RefreshCw className="h-3.5 w-3.5" />
                       </button>
@@ -285,6 +294,8 @@ export default function AdminDocCatalog({
         scheduleCatalogPatch={scheduleCatalogPatch}
         saveValidityFields={saveValidityFields}
         openDocDetail={openDocDetail}
+        reindexIds={reindexIds}
+        uploading={uploading}
       />
     </section>
   )

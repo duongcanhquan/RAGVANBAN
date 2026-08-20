@@ -189,38 +189,59 @@ async function saveDriveSources(items) {
 }
 
 async function upsertDriveSource(admin, input) {
-  const parsed = parseDriveResource(input.folderUrl || input.folderId);
+  const items = await listDriveSources();
+  const existing = input.id ? items.find((s) => s.id === input.id) : null;
+  if (input.id && !existing) {
+    const err = new Error('Không tìm thấy nguồn Drive');
+    err.status = 404;
+    throw err;
+  }
+
+  const folderInput = input.folderUrl || input.folderId;
+  const parsed = folderInput ? parseDriveResource(folderInput) : null;
   if (parsed?.type === 'file') {
     const err = new Error('Cần link thư mục Drive (folders/...), không phải link một file');
     err.status = 400;
     throw err;
   }
-  const folderId = parsed?.id || String(input.folderId || '').trim();
+  const folderId =
+    parsed?.id || String(input.folderId || '').trim() || existing?.folderId || '';
   if (!folderId) {
     const err = new Error('Dán link thư mục Google Drive (drive.google.com/drive/folders/...)');
     err.status = 400;
     throw err;
   }
-  const categoryId = input.categoryId || null;
+
+  const categoryId =
+    input.categoryId !== undefined
+      ? input.categoryId || null
+      : existing?.categoryId || null;
   if (categoryId && !canUseCategory(admin, categoryId) && !isSuperAdmin(admin)) {
     const err = new Error('Bạn không được gắn chuyên mục này');
     err.status = 403;
     throw err;
   }
-  const isShared = Boolean(input.isShared) && isSuperAdmin(admin);
-  const items = await listDriveSources();
-  const id = input.id || `drv-${Date.now()}`;
+
+  const isShared =
+    input.isShared !== undefined
+      ? Boolean(input.isShared) && isSuperAdmin(admin)
+      : Boolean(existing?.isShared);
+  const id = existing?.id || input.id || `drv-${Date.now()}`;
   const row = normalizeSource({
     id,
-    userId: isShared ? null : admin.id,
-    email: admin.email,
-    label: input.label || '',
+    userId: isShared ? null : existing?.userId || admin.id,
+    email: existing?.email || admin.email,
+    label: input.label !== undefined ? input.label || '' : existing?.label || '',
     folderId,
-    folderUrl: input.folderUrl || `https://drive.google.com/drive/folders/${folderId}`,
+    folderUrl:
+      input.folderUrl ||
+      existing?.folderUrl ||
+      `https://drive.google.com/drive/folders/${folderId}`,
     categoryId,
-    enabled: input.enabled !== false,
+    enabled: input.enabled !== undefined ? input.enabled !== false : existing?.enabled !== false,
     isShared,
   });
+
   const idx = items.findIndex((s) => s.id === id);
   if (idx >= 0) {
     if (!isSuperAdmin(admin) && items[idx].userId !== admin.id) {

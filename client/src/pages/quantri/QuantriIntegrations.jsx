@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { Check, Copy, Plus, Trash2 } from 'lucide-react'
+import { Check, Copy, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { adminFetch } from '../../lib/adminApi'
 import { publicApiUrl } from '../../lib/apiBase'
 
@@ -76,6 +76,10 @@ export default function QuantriIntegrations() {
   const [driveTab, setDriveTab] = useState('sources')
   const [categories, setCategories] = useState([])
   const [syncOut, setSyncOut] = useState('')
+  const [syncResults, setSyncResults] = useState([])
+  const [retryingId, setRetryingId] = useState('')
+  const [manualFileId, setManualFileId] = useState('')
+  const [manualCategoryId, setManualCategoryId] = useState('')
 
   async function load() {
     const [iRes, cRes] = await Promise.all([
@@ -87,6 +91,12 @@ export default function QuantriIntegrations() {
     if (!iRes.ok) throw new Error(integ.error || 'Không tải được tích hợp')
     setData(integ)
     setCategories(cats.items || [])
+    if (!isSuper && !manualCategoryId) {
+      const allowed = (cats.items || []).filter((c) =>
+        (me?.allowedCategoryIds || []).includes(c.id)
+      )
+      if (allowed[0]) setManualCategoryId(allowed[0].id)
+    }
   }
 
   useEffect(() => {
@@ -198,14 +208,115 @@ export default function QuantriIntegrations() {
     await load()
   }
 
+  async function patchSourceCategory(id, categoryId) {
+    setBusy(true)
+    setError('')
+    try {
+      const res = await adminFetch(`/api/quantri/integrations/drive-sources/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categoryId: categoryId || null }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error || 'Không đổi chuyên mục')
+      await load()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function upsertSyncResult(row) {
+    setSyncResults((prev) => {
+      const key = row.fileId || row.id || row.name
+      const next = prev.filter((r) => (r.fileId || r.id || r.name) !== key)
+      return [row, ...next]
+    })
+  }
+
+  async function retryDriveFile(fileId, categoryId) {
+    if (!fileId) return
+    setRetryingId(fileId)
+    setError('')
+    try {
+      const res = await adminFetch('/api/quantri/integrations/drive-ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileId,
+          categoryId: categoryId || undefined,
+        }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body.error || 'Thử lại thất bại')
+      upsertSyncResult({
+        ok: Boolean(body.ingested || body.duplicate || body.skipped || body.id),
+        fileId,
+        name: body.displayName || body.fileName || fileId,
+        chunks: body.chunks,
+        duplicate: body.duplicate,
+        skipped: body.skipped,
+        message: body.message,
+        error: body.ingested || body.duplicate || body.skipped ? undefined : body.error,
+      })
+      setSyncOut(body.message || (body.ingested ? 'Đã số hóa lại thành công' : 'Đã xử lý'))
+    } catch (e) {
+      upsertSyncResult({ ok: false, fileId, name: fileId, error: e.message })
+      setError(e.message)
+    } finally {
+      setRetryingId('')
+    }
+  }
+
+  async function ingestManualDrive() {
+    const fileId = manualFileId.trim()
+    if (!fileId) {
+      setError('Dán fileId hoặc link Drive của một file')
+      return
+    }
+    if (!isSuper && !manualCategoryId) {
+      setError('Chọn chuyên mục trước khi số hóa file tay')
+      return
+    }
+    setBusy(true)
+    setError('')
+    setSyncOut('Đang số hóa file tay…')
+    try {
+      const res = await adminFetch('/api/quantri/integrations/drive-ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileId,
+          categoryId: manualCategoryId || undefined,
+        }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body.error || 'Số hóa thất bại')
+      const id = body.driveFileId || body.fileId || fileId
+      upsertSyncResult({
+        ok: Boolean(body.ingested || body.duplicate || body.skipped || body.id),
+        fileId: id,
+        name: body.displayName || body.fileName || id,
+        chunks: body.chunks,
+        duplicate: body.duplicate,
+        skipped: body.skipped,
+        message: body.message,
+        error: undefined,
+      })
+      setSyncOut(body.message || 'Xong')
+      setManualFileId('')
+    } catch (e) {
+      setSyncOut('')
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const allowedCats = isSuper
     ? categories
     : categories.filter((c) => (me?.allowedCategoryIds || []).includes(c.id))
-
-  const catLabel = (id) => {
-    const c = categories.find((x) => x.id === id)
-    return c?.name || 'Không phân loại'
-  }
 
   if (!data) {
     return <p className="text-sm text-white/60">{error || 'Đang tải…'}</p>
@@ -400,7 +511,20 @@ export default function QuantriIntegrations() {
                   <span className="font-medium">{s.label || 'Thư mục Drive'}</span>
                   <span className="text-white/45">{s.isShared ? 'Chung' : s.email}</span>
                   <span className="min-w-0 flex-1 truncate text-xs text-white/50">{s.folderUrl}</span>
-                  <span className="text-[11px] text-white/60">{catLabel(s.categoryId)}</span>
+                  <select
+                    value={s.categoryId || ''}
+                    disabled={busy}
+                    onChange={(e) => patchSourceCategory(s.id, e.target.value)}
+                    className="max-w-[12rem] rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-[11px]"
+                    title="Chuyên mục mặc định khi số hóa từ thư mục này"
+                  >
+                    {isSuper ? <option value="">Không phân loại</option> : null}
+                    {allowedCats.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
                   <CopyBtn text={s.folderUrl} />
                   <button
                     type="button"
@@ -533,6 +657,7 @@ export default function QuantriIntegrations() {
                   setBusy(true)
                   setError('')
                   setSyncOut('Đang đọc thư mục Drive…')
+                  setSyncResults([])
                   try {
                     const res = await adminFetch('/api/quantri/integrations/drive-sync', {
                       method: 'POST',
@@ -541,8 +666,10 @@ export default function QuantriIntegrations() {
                     })
                     const body = await res.json().catch(() => ({}))
                     if (!res.ok) throw new Error(body.error || 'Đồng bộ thất bại')
-                    const okN = (body.results || []).filter((r) => r.ok).length
-                    const failN = body.failed || 0
+                    const rows = body.results || []
+                    setSyncResults(rows)
+                    const okN = rows.filter((r) => r.ok).length
+                    const failN = body.failed || rows.filter((r) => r.ok === false).length
                     const skipped = body.skipped || 0
                     const pending = body.pending || 0
                     setSyncOut(
@@ -550,7 +677,7 @@ export default function QuantriIntegrations() {
                         ? `Không có file mới. Đã bỏ qua ${skipped} file đã số hóa (tổng ${body.totalListed || 0} trong thư mục).`
                         : `File mới: thành công ${okN} · lỗi ${failN} · còn chờ ${Math.max(0, pending - okN - failN)} · đã có trong kho ${skipped}`
                     )
-                    if (failN && !okN) setError(body.error || 'Không số hóa được file nào')
+                    if (failN && !okN) setError(body.error || 'Không số hóa được file nào — xem danh sách lỗi bên dưới')
                   } catch (e) {
                     setSyncOut('')
                     setError(e.message)
@@ -565,6 +692,89 @@ export default function QuantriIntegrations() {
             </div>
           ) : null}
           {syncOut ? <p className="m-0 mt-2 text-xs text-emerald-100/80">{syncOut}</p> : null}
+
+          <div className="mt-3 space-y-2 rounded-2xl border border-white/10 bg-black/20 px-3 py-3">
+            <p className="m-0 text-xs font-medium text-white/80">Số hóa 1 file bằng tay (link hoặc fileId)</p>
+            <p className="m-0 text-[11px] text-white/45">
+              Khi sync/n8n lỗi, dán link file Drive vào đây để mapping lại. File đã có trong kho sẽ báo trùng — dùng
+              «Số hóa lại» ở danh mục tài liệu.
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <input
+                value={manualFileId}
+                onChange={(e) => setManualFileId(e.target.value)}
+                placeholder="https://drive.google.com/file/d/… hoặc fileId"
+                className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs"
+              />
+              <select
+                value={manualCategoryId}
+                onChange={(e) => setManualCategoryId(e.target.value)}
+                className="rounded-xl border border-white/15 bg-black/30 px-2 py-2 text-xs"
+              >
+                {isSuper ? <option value="">Tự theo nguồn Drive / gợi ý</option> : null}
+                {allowedCats.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={busy || !manualFileId.trim()}
+                onClick={ingestManualDrive}
+                className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
+              >
+                Số hóa file này
+              </button>
+            </div>
+          </div>
+
+          {syncResults.length ? (
+            <ul className="m-0 mt-3 list-none space-y-1.5 p-0">
+              {syncResults.map((r, idx) => {
+                const fid = r.fileId || r.driveFileId
+                const label = r.name || r.fileName || r.displayName || fid || '—'
+                const failed = r.ok === false
+                return (
+                  <li
+                    key={`${fid || label}-${idx}`}
+                    className={`flex flex-wrap items-start gap-2 rounded-xl border px-3 py-2 text-xs ${
+                      failed
+                        ? 'border-red-400/30 bg-red-500/10 text-red-50'
+                        : r.duplicate || r.skipped
+                          ? 'border-amber-400/25 bg-amber-500/10 text-amber-50'
+                          : 'border-emerald-400/25 bg-emerald-500/10 text-emerald-50'
+                    }`}
+                  >
+                    <span className="min-w-0 flex-1 break-words">
+                      <span className="font-medium">{label}</span>
+                      {fid ? <span className="ml-1 font-mono text-[10px] opacity-60">{fid}</span> : null}
+                      <span className="mt-0.5 block opacity-80">
+                        {failed
+                          ? r.error || 'Lỗi không rõ'
+                          : r.message ||
+                            (r.duplicate || r.skipped
+                              ? 'Đã có trong kho'
+                              : `OK${r.chunks != null ? ` · ${r.chunks} chunks` : ''}`)}
+                      </span>
+                    </span>
+                    {failed && fid ? (
+                      <button
+                        type="button"
+                        disabled={busy || retryingId === fid}
+                        onClick={() => retryDriveFile(fid)}
+                        className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold disabled:opacity-40"
+                      >
+                        <RefreshCw className={`h-3 w-3 ${retryingId === fid ? 'animate-spin' : ''}`} />
+                        Thử lại
+                      </button>
+                    ) : null}
+                  </li>
+                )
+              })}
+            </ul>
+          ) : null}
+
           <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
             <p className="m-0 mb-1 text-xs text-white/55">Body khi có file mới</p>
             <pre className="m-0 overflow-x-auto text-[11px] text-white/80">{`{ "fileId": "{{ $json.id }}" }`}</pre>

@@ -253,7 +253,89 @@ router.post('/integrations/drive-sync', requireSuperAdmin, async (req, res, next
       ok: failed.length === 0,
       ...result,
       failed: failed.length,
-      error: failed[0]?.error,
+      error: result.error || failed[0]?.error,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Số hóa lại / thử lại 1 file Drive theo fileId (sau lỗi sync hoặc n8n). */
+router.post('/integrations/drive-ingest', requireAdmin, async (req, res, next) => {
+  try {
+    const flags = await getFlags();
+    if (!flags.driveEnabled) {
+      res.status(403).json({ ok: false, error: 'Google Drive đang tắt trong Cài đặt' });
+      return;
+    }
+    const rawId = String(req.body?.fileId || req.body?.file_id || req.body?.url || '').trim();
+    if (!rawId) {
+      res.status(400).json({ ok: false, error: 'Thiếu fileId hoặc link Drive' });
+      return;
+    }
+    const { parseDriveResource } = require('../services/googleDrive');
+    const parsed = parseDriveResource(rawId);
+    if (parsed?.type === 'folder') {
+      res.status(400).json({
+        ok: false,
+        error: 'Cần link/fileId của một file, không phải thư mục. Dùng «Đồng bộ Drive» cho folder.',
+      });
+      return;
+    }
+    const fileId = parsed?.id || rawId;
+    if (!/^[a-zA-Z0-9_-]{10,}$/.test(fileId)) {
+      res.status(400).json({ ok: false, error: 'fileId / link Drive không hợp lệ' });
+      return;
+    }
+    const { ingestDriveFile } = require('../services/driveIngest');
+    const { findSourceForFolder } = require('../services/integrations');
+    const { getFileParentIds } = require('../services/googleDrive');
+    let categoryId = req.body?.categoryId || req.body?.category_id || null;
+    if (!categoryId) {
+      try {
+        const parents = await getFileParentIds(fileId);
+        for (const pid of parents) {
+          const src = await findSourceForFolder(pid);
+          if (src?.categoryId) {
+            categoryId = src.categoryId;
+            break;
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    if (categoryId) {
+      const { assertCanManageCategory } = require('../services/adminAccess');
+      assertCanManageCategory(req.admin, categoryId, { creatingRoot: false });
+    } else {
+      const { isSuperAdmin } = require('../services/adminAccess');
+      if (!isSuperAdmin(req.admin)) {
+        res.status(400).json({
+          ok: false,
+          error:
+            'Chọn chuyên mục hoặc gắn chuyên mục mặc định cho nguồn Drive chứa file này',
+        });
+        return;
+      }
+    }
+    const result = await ingestDriveFile(fileId, { categoryId });
+    const ingested = Boolean(result?.id) && !result?.duplicate && !result?.skipped;
+    const duplicate = Boolean(result?.duplicate || result?.skipped);
+    res.json({
+      ...result,
+      ok: true,
+      ingested,
+      duplicate,
+      fileId,
+      driveFileId: result?.driveFileId || fileId,
+      message:
+        result?.message ||
+        (ingested
+          ? `Đã số hóa «${result.displayName || result.fileName}» (${result.chunks || 0} chunks).`
+          : duplicate
+            ? result?.message || 'File đã có trong kho — không số hóa lại.'
+            : 'Đã xử lý'),
     });
   } catch (err) {
     next(err);

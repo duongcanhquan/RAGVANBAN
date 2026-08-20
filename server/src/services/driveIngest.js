@@ -318,14 +318,6 @@ async function syncDriveFolder(options = {}) {
   const recorded = allResults.filter((r) => r.id && !r.duplicate && !r.skipped);
   const failed = allResults.filter((r) => r.ok === false || r.error);
 
-  if (!recorded.length && failed.length) {
-    const err = new Error(
-      failed[0].error || 'Số hóa Drive xong nhưng không ghi được tài liệu vào danh mục.'
-    );
-    err.failures = failed;
-    throw err;
-  }
-
   return {
     totalListed,
     skipped,
@@ -333,6 +325,7 @@ async function syncDriveFolder(options = {}) {
     processed: recorded.length,
     failed: failed.length,
     results: allResults,
+    error: !recorded.length && failed.length ? failed[0].error : undefined,
   };
 }
 
