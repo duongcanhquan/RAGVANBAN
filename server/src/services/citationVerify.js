@@ -105,26 +105,27 @@ function appendVerifyNotes(answer, report) {
   const notes = [];
   if (report.unverifiedQuotes?.length) {
     notes.push(
-      'Một số câu trong ngoặc kép không khớp nguyên văn đoạn đã truy xuất — chỉ dùng căn cứ trong mục Nguồn.'
+      'Một số đoạn trong ngoặc kép chưa khớp đúng nguyên văn các đoạn hệ thống vừa tìm được. Hãy ưu tiên các Điều/khoản và link ở mục Nguồn; mở bản gốc để đối chiếu nếu cần.'
     );
   }
   if (report.unknownSoHieu?.length) {
     notes.push(
-      `Số hiệu không có trong kho truy xuất lần này: ${report.unknownSoHieu.join(', ')} — không dùng làm căn cứ.`
+      `Câu trả lời có nhắc số hiệu ${report.unknownSoHieu.join(', ')}, nhưng lần tìm này hệ thống chưa lấy được đoạn nội dung của (các) số hiệu đó trong kho — có thể chỉ xuất hiện trong quan hệ sửa đổi/thay thế. ` +
+        `Không dùng ${report.unknownSoHieu.length > 1 ? 'các số hiệu này' : 'số hiệu này'} làm căn cứ chính; chỉ dựa các văn bản đã có ở mục Nguồn (kèm Điều/khoản).`
     );
   }
   if (report.unverifiedDieu?.length) {
     notes.push(
-      `Điều ${report.unverifiedDieu.join(', ')} không có trong đoạn đã truy xuất — cần đối chiếu bản gốc.`
+      `Có nhắc Điều ${report.unverifiedDieu.join(', ')} nhưng chưa thấy trong các đoạn vừa truy xuất — cần mở văn bản gốc để xác nhận đúng điều/khoản.`
     );
   }
   if (report.unverifiedDurations?.length) {
     notes.push(
-      `Mốc thời hạn (${report.unverifiedDurations.join(', ')}) không khớp đoạn đã truy xuất — đối chiếu nguyên văn.`
+      `Mốc thời hạn (${report.unverifiedDurations.join(', ')}) chưa khớp đoạn đã truy xuất — đối chiếu nguyên văn trước khi áp dụng.`
     );
   }
   if (!notes.length) return answer;
-  return `${String(answer || '').trim()}\n\n**Kiểm chứng:** ${notes.join(' ')}`;
+  return `${String(answer || '').trim()}\n\n**Kiểm chứng (ghi chú nội bộ hệ thống):** ${notes.join(' ')}`;
 }
 
 function confidenceFromVerify(sources, report) {

@@ -60,7 +60,7 @@ function buildConflictBrief(matches = []) {
 
   return `BẢN ĐỒ CHỒNG CHÉO (bắt buộc đối chiếu trước khi kết luận):
 ${lines.join('\n')}
-Quy tắc: nêu văn bản còn hiệu lực / ngày mới hơn trước; điểm bị sửa phải nói rõ điều khoản và số hiệu VB sửa; không gộp thành một quy định duy nhất; hết hiệu lực chỉ nêu để cảnh báo, không áp dụng nguyên văn.`;
+Quy tắc: nêu văn bản còn hiệu lực / ngày mới hơn trước; mỗi điểm liên quan câu hỏi phải kèm Điều/khoản cụ thể; điểm bị sửa phải nói rõ điều khoản và số hiệu VB sửa; không chỉ liệt kê tên VB; không gộp thành một quy định duy nhất; hết hiệu lực chỉ nêu để cảnh báo, không áp dụng nguyên văn.`;
 }
 
 function shouldCompare(matches = []) {

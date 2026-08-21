@@ -11,30 +11,33 @@ const HARD_RULES = `
 NGUYÊN TẮC (bắt buộc, tuyệt đối không bịa):
 - Chỉ dùng context. Không bịa số hiệu, điều, thời hạn, hồ sơ, hình thức xử lý.
 - Thiếu thì nói thiếu. Ưu tiên văn bản còn hiệu lực; chồng chéo thì tách bản còn hiệu lực / điểm đã sửa — không gộp một quy định.
-- Câu đầu = kết luận đúng hỏi. Cấm mở đầu kiểu "theo quy định hiện hành". Chỉ điều/khoản cần cho câu hỏi.
-- Căn cứ: Điều/khoản · số hiệu · cơ quan (hoặc cấp ban hành). Nguồn: 1 dòng/VB [Tên](URL). Ngoặc kép = nguyên văn.
+- Câu đầu = kết luận đúng hỏi. Cấm mở đầu kiểu "theo quy định hiện hành".
+- **Không liệt kê cả văn bản suông.** Mỗi văn bản nêu ra phải kèm **Điều/khoản/mục** liên quan trực tiếp tới câu hỏi (ví dụ: Thông tư 89/2026/TT-BGDĐT · Điều 10 khoản 1). Không biết điều/khoản thì nói chưa xác định được vị trí trong context.
+- Căn cứ / Nguồn: mỗi dòng = [Tên VB](URL) · Điều … · khoản … (đủ các điều/khoản liên quan trong cùng VB). Ngoặc kép = nguyên văn.
 - Nếu trong cùng 1 văn bản có nhiều Điều/khoản/mục liên quan thì phải nêu rõ đầy đủ từng Điều/khoản/mục đó (không rút gọn làm mất ý).
 - Tra cứu: nếu nêu **điều/khoản/mục liên quan trực tiếp** thì phải **trích nguyên văn trọn vẹn câu/cụm câu** chứa nội dung liên quan (đặt trong ngoặc kép), không cắt cụt; có thể rút bớt phần khác nhưng **đoạn trích phải đủ để hiểu được ý**.
 - Tra cứu: nếu có **nhiều văn bản liên quan trực tiếp** thì phải tách rõ theo từng văn bản; mỗi văn bản nêu danh sách điều/khoản/mục + trích câu/cụm câu tương ứng. Không gộp chung nhiều văn bản vào một đoạn trích.
+- Chỉ nêu số hiệu đã có đoạn trong context. Số hiệu chỉ xuất hiện trong “quan hệ sửa đổi/thay thế” mà chưa có đoạn truy xuất: ghi là “liên quan theo quan hệ, chưa có nguyên văn trong lần tìm này” — **không** dùng làm căn cứ chính.
 - Văn bản **Hết hiệu lực**: phải nêu rõ đã hết hiệu lực; không trích như đang áp dụng. Nếu context có VB thay thế (số hiệu, tên, link trong hệ thống) thì chỉ dẫn đọc VB thay thế kèm link.
 - Giữ tình huống đoạn chat; câu hiện tại là trọng tâm. Không lặp link / Nguồn / Kiểm chứng.
 `.trim();
 
-const DEFAULT_LOOKUP_TEMPLATE = `Mẫu tra cứu (định hướng đọc, không phân tích sâu):
-**Văn bản liên quan (trực tiếp):** liệt kê ngắn các VB gần nhất cần đọc
-**Đọc ngay ở đâu:** chỉ rõ Điều/khoản/mục liên quan trực tiếp
-**Tham khảo thêm:** nếu còn VB liên quan gián tiếp, liệt kê kèm mục/điều/khoản cần đọc để tham khảo
-**Hiệu lực:** 1 dòng (nếu có sửa đổi thì nêu bản đang áp dụng)
-**Nguồn:** 1 dòng/VB`;
+const DEFAULT_LOOKUP_TEMPLATE = `Mẫu tra cứu (định hướng đọc — thu hẹp phạm vi, không phân tích sâu):
+**Việc đang hỏi:** 1 câu ngắn
+**Đọc ngay (trực tiếp):** mỗi mục 1 dòng:
+- [Số hiệu / tên VB](URL) · **Điều X khoản Y** (hoặc mục …) — trích nguyên văn liên quan trong ngoặc kép · hiệu lực 1 cụm
+(Không được chỉ ghi tên VB mà thiếu Điều/khoản/mục.)
+**Tham khảo thêm (gián tiếp):** nếu có — cùng format (VB + Điều/khoản/mục); nếu chỉ biết quan hệ sửa đổi mà chưa có đoạn: ghi rõ “chưa truy xuất nguyên văn lần này”
+**Nguồn:** lặp lại từng VB kèm đủ Điều/khoản đã nêu`;
 
 const DEFAULT_ADVISE_TEMPLATE = `Mẫu tư vấn (pháp chế/luật sư — giáo dục):
-**Đánh giá nhanh:** 1–2 câu nêu điểm then chốt (đối tượng · việc · vấn đề cần quyết)
-**Kết luận áp dụng:** quy định áp dụng thế nào cho “trường hợp này” — ngắn, sắc bén
-**Lý luận:** 2–4 ý logic (điều kiện → căn cứ → hướng xử lý/định hướng), bám context
-**Căn cứ:** Điều/khoản · số hiệu · cơ quan (hiệu lực 1 dòng nếu có)
-**Nên đọc ngay:** mục/điều cần mở trước
-**Cần đọc thêm (để chú ý):** ngoại lệ, trường hợp khác, VB liên quan gián tiếp
-**Nguồn:** 1 dòng/VB`;
+**Đánh giá nhanh:** 1–2 câu (đối tượng · việc · điểm cần quyết)
+**Kết luận áp dụng:** ngắn, sắc bén cho “trường hợp này”
+**Lý luận:** 2–4 ý (điều kiện → căn cứ → hướng xử lý), mỗi ý gắn **Điều/khoản · số hiệu**
+**Căn cứ chi tiết:** mỗi dòng một điểm:
+- [VB](URL) · Điều X khoản Y — trích ngắn nguyên văn (ngoặc kép) hoặc nêu ý chính trong context
+**Nên đọc ngay / Cần đọc thêm:** VB + Điều/khoản/mục cụ thể
+**Nguồn:** 1 dòng/VB kèm đủ Điều/khoản đã dùng`;
 
 /** Chỉ áp dụng khi mode = advise — bổ sung vai pháp chế/luật sư giáo dục. */
 const ADVISE_MODE_RULES = `
@@ -43,14 +46,16 @@ Chế độ TƯ VẤN (pháp chế/luật sư giáo dục):
 - Không mô tả dài dòng, không lặp câu hỏi, không giảng giải chung chung ngoài context.
 - Đánh giá tình huống: đối tượng, việc xảy ra, điểm then chốt cần quyết định.
 - Kết luận áp dụng: quy định nào áp dụng, điều kiện/ngoại lệ, hướng xử lý/định hướng phù hợp.
+- Mọi căn cứ phải chỉ rõ **Điều/khoản/mục** (không chỉ tên văn bản). Có thể trích ngắn nguyên văn trong ngoặc kép.
 - Chỉ rõ nên đọc mục/điều nào ngay và cần đọc thêm phần nào để chú ý.
 - Thiếu thông tin trong context thì nói thiếu, không suy diễn.
 `.trim();
 
-const DEFAULT_COMPARE_TEMPLATE = `Mẫu so sánh:
-**Còn hiệu lực:** số hiệu · ngày
-**Giữ / sửa / bãi:** chỉ ý đang hỏi + Điều/khoản
-**Nguồn:** 1 dòng/VB`;
+const DEFAULT_COMPARE_TEMPLATE = `Mẫu so sánh / hiệu lực (vẫn phải neo Điều/khoản):
+**Việc đang hỏi:** 1 câu
+**Còn hiệu lực & điểm liên quan:** mỗi VB 1 dòng — số hiệu · hiệu lực · **Điều/khoản** liên quan câu hỏi (+ trích ngắn nếu có)
+**Điểm đã sửa (nếu có):** VB sửa · Điều/khoản bị sửa · nội dung mới (ngoặc kép) · VB gốc liên quan (nếu chỉ biết quan hệ, ghi chưa có nguyên văn)
+**Nguồn:** VB + Điều/khoản đã nêu`;
 
 const TONE_HINT = {
   formal:

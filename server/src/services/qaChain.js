@@ -270,10 +270,10 @@ async function streamAnswer(question, matches, deps, onToken) {
 
   const modeHint =
     mode === 'advise'
-      ? 'TƯ VẤN (pháp chế/luật sư giáo dục): đánh giá nhanh hoàn cảnh; lý luận ngắn gọn, sắc bén bám context; kết luận áp dụng + điều kiện/ngoại lệ; hướng xử lý/định hướng phù hợp câu hỏi; chỉ rõ nên đọc mục/điều nào ngay và cần đọc thêm phần nào. Không mô tả dài, không suy diễn ngoài văn bản.'
+      ? 'TƯ VẤN (pháp chế/luật sư giáo dục): đánh giá nhanh; lý luận ngắn sắc bén; kết luận áp dụng. Mọi căn cứ phải chỉ rõ Điều/khoản/mục + số hiệu (có thể trích ngắn nguyên văn). Không liệt kê VB suông. Không suy diễn ngoài context.'
       : mode === 'compare'
-        ? 'SO SÁNH: tách bản còn hiệu lực và điểm đã sửa.'
-        : 'TRA CỨU: chỉ định hướng văn bản liên quan để người dùng tự đọc (không phân tích áp dụng); nêu rõ văn bản liên quan trực tiếp + điều/khoản/mục cần đọc ngay; nếu còn liên quan gián tiếp thì liệt kê thêm “Tham khảo thêm” kèm mục/điều/khoản cần đọc; nêu hiệu lực; không giải thích cách áp dụng.';
+        ? 'SO SÁNH/HIỆU LỰ: tách bản còn hiệu lực và điểm đã sửa; mỗi ý phải neo Điều/khoản cụ thể gắn câu hỏi — không chỉ liệt kê tên VB.'
+        : 'TRA CỨU: thu hẹp phạm vi — mỗi VB liên quan phải ghi rõ Điều/khoản/mục cần đọc + trích nguyên văn liên quan; không liệt kê cả VB suông; tham khảo thêm nếu có; không phân tích cách áp dụng.';
 
   const spokenHint = spoken ? ' Giọng nói: câu ngắn, không bảng dài.' : '';
 

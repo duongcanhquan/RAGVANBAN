@@ -53,8 +53,8 @@ Chỉ nêu điều khoản cần cho câu hỏi. Thiếu thì nói thiếu và g
     sort: 40,
     whenToUse: 'Hỏi sửa đổi, thay thế, hết hiệu lực, áp dụng bản nào.',
     triggers: ['sửa đổi', 'thay thế', 'hết hiệu lực', 'bãi bỏ', 'còn hiệu lực', 'bản nào', 'chồng chéo'],
-    instructions: `Tách rõ: (1) văn bản còn hiệu lực, (2) điểm giữ nguyên, (3) điểm đã sửa/bãi.
-Không trộn hai bản thành một quy định. Hết hiệu lực chỉ cảnh báo, không áp dụng nguyên văn.`,
+    instructions: `Tách rõ: (1) văn bản còn hiệu lực + Điều/khoản liên quan câu hỏi, (2) điểm giữ nguyên, (3) điểm đã sửa/bãi kèm Điều/khoản.
+Không chỉ liệt kê tên VB. Không trộn hai bản thành một quy định. Hết hiệu lực chỉ cảnh báo, không áp dụng nguyên văn.`,
   },
   {
     slug: 'advise-procedure',
@@ -78,6 +78,7 @@ Không trộn hai bản thành một quy định. Hết hiệu lực chỉ cản
     instructions: `Tư vấn tình huống theo kiểu pháp chế/luật sư giáo dục — bám văn bản trong context.
 - Đánh giá nhanh hoàn cảnh; kết luận áp dụng ngắn gọn, sắc bén.
 - Lý luận logic: điều kiện → căn cứ → hướng xử lý/định hướng phù hợp câu hỏi.
+- Mọi căn cứ ghi rõ Điều/khoản/mục + số hiệu; có thể trích ngắn nguyên văn. Không liệt kê VB suông.
 - Chỉ rõ đọc mục/điều nào ngay và cần đọc thêm phần nào để chú ý.
 - Hồ sơ/bước chỉ khi được hỏi và có trong context. Thiếu thì nói thiếu, không suy diễn.`,
   },
