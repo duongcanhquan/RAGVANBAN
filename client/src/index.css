@@ -209,13 +209,19 @@ body {
 
 .prose-chat a.citation-chip {
   text-decoration: none;
+  color: #0a0a0a !important;
+  font-weight: 700;
+}
+
+.prose-chat a.citation-chip:hover {
+  color: #000 !important;
 }
 
 .prose-chat {
   color: inherit;
 }
 
-.prose-chat a {
+.prose-chat a:not(.citation-chip) {
   color: var(--hcc-gold-bright);
 }
 
